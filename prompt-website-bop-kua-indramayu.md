@@ -1,192 +1,1273 @@
 # Prompt: Pengembangan Website BOP KUA Kabupaten Indramayu
 
-Kamu adalah seorang full-stack web developer berpengalaman. Bangunkan saya sebuah website sistem pengelolaan **Biaya Operasional Perkantoran (BOP)** untuk seluruh KUA (Kantor Urusan Agama) se-Kabupaten Indramayu, sesuai spesifikasi lengkap di bawah ini. Jika ada bagian yang ambigu, buat asumsi yang masuk akal, sebutkan asumsinya secara eksplisit, lalu tetap lanjutkan — jangan berhenti hanya untuk bertanya hal kecil.
+Kamu adalah seorang **full-stack web developer berpengalaman** yang menguasai frontend, Supabase/PostgreSQL, JavaScript modern, keamanan web, dan integrasi Google Drive.
 
-## 1. Tech Stack & Prinsip Utama
+Saya ingin melanjutkan pengembangan sebuah website sistem pengelolaan **Biaya Operasional Perkantoran (BOP)** untuk seluruh KUA (Kantor Urusan Agama) se-Kabupaten Indramayu.
 
-- **Frontend**: HTML, CSS, JavaScript native (vanilla). Tanpa framework berat (tanpa React/Vue/Angular, tanpa Bootstrap penuh). Library eksternal hanya dipakai untuk kebutuhan spesifik yang memang butuh (export Excel/PDF), itu pun dimuat lazy (hanya saat dibutuhkan).
-- **Backend**: Google Apps Script sebagai REST-like API (`doGet`/`doPost` dengan parameter `action` sebagai router).
-- **Database**: Google Spreadsheet (multi-sheet, lihat bagian 4).
-- **Prinsip non-fungsional yang wajib dijaga di semua fitur:**
-  - *Ringan* — minim dependency, minim request ke Apps Script, cache data referensi (master POS, daftar KUA) di client.
-  - *Responsive* — nyaman dipakai di HP, tablet, dan desktop (mobile-first).
-  - *Smooth* — tidak ada full page reload antar-menu, ada loading state/skeleton tiap fetch data, transisi antar-tampilan halus.
+## 0. KONDISI PROJECT SAAT INI — WAJIB DIPAHAMI
 
-## 2. Role & Autentikasi
+Project ini **BUKAN project kosong**.
 
-Dua role: **Admin** dan **Operator KUA** (satu akun Operator terikat ke satu KUA).
+Saya sudah memiliki implementasi awal dan sudah melakukan setup database sebelumnya.
 
-- Login: username + password + **captcha lokal** — di-generate dan divalidasi sepenuhnya di client (misalnya kode acak di `<canvas>` dengan sedikit noise/distorsi), tanpa API/layanan captcha eksternal.
-- Password disimpan ter-hash (misalnya SHA-256 + salt lewat `Utilities.computeDigest` di Apps Script, karena Apps Script tidak punya bcrypt native), tidak pernah disimpan plain text.
-- Sesi login: gunakan token yang disimpan di `CacheService`/`PropertiesService` (dengan expiry) atau di sheet `Sessions`, dikirim client lewat parameter di tiap request, dan disimpan di client di `localStorage` (bukan cookie, karena web app Apps Script tidak jalan di domain sendiri).
+Saya akan menyertakan beberapa file sebagai baseline project:
 
-### 2.1 Hak Akses Admin
-1. Input & edit Anggaran Tahunan per KUA.
-2. Lihat, edit, hapus RPD milik KUA mana pun (semua bulan, semua pos).
-3. Verifikasi Realisasi (approve / reject / tandai paid) milik KUA mana pun.
-4. Download Laporan RPD & Realisasi (Excel dan PDF).
-5. Kelola Config sistem.
-6. Kelola AutoPayment.
-7. Ubah password akun sendiri.
-8. Reset password akun Operator KUA mana pun.
+* `index.html`
+* file JavaScript module `*.mjs`
+* file `*.sql` yang sebelumnya sudah saya jalankan di Supabase
 
-### 2.2 Hak Akses Operator KUA
-1. Input RPD bulanan — hanya untuk KUA-nya sendiri.
-2. Input Realisasi bulanan (termasuk upload LPJ sesuai Config) — hanya untuk KUA-nya sendiri.
-3. Download Laporan RPD & Realisasi (Excel dan PDF) — hanya untuk KUA-nya sendiri.
-4. Ubah password akun sendiri.
+### Aturan penting
 
-## 3. Master Data POS (Akun Belanja)
+1. **Jangan membangun ulang project dari nol.**
+2. **Jangan menghapus atau mengganti struktur yang sudah berjalan tanpa alasan teknis yang jelas.**
+3. File yang saya kirim harus terlebih dahulu dianalisis untuk memahami:
 
-Gunakan struktur berikut apa adanya:
+   * struktur HTML yang sudah ada,
+   * login page,
+   * dashboard,
+   * fungsi JavaScript yang sudah tersedia,
+   * koneksi Supabase,
+   * tabel/database yang sudah dibuat,
+   * autentikasi yang sudah digunakan,
+   * role dan akun yang sudah tersedia.
+4. **Pertahankan akun yang sudah saya generate.**
+5. **Jangan membuat akun dummy baru**, kecuali benar-benar diperlukan untuk pengujian lokal dan tidak mengubah data produksi.
+6. SQL yang sudah pernah dijalankan dianggap sebagai **baseline database**.
+7. Jangan melakukan `DROP TABLE`, reset database, atau tindakan destruktif terhadap database yang sudah ada.
+8. Bila ada perubahan struktur database yang diperlukan, buat **migration SQL tambahan** yang aman dan jelaskan perubahan tersebut.
+9. Pertahankan fitur yang sudah bekerja dan lakukan perubahan secara incremental.
+10. Sebelum mengubah kode, pahami terlebih dahulu kode yang sudah saya berikan.
 
-- **521111** — Belanja Operasional Perkantoran
-  - a. ATK Kantor
-  - b. Jamuan Tamu
-  - c. Pramubakti
-  - d. Alat Rumah Tangga Kantor
-- **521211** — Belanja Bahan
-  - a. Penggandaan / Penjilidan
-  - b. Spanduk
-- **522111** — Belanja Langganan Listrik
-- **522112** — Belanja Langganan Telepon / Internet
-- **522113** — Belanja Langganan Air
-- **523111** — Belanja Pemeliharaan Gedung dan Bangunan
-- **523121** — Belanja Pemeliharaan Peralatan dan Mesin
+---
 
-**Penting:** unit terkecil yang dipakai untuk input & validasi RPD/Realisasi adalah level **rincian** (a/b/c/d) jika kode itu punya rincian, atau level **kode POS itu sendiri** jika tidak punya rincian — bukan agregat di level kode 6 digit induk. Jadi "ATK Kantor", "Jamuan Tamu", dst masing-masing punya baris RPD/Realisasi dan sisa-anggaran sendiri.
+# 1. ARSITEKTUR & TECH STACK
 
-## 4. Struktur Data (Google Spreadsheet)
+## Frontend
 
-Usulan 1 spreadsheet dengan sheet-sheet berikut:
+Website akan di-deploy secara gratis menggunakan:
 
-**Sheet `Users`**: user_id, username, password_hash, salt, role (`admin`/`operator`), kua_id (kosong untuk admin), nama_lengkap, status (aktif/nonaktif), last_login.
+**GitHub Pages**
 
-**Sheet `KUA`**: kua_id, nama_kua, kecamatan, status.
+Frontend harus bersifat static sehingga kompatibel dengan GitHub Pages.
 
-**Sheet `POS`** (master akun, sesuai bagian 3): pos_id, kode_pos, nama_pos, kode_rincian (kosong jika tidak ada), nama_rincian, urutan.
+Teknologi utama:
 
-**Sheet `AnggaranTahunan`**: id, kua_id, tahun, nominal_total, updated_by, updated_at.
+* HTML5
+* CSS3
+* JavaScript modern / ES Modules
+* `.mjs` bila memang sudah digunakan oleh project
+* Fetch API / Supabase JS client sesuai implementasi existing
 
-**Sheet `RPD`**: id, kua_id, tahun, bulan, pos_id, nominal, updated_by, updated_at.
+Saya **tidak mewajibkan native vanilla JS**.
 
-**Sheet `Realisasi`**: id, kua_id, tahun, bulan, pos_id, nominal, status (`waiting`/`approved`/`rejected`/`paid`), is_autopayment (TRUE/FALSE), file_lpj_url, catatan_admin, submitted_by, submitted_at, verified_by, verified_at, paid_at.
+Apabila penggunaan library atau framework modern memang memberikan manfaat yang signifikan, diperbolehkan menggunakan:
 
-**Sheet `AutoPayment`**: id, kua_id, pos_id, tahun, bulan, nominal, input_by, input_at.
+* Vite
+* framework frontend ringan lainnya
+* library UI ringan
 
-**Sheet `Config`**: key, value, updated_by, updated_at — baris: wajib_lpj, rpd_enabled, realisasi_enabled, max_file_size_mb, max_file_count, bulan_edit_rpd.
+Namun:
 
-**Sheet `LogAktivitas`** (opsional, praktik baik untuk audit): id, timestamp, user, aksi, detail.
+> **Jangan melakukan migrasi dari native HTML/JS ke framework hanya demi mengganti teknologi.**
 
-## 5. Fitur Admin (Detail)
+Prioritas utama adalah menjaga project yang sudah ada tetap sederhana, ringan, mudah dipelihara, dan mudah di-deploy melalui GitHub Pages.
 
-- **Anggaran Tahunan**: form pilih KUA + tahun + nominal; list semua KUA dengan status "sudah/belum diset" untuk tahun berjalan.
-- **RPD semua KUA**: tabel/browsable per KUA → tahun → bulan → pos, dengan aksi edit & hapus per baris. Perubahan oleh Admin tidak terikat Config "Bulan Dibuka untuk Edit RPD" (itu hanya berlaku untuk Operator).
-- **Verifikasi Realisasi**: daftar Realisasi masuk (default filter status `waiting`), buka detail (termasuk lampiran LPJ), lalu approve / reject (reject wajib isi catatan alasan) / tandai paid (untuk yang sudah approved). Entri AutoPayment tidak muncul di antrian ini karena langsung berstatus `paid` (lihat bagian 7).
-- **Laporan**: lihat bagian 9.
-- **Config**: lihat bagian 10.
-- **AutoPayment**: lihat bagian 7.
-- **Manajemen akun**: ubah password sendiri; reset password akun Operator KUA mana pun (set password baru).
+Library tambahan hanya digunakan bila memang diperlukan, misalnya:
 
-## 6. Fitur Operator KUA (Detail)
+* export Excel
+* export PDF
+* PDF viewer
+* date utility
+* UI utility
 
-- **Input RPD bulanan**: pilih bulan (dibatasi Config "Bulan Dibuka untuk Edit RPD"), isi nominal per pos/rincian. Tampilkan total RPD tahun berjalan vs Anggaran Tahunan KUA tsb secara real-time (progress/sisa).
-- **Input Realisasi bulanan**: pilih bulan (tunduk aturan tanggal 10, lihat bagian 11), isi nominal per pos/rincian, upload LPJ jika diwajibkan Config. Pos yang sudah ditangani AutoPayment untuk bulan itu tampil read-only dengan label "Dibayar otomatis" dan tidak bisa diisi manual. Tampilkan sisa anggaran per pos (RPD setahun pos dikurangi total Realisasi pos sejauh ini) secara real-time saat mengisi, dan cegah submit bila ada pos yang jadi minus.
-- Realisasi hanya bisa diedit Operator selama statusnya `waiting` atau `rejected`; setelah `approved`/`paid`, terkunci dari Operator.
-- **Download Laporan**: sama seperti Admin (bagian 9) tapi otomatis terbatas ke KUA-nya sendiri (tanpa opsi "semua KUA").
-- **Ubah password sendiri.**
+Library yang berat dan tidak diperlukan harus dihindari.
 
-## 7. AutoPayment
+---
 
-Fitur untuk tagihan yang sudah dibayar otomatis lewat Sakti tiap bulan (mis. listrik, air, telepon/internet), sehingga tidak perlu diinput manual oleh Operator. (Nama fitur ini bebas diganti — misalnya "Pembayaran Otomatis" — asal fungsinya tetap sama.)
+# 2. BACKEND & DATABASE — SUPABASE
+
+Backend dan database sudah menggunakan:
+
+**Supabase**
+
+Gunakan Supabase sebagai sumber data utama aplikasi.
+
+Komponen yang dapat digunakan:
+
+* Supabase PostgreSQL
+* Supabase JS Client
+* Row Level Security (RLS)
+* Supabase Auth apabila memang sudah digunakan oleh project existing
+* Supabase Edge Functions hanya apabila memang diperlukan untuk proses server-side yang tidak aman dilakukan dari frontend
+
+### Sangat penting
+
+Frontend yang di-host di GitHub Pages adalah public/static.
+
+Karena itu:
+
+### DILARANG keras menaruh:
+
+* Supabase `service_role` key
+* secret key
+* private API credential
+* Google service account private key
+* OAuth client secret
+
+di dalam:
+
+* `index.html`
+* `.js`
+* `.mjs`
+* repository GitHub
+* file konfigurasi frontend yang dapat diakses publik
+
+Frontend hanya boleh menggunakan credential yang memang aman untuk client-side, seperti **Supabase anon/publishable key**, dengan keamanan utama ditangani melalui RLS dan policy database.
+
+---
+
+# 3. KONDISI LOGIN & AUTENTIKASI
+
+Saya **sudah memiliki login page dan dashboard di `index.html`**.
+
+Jangan membuat login page baru apabila yang sekarang sudah dapat digunakan.
+
+Analisis implementasi login yang ada dan lanjutkan dari sistem tersebut.
+
+Role sistem:
+
+1. `admin`
+2. `operator`
+
+Satu akun Operator terikat ke satu KUA.
+
+## Captcha
+
+Captcha sudah menggunakan **Cloudflare CAPTCHA/Turnstile** pada project existing.
+
+Gunakan implementasi yang sudah ada dan jangan menggantinya dengan captcha lokal.
+
+Captcha harus:
+
+* ditampilkan pada login sesuai implementasi existing,
+* divalidasi dengan mekanisme Cloudflare,
+* tidak dibuat ulang menggunakan canvas/random captcha,
+* tidak menggunakan layanan captcha lain.
+
+## Password
+
+Password tidak boleh disimpan dalam bentuk plain text.
+
+Gunakan mekanisme autentikasi yang sudah terdapat pada project existing.
+
+Apabila project telah menggunakan **Supabase Auth**, pertahankan Supabase Auth.
+
+Jangan membuat sistem password custom baru apabila Supabase Auth sudah digunakan.
+
+Apabila terdapat tabel user tambahan untuk informasi role/KUA, gunakan tabel tersebut sebagai metadata/otorisasi dan tetap sinkron dengan mekanisme autentikasi yang sudah berjalan.
+
+---
+
+# 4. MASTER DATA POS
+
+Gunakan struktur berikut apa adanya.
+
+### 521111 — Belanja Operasional Perkantoran
+
+* ATK Kantor
+* Jamuan Tamu
+* Pramubakti
+* Alat Rumah Tangga Kantor
+
+### 521211 — Belanja Bahan
+
+* Penggandaan / Penjilidan
+* Spanduk
+
+### 522111 — Belanja Langganan Listrik
+
+Tidak memiliki rincian.
+
+### 522112 — Belanja Langganan Telepon / Internet
+
+Tidak memiliki rincian.
+
+### 522113 — Belanja Langganan Air
+
+Tidak memiliki rincian.
+
+### 523111 — Belanja Pemeliharaan Gedung dan Bangunan
+
+Tidak memiliki rincian.
+
+### 523121 — Belanja Pemeliharaan Peralatan dan Mesin
+
+Tidak memiliki rincian.
+
+### Penting
+
+Unit terkecil yang dipakai untuk input dan validasi RPD/Realisasi adalah:
+
+* level rincian bila kode POS mempunyai rincian;
+* level kode POS itu sendiri bila tidak mempunyai rincian.
+
+Contoh:
+
+`ATK Kantor`
+
+harus dianggap sebagai item tersendiri untuk:
+
+* RPD
+* Realisasi
+* total
+* sisa anggaran
+* validasi
+
+Bukan menggunakan agregat kode POS induk sebagai unit input.
+
+---
+
+# 5. STRUKTUR DATABASE SUPABASE
+
+Database utama menggunakan PostgreSQL pada Supabase.
+
+Struktur harus menyesuaikan database yang **sudah saya buat melalui file SQL yang saya sertakan**.
+
+Jangan langsung membuat tabel baru dengan nama berbeda apabila tabel existing sudah memiliki fungsi yang sama.
+
+Secara konsep data yang diperlukan adalah:
+
+## Users / Profiles
+
+Minimal menyimpan informasi:
+
+* user_id
+* username/email sesuai mekanisme autentikasi existing
+* role
+* kua_id
+* nama_lengkap
+* status
+* last_login atau informasi login terakhir apabila memang sudah digunakan
+
+Password credential dikelola melalui sistem authentication, bukan disimpan plain text di tabel aplikasi.
+
+---
+
+## KUA
+
+Field minimal:
+
+* kua_id
+* nama_kua
+* kecamatan
+* status
+
+---
+
+## POS
+
+Field minimal:
+
+* pos_id
+* kode_pos
+* nama_pos
+* kode_rincian
+* nama_rincian
+* urutan
+
+---
+
+## AnggaranTahunan
+
+Field minimal:
+
+* id
+* kua_id
+* tahun
+* nominal_total
+* updated_by
+* updated_at
+
+---
+
+## RPD
+
+Field minimal:
+
+* id
+* kua_id
+* tahun
+* bulan
+* pos_id
+* nominal
+* updated_by
+* updated_at
+
+---
+
+## Realisasi
+
+Field minimal:
+
+* id
+* kua_id
+* tahun
+* bulan
+* pos_id
+* nominal
+* status
+* is_autopayment
+* file_lpj_url
+* catatan_admin
+* submitted_by
+* submitted_at
+* verified_by
+* verified_at
+* paid_at
+
+Status:
+
+* `waiting`
+* `approved`
+* `rejected`
+* `paid`
+
+---
+
+## AutoPayment
+
+Field minimal:
+
+* id
+* kua_id
+* pos_id
+* tahun
+* bulan
+* nominal
+* input_by
+* input_at
+
+---
+
+## Config
+
+Field minimal:
+
+* key
+* value
+* updated_by
+* updated_at
+
+Konfigurasi:
+
+* wajib_lpj
+* rpd_enabled
+* realisasi_enabled
+* max_file_size_mb
+* max_file_count
+* bulan_edit_rpd
+
+---
+
+# 6. LOG AKTIVITAS
+
+**Tidak perlu membuat atau menyimpan LogAktivitas di database.**
+
+Saya sengaja tidak ingin menyimpan log aktivitas ke Supabase karena ingin menghemat storage.
+
+Karena itu:
+
+* jangan membuat tabel `LogAktivitas`,
+* jangan membuat tabel audit khusus,
+* jangan menyimpan setiap aktivitas user sebagai row baru.
+
+Untuk debugging gunakan seperlunya:
+
+* `console.log`
+* `console.warn`
+* `console.error`
+* Supabase/logging bawaan yang tersedia secara platform apabila diperlukan
+
+Informasi audit penting tetap dapat diketahui dari field data yang sudah ada seperti:
+
+* `updated_by`
+* `updated_at`
+* `submitted_by`
+* `submitted_at`
+* `verified_by`
+* `verified_at`
+* `paid_at`
+
+Jangan menambahkan persistent activity log hanya untuk mencatat aktivitas biasa.
+
+---
+
+# 7. HAK AKSES ADMIN
+
+Admin memiliki akses:
+
+1. Input dan edit Anggaran Tahunan per KUA.
+2. Melihat, mengedit, dan menghapus RPD milik seluruh KUA.
+3. Melakukan verifikasi Realisasi seluruh KUA.
+4. Approve Realisasi.
+5. Reject Realisasi dengan catatan.
+6. Menandai Realisasi sebagai `paid`.
+7. Download laporan RPD dan Realisasi.
+8. Kelola Config.
+9. Kelola AutoPayment.
+10. Mengubah password akun sendiri.
+11. Reset password Operator KUA.
+12. Melihat data seluruh KUA.
+
+Admin tidak dibatasi oleh konfigurasi bulan edit RPD yang berlaku untuk Operator.
+
+---
+
+# 8. HAK AKSES OPERATOR KUA
+
+Operator hanya boleh mengakses data milik KUA yang terhubung dengan akun tersebut.
+
+Operator dapat:
+
+1. Input RPD bulanan.
+2. Edit RPD selama bulan tersebut dibuka.
+3. Input Realisasi bulanan.
+4. Upload/menambahkan dokumen LPJ sesuai Config.
+5. Melihat status Realisasi.
+6. Memperbaiki Realisasi yang ditolak.
+7. Download laporan untuk KUA sendiri.
+8. Mengubah password sendiri.
+
+Operator **tidak boleh**:
+
+* melihat data KUA lain,
+* mengedit data KUA lain,
+* mengubah anggaran KUA lain,
+* memverifikasi Realisasi,
+* mengubah status menjadi approved/paid,
+* mengubah konfigurasi global.
+
+Pembatasan harus diterapkan bukan hanya di UI, tetapi juga pada **Supabase RLS/policy dan validasi server-side**.
+
+---
+
+# 9. ANGGARAN TAHUNAN
+
+Admin dapat memilih:
+
+* KUA
+* Tahun
+* Nominal Anggaran
+
+Dashboard harus menampilkan daftar seluruh KUA dengan status:
+
+* sudah diset
+* belum diset
+
+Untuk tahun berjalan.
+
+Operator hanya dapat melihat anggaran milik KUA sendiri.
+
+---
+
+# 10. RPD
+
+## Operator
+
+Operator mengisi RPD bulanan berdasarkan:
+
+* tahun
+* bulan
+* POS/rincian
+
+Tampilkan secara real-time:
+
+**Total RPD tahun berjalan**
+
+dibandingkan dengan:
+
+**Anggaran Tahunan KUA**
+
+Contoh:
+
+`Total RPD: Rp 25.000.000`
+
+`Anggaran Tahunan: Rp 30.000.000`
+
+`Sisa: Rp 5.000.000`
+
+RPD tidak boleh menyebabkan total RPD setahun melebihi Anggaran Tahunan.
+
+## Pembatasan bulan
+
+Operator hanya dapat mengedit bulan yang diperbolehkan oleh Config:
+
+`bulan_edit_rpd`
+
+Admin tidak terkena pembatasan tersebut.
+
+---
+
+# 11. REALISASI
+
+Operator memilih:
+
+* tahun
+* bulan
+
+kemudian mengisi nominal Realisasi per POS/rincian.
+
+Tampilkan:
+
+* RPD bulan tersebut
+* Realisasi bulan berjalan
+* sisa RPD
+* sisa anggaran POS tahunan
+
+Validasi harus dilakukan secara real-time.
+
+Realisasi yang sudah:
+
+* `approved`
+* `paid`
+
+tidak dapat diedit Operator.
+
+Realisasi:
+
+* `waiting`
+* `rejected`
+
+masih dapat diedit oleh Operator.
+
+Setelah diperbaiki dan dikirim ulang:
+
+`rejected → waiting`
+
+---
+
+# 12. GOOGLE DRIVE UNTUK DOKUMEN LPJ
+
+Dokumen LPJ **tetap disimpan di Google Drive**.
+
+Jangan memindahkan penyimpanan dokumen LPJ ke Supabase Storage kecuali saya meminta perubahan tersebut secara khusus.
+
+Database hanya menyimpan informasi yang diperlukan, terutama:
+
+`file_lpj_url`
+
+atau metadata file yang memang diperlukan.
+
+## Google Drive API
+
+Saya sudah merencanakan penggunaan **Google Drive API dengan API key** untuk kebutuhan akses/preview dokumen.
+
+Gunakan mekanisme integrasi Google Drive yang sudah tersedia di project apabila sudah ada.
+
+### Keamanan sangat penting
+
+Karena frontend di-host pada GitHub Pages:
+
+* jangan menaruh credential privat Google di frontend,
+* jangan menaruh service account private key di repository,
+* jangan menaruh OAuth client secret di JavaScript,
+* API key yang digunakan client-side harus dibatasi/restrict sesuai kebutuhan.
+
+### Upload LPJ
+
+Perhatikan bahwa **API key Google Drive bukan credential untuk melakukan upload file secara aman**.
+
+Karena itu:
+
+* apabila project existing sudah mempunyai mekanisme upload yang aman, pertahankan;
+* apabila upload ke Google Drive belum tersedia dan memang membutuhkan akses tulis, gunakan mekanisme server-side yang aman seperti Supabase Edge Function atau mekanisme autentikasi Google yang sesuai;
+* **jangan pernah memasukkan service account private key atau secret Google ke GitHub Pages/frontend.**
+
+Untuk kebutuhan preview PDF/image, gunakan URL atau Google Drive API yang sudah disediakan oleh project.
+
+---
+
+# 13. AUTOPAYMENT
+
+Fitur untuk pembayaran yang sudah dilakukan otomatis melalui SAKTI setiap bulan.
+
+Contoh:
+
+* listrik
+* air
+* telepon/internet
+
+Alurnya:
+
+### 1
+
+Admin memilih kombinasi:
+
+`KUA + POS`
+
+yang menggunakan AutoPayment.
+
+Bisa memilih banyak sekaligus.
+
+### 2
+
+Setiap bulan Admin memasukkan nominal AutoPayment.
+
+### 3
+
+Data AutoPayment otomatis menjadi Realisasi dengan:
+
+`status = paid`
+
+dan:
+
+`is_autopayment = true`
+
+### 4
+
+Tidak masuk ke antrean verifikasi Admin.
+
+### 5
+
+Tidak memerlukan LPJ.
+
+### 6
+
+Pada form Realisasi Operator:
+
+kombinasi KUA + POS + bulan yang sudah memiliki AutoPayment harus:
+
+* tampil,
+* read-only,
+* diberi label **Dibayar otomatis**.
+
+Operator tidak dapat mengisi manual.
+
+### 7
+
+AutoPayment tetap dihitung dalam:
+
+* total Realisasi,
+* validasi RPD,
+* sisa anggaran POS,
+* laporan.
+
+---
+
+# 14. STATUS REALISASI
+
+Status utama:
+
+`waiting → approved → paid`
+
+atau:
+
+`waiting → rejected → waiting`
 
 Alur:
-1. Admin memilih kombinasi **KUA + pos** yang mau pakai AutoPayment (bisa pilih banyak sekaligus, lewat checklist).
-2. Tiap bulan, Admin input **nominal** AutoPayment untuk tiap kombinasi KUA+pos yang aktif.
-3. Nominal itu otomatis menjadi nilai **Realisasi** bulan tsb untuk KUA & pos terkait — berstatus `paid` langsung, ditandai `is_autopayment = true`, tanpa perlu LPJ dan tanpa lewat alur waiting/approve.
-4. Di form input Realisasi milik Operator, kombinasi KUA+pos+bulan yang sudah dicover AutoPayment otomatis tampil read-only ("Dibayar otomatis") — Operator tidak bisa dan tidak perlu mengisi manual.
-5. Nominal AutoPayment tetap dihitung dalam semua validasi (total bulanan, sisa anggaran pos tahunan) dan tetap muncul di Laporan seperti Realisasi biasa.
 
-## 8. Status Realisasi & Alur Verifikasi
+### Operator
 
-Status: `waiting` → `approved` atau `rejected` → (dari `approved`) → `paid`.
+Submit Realisasi:
 
-1. Operator submit Realisasi (+ LPJ jika wajib) → status `waiting`.
-2. Admin review: **Approve** → `approved`, atau **Reject** (wajib isi catatan) → `rejected` (Operator bisa edit & submit ulang → balik ke `waiting`).
-3. Admin menandai **paid** setelah pembayaran benar-benar diproses (transisi dari `approved`).
-4. Entri AutoPayment langsung `paid` sejak dibuat, di luar alur di atas (lihat bagian 7).
+`waiting`
 
-## 9. Laporan (Download RPD/Realisasi)
+### Admin
 
-Filter yang tersedia:
-- **Periode**: 1 tahun, atau 1 bulan tertentu.
-- **Cakupan KUA**: 1 KUA tertentu, atau semua KUA (tetap 1 file, hanya kolomnya menyesuaikan — misalnya ditambah kolom "Nama KUA" saat pilih semua KUA, dihilangkan saat pilih 1 KUA).
-- **Jenis nominal**: RPD atau Realisasi.
-- **Format**: Excel (.xlsx) dan PDF, masing-masing tombol unduh terpisah.
+Approve:
 
-Dua jenis laporan:
-1. **Laporan per Tahun** — rekap satu baris per pos/rincian (atau per KUA+pos bila semua KUA), kolom Total RPD atau Total Realisasi setahun. Untuk ringkasan cepat.
-2. **Laporan Detail** — rincian per pos/rincian per bulan (matrix pos x 12 bulan, atau baris per pos+bulan), nominal RPD atau Realisasi sesuai pilihan. Untuk keperluan audit/cek detail.
+`waiting → approved`
 
-Saran teknis: ambil data dari Apps Script sebagai JSON, lalu generate file di client memakai library ringan yang dimuat lazy (contoh: SheetJS/xlsx.js untuk Excel, jsPDF + autotable untuk PDF) — supaya proses cepat, tidak membebani quota Apps Script, dan tidak memperberat ukuran halaman utama.
+Reject:
 
-## 10. Config
+`waiting → rejected`
 
-| Pengaturan | Tipe |
-|---|---|
-| Wajib upload LPJ (PDF/Image) saat submit Realisasi | on/off |
-| Pengisian RPD oleh Operator | on/off |
-| Pengisian Realisasi oleh Operator | on/off |
-| Maksimal ukuran file | angka (MB) |
-| Maksimal jumlah file | angka |
-| Bulan dibuka untuk edit RPD (Operator) | pilih bulan mana saja yang aktif |
+Reject **wajib memberikan catatan alasan**.
 
-## 11. Validasi & Aturan Bisnis
+### Operator
 
-Semua ini wajib divalidasi di **client maupun server** (server sebagai validasi final, jangan percaya client saja), dan setiap pelanggaran harus menampilkan pesan yang jelas — sebutkan batasnya, nilai yang diinput, dan selisih kelebihannya, bukan sekadar "tidak valid":
+Memperbaiki data:
 
-1. Submit Realisasi untuk bulan **M** hanya bisa mulai tanggal 10 bulan **M** (boleh dilakukan kapan pun setelahnya, termasuk di bulan-bulan berikutnya).
-2. Nominal tidak boleh negatif.
-3. Semua field nominal ditampilkan dengan separator ribuan format Indonesia (mis. `1.500.000`), **termasuk saat sedang diketik** di input field (format-as-you-type, kursor tidak boleh meloncat).
-4. Total RPD yang diinput Operator dalam 1 tahun (seluruh bulan, seluruh pos) tidak boleh melebihi Anggaran Tahunan KUA tsb.
-5. Total Realisasi dalam 1 bulan (seluruh pos, termasuk AutoPayment) tidak boleh melebihi Total RPD bulan yang sama.
-6. Total Realisasi 1 pos/rincian (akumulasi seluruh bulan dalam 1 tahun, termasuk AutoPayment) tidak boleh melebihi Total RPD pos/rincian tsb dalam 1 tahun — tampilkan sisa anggaran pos secara real-time saat input Realisasi, dan cegah submit bila akan jadi minus.
+`rejected → waiting`
 
-## 12. UI/UX & Performa
+### Admin
 
-- Format angka Rupiah konsisten di semua tempat (tabel, form, laporan): `Rp` + separator titik ribuan, tanpa desimal.
-- Indikator sisa anggaran (per pos, per KUA) ditampilkan jelas — beri warna berbeda saat mendekati atau melewati batas.
-- Loading indicator di setiap fetch ke Apps Script (API Apps Script cenderung agak lambat).
-- Navigasi antar-menu tanpa reload halaman penuh (show/hide section atau routing sederhana berbasis hash).
-- Modal konfirmasi sebelum aksi destruktif (hapus RPD, reset password).
-- Notifikasi toast untuk sukses/gagal.
-- Mobile-first dengan breakpoint jelas untuk tablet & desktop.
+Setelah benar-benar dibayarkan:
 
-## 13. Arsitektur & Struktur File (Usulan)
+`approved → paid`
 
-**Frontend**
-- `index.html` — halaman login (+ captcha lokal)
-- `app.html` — shell utama setelah login, render konten sesuai role via JS
-- `/css/style.css` (boleh dipecah: base, components, admin, operator)
-- `/js/api.js` — wrapper fetch ke Apps Script
-- `/js/auth.js`, `/js/admin.js`, `/js/operator.js`, `/js/utils.js` (format angka, validasi), `/js/captcha.js`
+### AutoPayment
 
-**Backend (Google Apps Script, 1 project)**
-- `Code.gs` — entry point `doGet`/`doPost`, router berdasar `action`
-- `Auth.gs`, `RPD.gs`, `Realisasi.gs`, `AutoPayment.gs`, `Laporan.gs`, `Config.gs`, `Utils.gs`
+Langsung:
 
-**Database**: 1 Google Spreadsheet sesuai bagian 4.
+`paid`
 
-## 14. Asumsi yang Diambil (mohon dikoreksi bila salah)
+dengan:
 
-- Transisi status `approved` → `paid` dilakukan manual oleh Admin, terpisah dari aksi approve.
-- Toggle "Pengisian RPD" dan "Pengisian Realisasi" di Config berlaku global untuk semua KUA, bukan per-KUA.
-- "Bulan Dibuka untuk Edit RPD" adalah pengaturan global (berlaku sama untuk semua KUA), bisa diubah Admin kapan saja.
-- Definisi "Laporan per Tahun" vs "Laporan Detail" mengikuti penjelasan di bagian 9 — sesuaikan jika yang dimaksud berbeda.
+`is_autopayment = true`
 
-## 15. Yang Harus Dihasilkan
+---
 
-- Kode frontend (HTML/CSS/JS) lengkap dan siap pakai.
-- Kode backend Apps Script lengkap (siap paste ke Apps Script Editor) + struktur Spreadsheet (nama sheet & kolom sesuai bagian 4).
-- Petunjuk singkat setup: cara buat Spreadsheet, cara deploy Apps Script sebagai Web App, cara hubungkan ke frontend.
-- Mengingat scope-nya besar, boleh dibangun bertahap: (1) Auth + struktur data dasar → (2) RPD & Realisasi Operator → (3) Verifikasi & Laporan Admin → (4) AutoPayment & Config.
+# 15. ATURAN VALIDASI
+
+Semua validasi wajib dilakukan pada:
+
+1. frontend/client;
+2. database/security/server-side.
+
+Frontend bukan sumber kebenaran utama.
+
+## 15.1 Realisasi
+
+Realisasi untuk bulan `M` baru boleh disubmit mulai:
+
+**tanggal 10 bulan M**
+
+Contoh:
+
+Realisasi September dapat mulai disubmit:
+
+**10 September**
+
+dan tetap boleh dilakukan pada bulan berikutnya.
+
+## 15.2 Nominal
+
+Nominal tidak boleh negatif.
+
+## 15.3 Format Rupiah
+
+Semua nominal menggunakan format Indonesia:
+
+`1.500.000`
+
+Tanpa desimal.
+
+Format juga diterapkan ketika user sedang mengetik:
+
+`format-as-you-type`
+
+Kursor tidak boleh meloncat secara mengganggu.
+
+## 15.4 Total RPD
+
+Total seluruh RPD dalam satu tahun:
+
+`≤ Anggaran Tahunan`
+
+## 15.5 Total Realisasi Bulanan
+
+Total Realisasi seluruh POS dalam satu bulan:
+
+`≤ Total RPD bulan tersebut`
+
+AutoPayment ikut dihitung.
+
+## 15.6 Total Realisasi per POS
+
+Akumulasi Realisasi satu POS/rincian sepanjang tahun:
+
+`≤ Total RPD POS/rincian tersebut`
+
+AutoPayment ikut dihitung.
+
+Sisa anggaran harus ditampilkan secara real-time.
+
+Submit harus dicegah jika hasil akhirnya negatif.
+
+Pesan error harus menjelaskan:
+
+* batas maksimal,
+* nilai yang dimasukkan,
+* nilai yang sudah digunakan,
+* selisih kelebihan.
+
+Jangan hanya menampilkan:
+
+`Data tidak valid`.
+
+---
+
+# 16. CONFIG SISTEM
+
+Admin dapat mengatur:
+
+| Pengaturan                   | Tipe               |
+| ---------------------------- | ------------------ |
+| Wajib upload LPJ             | on/off             |
+| Pengisian RPD Operator       | on/off             |
+| Pengisian Realisasi Operator | on/off             |
+| Maksimal ukuran file         | MB                 |
+| Maksimal jumlah file         | angka              |
+| Bulan dibuka untuk edit RPD  | multi-select bulan |
+
+Config berlaku global kecuali nantinya project existing sudah mempunyai mekanisme berbeda.
+
+---
+
+# 17. LAPORAN
+
+Laporan harus tersedia untuk:
+
+### Admin
+
+* 1 KUA
+* seluruh KUA
+
+### Operator
+
+* hanya KUA sendiri
+
+Filter:
+
+### Periode
+
+* 1 tahun
+* 1 bulan
+
+### Cakupan
+
+* 1 KUA
+* seluruh KUA
+
+### Jenis nominal
+
+* RPD
+* Realisasi
+
+### Format
+
+* Excel `.xlsx`
+* PDF
+
+Tombol download terpisah.
+
+---
+
+# 18. LAPORAN PER TAHUN
+
+Rekap satu baris per:
+
+* POS/rincian
+
+atau:
+
+* KUA + POS/rincian jika memilih seluruh KUA.
+
+Kolom nominal berisi total:
+
+* RPD setahun
+
+atau:
+
+* Realisasi setahun.
+
+---
+
+# 19. LAPORAN DETAIL
+
+Rincian berdasarkan:
+
+* POS/rincian
+* bulan
+
+Format dapat berupa:
+
+### Matrix
+
+POS × Januari–Desember
+
+atau:
+
+### Tabel
+
+POS + Bulan + Nominal
+
+Data harus dapat digunakan untuk audit dan pengecekan detail.
+
+---
+
+# 20. EXPORT EXCEL & PDF
+
+Karena frontend menggunakan GitHub Pages/static hosting, proses generate laporan sebaiknya dilakukan di client.
+
+Gunakan library secara lazy-load hanya ketika user menekan tombol export.
+
+Contoh:
+
+### Excel
+
+SheetJS / library XLSX sejenis.
+
+### PDF
+
+jsPDF + AutoTable atau library sejenis.
+
+Jangan memuat library export besar pada initial page load apabila tidak diperlukan.
+
+---
+
+# 21. PERFORMA
+
+Project harus hemat resource karena menggunakan layanan gratis.
+
+Prioritas:
+
+* minim request ke Supabase,
+* query hanya kolom yang diperlukan,
+* pagination bila data besar,
+* caching master data di client bila aman,
+* hindari query berulang,
+* hindari render tabel ribuan row sekaligus,
+* debounce/filter input bila diperlukan,
+* lazy-load library berat,
+* gunakan loading state,
+* gunakan skeleton/loading indicator.
+
+Data master seperti:
+
+* KUA
+* POS
+* Config
+
+dapat di-cache di memory/session/localStorage apabila sesuai dan tidak menimbulkan masalah keamanan/stale data.
+
+---
+
+# 22. UI/UX
+
+Dashboard yang sudah ada harus dipertahankan dan ditingkatkan.
+
+Prinsip:
+
+* responsive,
+* mobile-first,
+* nyaman di HP,
+* tablet,
+* desktop.
+
+Navigasi antar menu tidak boleh menyebabkan full page reload.
+
+Gunakan:
+
+* section show/hide,
+* SPA sederhana,
+* hash routing,
+* atau mekanisme existing.
+
+Tampilkan:
+
+* loading state,
+* empty state,
+* error state,
+* success toast,
+* error toast,
+* confirmation modal untuk aksi destruktif.
+
+Contoh aksi destruktif:
+
+* hapus RPD,
+* reset password,
+* aksi lain yang mengubah/menghapus data secara permanen.
+
+---
+
+# 23. KONTROL AKSES & RLS
+
+Ini merupakan bagian yang sangat penting.
+
+Supabase harus menggunakan **Row Level Security (RLS)** untuk membatasi data.
+
+### Admin
+
+Boleh mengakses data seluruh KUA sesuai kebutuhan.
+
+### Operator
+
+Hanya boleh:
+
+`kua_id = kua_id akun yang sedang login`
+
+RLS harus mencegah operator membaca atau memodifikasi data KUA lain walaupun user mencoba memanipulasi request secara manual melalui browser developer tools.
+
+Jangan hanya mengandalkan:
+
+* hidden button,
+* role check di JavaScript,
+* filter UI.
+
+Security harus diterapkan pada database/backend.
+
+---
+
+# 24. OPTIMASI STORAGE SUPABASE
+
+Karena saya menggunakan paket gratis, penggunaan storage harus dihemat.
+
+Karena itu:
+
+* jangan menyimpan file LPJ di Supabase Storage,
+* jangan menyimpan log aktivitas,
+* jangan membuat tabel duplikat yang tidak diperlukan,
+* jangan menyimpan JSON besar yang sebenarnya dapat dihitung dari data utama,
+* gunakan relasi/foreign key yang tepat,
+* simpan data turunan hanya bila memang diperlukan.
+
+Dokumen LPJ tetap berada di Google Drive.
+
+---
+
+# 25. STRUKTUR PROJECT
+
+Karena project existing sudah memiliki `index.html` dan file `.mjs`, jangan memaksakan struktur baru.
+
+Struktur akhir boleh seperti:
+
+```text
+/
+├── index.html
+├── *.mjs
+├── css/
+│   └── *.css
+├── js/
+│   └── *.js / *.mjs
+├── assets/
+├── libs/
+└── sql/
+    └── migration-*.sql
+```
+
+Bila project existing mempunyai struktur berbeda, **pertahankan struktur existing** selama masih baik.
+
+Jangan memecah `index.html` menjadi `app.html` secara otomatis.
+
+`index.html` saat ini sudah berisi:
+
+* login page
+* dashboard
+
+dan harus tetap menjadi entry point utama aplikasi kecuali ada alasan teknis kuat.
+
+---
+
+# 26. API / DATA ACCESS
+
+Karena menggunakan Supabase, tidak perlu lagi:
+
+* Google Apps Script `doGet`
+* Google Apps Script `doPost`
+* router `action`
+* Google Spreadsheet sebagai database.
+
+Gunakan:
+
+**Supabase client → PostgreSQL**
+
+sesuai struktur database existing.
+
+Gunakan query yang efisien dan hindari mengambil seluruh tabel apabila hanya membutuhkan sebagian data.
+
+---
+
+# 27. MIGRASI DARI PROMPT LAMA
+
+Semua bagian yang sebelumnya menggunakan:
+
+* Google Apps Script
+* Google Spreadsheet
+* `Code.gs`
+* `Auth.gs`
+* `RPD.gs`
+* `Realisasi.gs`
+* `Config.gs`
+* `Laporan.gs`
+* `LogAktivitas`
+
+harus dianggap **sudah tidak digunakan**, kecuali ada kode existing yang memang masih diperlukan untuk integrasi tertentu.
+
+Sumber data utama sekarang adalah:
+
+**Supabase PostgreSQL**
+
+Sumber dokumen LPJ:
+
+**Google Drive**
+
+Hosting frontend:
+
+**GitHub Pages**
+
+Captcha:
+
+**Cloudflare**
+
+---
+
+# 28. ASUMSI YANG DIGUNAKAN
+
+Gunakan asumsi berikut:
+
+1. `index.html` yang saya kirim merupakan frontend existing dan harus menjadi baseline.
+2. File `.mjs` yang saya kirim berisi sebagian atau seluruh logic aplikasi existing.
+3. File `.sql` yang saya kirim merupakan SQL yang sudah pernah dijalankan di Supabase.
+4. Database existing harus dipertahankan.
+5. Akun yang sudah saya generate harus tetap digunakan.
+6. Tidak perlu membuat sistem akun baru dari nol.
+7. Supabase menjadi backend/database utama.
+8. GitHub Pages menjadi hosting frontend.
+9. Google Drive tetap menjadi lokasi penyimpanan dokumen LPJ.
+10. Captcha tetap menggunakan Cloudflare.
+11. Tidak ada tabel log aktivitas persisten karena saya ingin menghemat storage.
+12. RLS wajib digunakan untuk keamanan data.
+13. Admin dapat mengakses seluruh KUA.
+14. Operator hanya dapat mengakses satu KUA.
+15. AutoPayment langsung menjadi `paid`.
+16. `approved → paid` dilakukan manual oleh Admin.
+17. Config pengisian RPD, Realisasi, dan bulan edit RPD berlaku global.
+
+---
+
+# 29. ATURAN PENGERJAAN
+
+Sebelum menulis kode:
+
+### Tahap 1 — Audit Project Existing
+
+Baca dan pahami:
+
+* `index.html`
+* file `.mjs`
+* file `.sql`
+
+Kemudian identifikasi:
+
+* struktur UI,
+* struktur dashboard,
+* fungsi login,
+* struktur role,
+* koneksi Supabase,
+* tabel existing,
+* foreign key,
+* RLS/policy,
+* fungsi yang sudah tersedia,
+* bagian yang belum selesai.
+
+### Tahap 2 — Jangan merusak fitur existing
+
+Pertahankan fungsi yang sudah bekerja.
+
+Jangan mengganti implementasi yang sudah benar hanya karena ingin menggunakan pola kode yang berbeda.
+
+### Tahap 3 — Tentukan gap
+
+Buat daftar:
+
+* fitur yang sudah tersedia,
+* fitur yang masih kurang,
+* bug yang harus diperbaiki,
+* perubahan database yang diperlukan,
+* perubahan frontend yang diperlukan.
+
+### Tahap 4 — Implementasi
+
+Implementasikan secara bertahap:
+
+**Tahap 1**
+
+Auth + role + struktur data + RLS
+
+**Tahap 2**
+
+RPD + Anggaran Tahunan
+
+**Tahap 3**
+
+Realisasi + LPJ + status verifikasi
+
+**Tahap 4**
+
+Admin verification + AutoPayment
+
+**Tahap 5**
+
+Config + laporan Excel/PDF
+
+**Tahap 6**
+
+Optimasi UI/UX + performa + security review
+
+---
+
+# 30. OUTPUT YANG SAYA INGINKAN
+
+Setelah menganalisis file existing yang saya kirim, hasil pekerjaan harus mencakup:
+
+### Frontend
+
+Kode lengkap yang dapat langsung digunakan pada GitHub Pages.
+
+Jangan hanya memberikan pseudocode.
+
+### Supabase
+
+SQL migration apabila memang dibutuhkan.
+
+Jangan menghapus database existing.
+
+Sertakan:
+
+* tabel yang ditambahkan/diubah,
+* index,
+* foreign key,
+* RLS,
+* policy,
+* function/trigger bila memang diperlukan.
+
+### Google Drive
+
+Implementasi integrasi sesuai arsitektur existing.
+
+Pastikan tidak ada credential privat yang bocor ke frontend/GitHub.
+
+### Dokumentasi
+
+Berikan langkah setup yang jelas:
+
+1. konfigurasi Supabase,
+2. pengecekan database,
+3. konfigurasi Cloudflare CAPTCHA,
+4. konfigurasi Google Drive,
+5. konfigurasi frontend,
+6. deploy ke GitHub Pages.
+
+---
+
+# 31. ATURAN PALING PENTING
+
+**JANGAN menganggap project ini sebagai project baru.**
+
+Saya sudah memiliki:
+
+* `index.html`
+* JavaScript `.mjs`
+* database Supabase
+* SQL yang sudah pernah dijalankan
+* akun yang sudah dibuat
+* login page
+* dashboard
+
+Tugasmu adalah:
+
+> **melanjutkan, memperbaiki, merapikan, dan melengkapi project existing tersebut.**
+
+Bukan membuat project alternatif yang terpisah.
+
+Sebelum membuat perubahan besar, gunakan struktur dan fungsi existing semaksimal mungkin.
+
+Prioritas:
+
+**Existing Code → Compatibility → Security → Functionality → Performance → UI Enhancement**
+
+Dan bukan:
+
+**Rewrite Everything From Scratch.**
