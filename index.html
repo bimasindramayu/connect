@@ -29,6 +29,8 @@ h4,h5{color:#566a7f;font-weight:600}
 #side .nav-link.sub{padding-left:2.4rem}
 dialog{border:0;border-radius:.5rem;padding:0;width:min(440px,calc(100% - 2rem));box-shadow:0 .5rem 2rem rgba(67,89,113,.3);color:var(--bs-body-color)}
 dialog::backdrop{background:rgba(67,89,113,.5)}
+dialog.wide{width:min(1100px,calc(100% - 1rem));height:calc(100% - 1rem);max-width:none;max-height:none;overflow:hidden}
+@media(max-width:575px){dialog.wide{width:100%;height:100%;border-radius:0}}
 @media(max-width:991px){#side{transform:translateX(-100%)}#side.open{transform:none}#main{margin-left:0}#topbar{margin:.75rem}}
 </style>
 </head>
@@ -95,8 +97,6 @@ dialog::backdrop{background:rgba(67,89,113,.5)}
 const CFG = {
   url: 'https://lpfwkitppdnlcakkncov.supabase.co',
   key: 'sb_publishable_AfVmUT86ttPMaiO3iUmJew_u3l3IBPF',
-  gKey: 'AIzaSyAq4VCOiSyvf4DriZk1RDR--m8u4iX11U8',      // API key Google (batasi: HTTP referrer = domain GitHub Pages Anda, API = Google Drive API)
-  gClient: '423936927025-nj5e6s5pkpvujm3b41vb3j47u8o5tbvu.apps.googleusercontent.com',   // OAuth Client ID tipe Web (Authorized JavaScript origins = domain GitHub Pages Anda)
   turnstile: '0x4AAAAAAFKG36vwdFMGZBiz'   // test key; ganti dengan Site Key Turnstile Anda
 };
 /* ============================= */
@@ -148,7 +148,7 @@ const pairOk = p => {
   return a.length >= 8 && same;
 };
 const bindPair = p => [1, 2].forEach(n => $(p + n).addEventListener('input', () => pairOk(p)));
-$('dlg').onclose = () => $('dlg').replaceChildren();
+$('dlg').onclose = () => { if (vOff) vOff(); vOff = null; $('dlg').className = ''; $('dlg').replaceChildren(); };
 
 $('f').onsubmit = async e => {
   e.preventDefault();
@@ -263,37 +263,200 @@ async function pageAnggaran() {
   load();
 }
 
+const ST = { waiting: ['bg-warning', 'Menunggu verifikasi'], approved: ['bg-info', 'Disetujui'], rejected: ['bg-danger', 'Ditolak'], paid: ['bg-success', 'Dibayar'] };
+const badge = r => r.is_autopayment ? '<span class="badge bg-success">Dibayar otomatis</span>' : `<span class="badge ${ST[r.status][0]}">${ST[r.status][1]}</span>`;
+const sumN = a => a.reduce((s, x) => s + x.nominal, 0);
+
+/* ====== LPJ: unggah, daftar, baca file lewat Edge Function "lpj" (file tersimpan di folder pusat Google Drive) ====== */
+async function lpjCall(q, opt = {}) {
+  const { data: { session } } = await sb.auth.getSession();
+  let r;
+  try { r = await fetch(`${CFG.url}/functions/v1/lpj?${new URLSearchParams(q)}`, { ...opt, headers: { Authorization: 'Bearer ' + session.access_token, apikey: CFG.key } }); }
+  catch { throw new Error('Tidak dapat menghubungi server LPJ. Periksa koneksi internet dan pastikan Edge Function lpj sudah di-deploy.'); }
+  if (!r.ok) {
+    const j = await r.json().catch(() => null);
+    throw new Error(j?.error || `Server LPJ tidak merespons (kode ${r.status}). Pastikan Edge Function lpj sudah di-deploy.`);
+  }
+  return r;
+}
+async function showDocs(el, ctx) {   // ctx = { kua, tahun, bulan }; daftar dokumen + tombol Lihat
+  el.textContent = 'Memuat dokumen…';
+  try {
+    const { files } = await (await lpjCall({ action: 'list', ...ctx })).json();
+    el.innerHTML = files.length ? `<ul class="list-unstyled mb-0">${files.map((f, i) => `<li class="d-flex align-items-center gap-2 mb-1"><i class="bx bx-file"></i><span class="me-auto text-break">${esc(f.name)}</span><button class="btn btn-sm btn-outline-primary" data-f="${i}">Lihat</button></li>`).join('')}</ul>` : '<span class="small">Belum ada dokumen.</span>';
+    el.onclick = e => { const b = e.target.closest('[data-f]'); if (b) openViewer(files, +b.dataset.f, ctx); };
+  } catch (e) { el.innerHTML = note(e.message); }
+}
+
+/* ====== Pratinjau dokumen: zoom (mouse/trackpad/sentuh), geser, putar. Posisi dijepit agar dokumen tak pernah hilang dari layar ====== */
+const PDF_JS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+const PDF_WK = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+let vOff = null;
+async function openViewer(files, idx, ctx) {
+  const d = $('dlg'), btn = (k, ic, lb) => `<button type="button" class="btn btn-outline-secondary" data-v="${k}" aria-label="${lb}" title="${lb}"><i class="bx ${ic}"></i></button>`;
+  d.className = 'wide';
+  d.innerHTML = `<div class="d-flex flex-column h-100">
+    <div class="d-flex align-items-center flex-wrap gap-2 p-2 border-bottom">
+      <select id="vf" class="form-select form-select-sm" style="flex:1 1 140px;width:auto;min-width:0">${files.map((f, i) => `<option value="${i}"${i === idx ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}</select>
+      <div class="btn-group btn-group-sm">${btn('out', 'bx-zoom-out', 'Perkecil')}${btn('in', 'bx-zoom-in', 'Perbesar')}${btn('fit', 'bx-fullscreen', 'Pas layar')}${btn('ccw', 'bx-rotate-left', 'Putar kiri')}${btn('cw', 'bx-rotate-right', 'Putar kanan')}</div>
+      <button type="button" class="btn btn-sm btn-primary" id="vx">Tutup</button></div>
+    <div id="vp" style="flex:1;min-height:0;position:relative;overflow:hidden;touch-action:none;background:#e9ecef;user-select:none;-webkit-user-select:none">
+      <div id="vst" style="position:absolute;left:0;top:0;transform-origin:0 0"><div id="vin" style="position:absolute;left:0;top:0;transform-origin:0 0"></div></div>
+      <div id="vm" class="position-absolute top-50 start-50 translate-middle text-center px-3" style="z-index:2"></div></div>
+    <div class="small px-2 py-1 border-top d-none d-md-block">Geser dengan klik-tahan atau scroll. Ctrl + scroll, pinch, atau dua kali klik untuk zoom.</div></div>`;
+  d.showModal();
+  const vp = $('vp'), st = $('vst'), inn = $('vin'), P = new Map();
+  let W = 0, H = 0, rot = 0, s = 1, x = 0, y = 0, gen = 0, pdf = null, url = null, io = null;
+  const dim = () => rot % 180 ? [H, W] : [W, H];
+  const lim = () => { const [bw, bh] = dim(), base = vp.clientWidth / bw; return [Math.max(Math.min(base, vp.clientHeight / bh) * 0.9, base * 0.15), base * 6]; };
+  const apply = () => {   // jepit zoom dan posisi: dokumen selalu terlihat (kecil = di tengah, besar = tepi tak keluar layar)
+    if (!W) return;
+    const [bw, bh] = dim(), vw = vp.clientWidth, vh = vp.clientHeight, [lo, hi] = lim();
+    s = Math.min(hi, Math.max(lo, s));
+    x = bw * s <= vw ? (vw - bw * s) / 2 : Math.min(0, Math.max(vw - bw * s, x));
+    y = bh * s <= vh ? (vh - bh * s) / 2 : Math.min(0, Math.max(vh - bh * s, y));
+    st.style.width = bw + 'px'; st.style.height = bh + 'px';
+    st.style.transform = `translate(${x}px,${y}px) scale(${s})`;
+    inn.style.transform = ['', `translate(${H}px,0) rotate(90deg)`, `translate(${W}px,${H}px) rotate(180deg)`, `translate(0,${W}px) rotate(270deg)`][rot / 90];
+  };
+  const fit = () => { if (!W) return; s = vp.clientWidth / dim()[0]; x = y = 0; apply(); };
+  const zoomAt = (cx, cy, k) => {
+    if (!W) return;
+    const n = Math.min(lim()[1], Math.max(lim()[0], s * k)), f = n / s;
+    x = cx - (cx - x) * f; y = cy - (cy - y) * f; s = n;
+  };
+  d.onclick = e => {
+    const b = e.target.closest('[data-v]'); if (!b || !W) return;
+    const k = b.dataset.v, c = [vp.clientWidth / 2, vp.clientHeight / 2];
+    if (k === 'fit') return fit();
+    if (k === 'cw' || k === 'ccw') { rot = (rot + (k === 'cw' ? 90 : 270)) % 360; return fit(); }
+    zoomAt(c[0], c[1], k === 'in' ? 1.4 : 1 / 1.4); apply();
+  };
+  vp.onpointerdown = e => { vp.setPointerCapture(e.pointerId); P.set(e.pointerId, [e.clientX, e.clientY]); };
+  vp.onpointermove = e => {
+    if (!P.has(e.pointerId) || !W) return;
+    const r = vp.getBoundingClientRect(), a = [...P.values()];
+    P.set(e.pointerId, [e.clientX, e.clientY]);
+    const b = [...P.values()];
+    if (b.length === 1) { x += b[0][0] - a[0][0]; y += b[0][1] - a[0][1]; }
+    else {   // dua jari: geser mengikuti titik tengah + zoom mengikuti jarak
+      const d0 = Math.hypot(a[0][0] - a[1][0], a[0][1] - a[1][1]), d1 = Math.hypot(b[0][0] - b[1][0], b[0][1] - b[1][1]);
+      const cx = (b[0][0] + b[1][0]) / 2 - r.left, cy = (b[0][1] + b[1][1]) / 2 - r.top;
+      x += cx - ((a[0][0] + a[1][0]) / 2 - r.left); y += cy - ((a[0][1] + a[1][1]) / 2 - r.top);
+      if (d0 > 0) zoomAt(cx, cy, d1 / d0);
+    }
+    apply();
+  };
+  vp.onpointerup = vp.onpointercancel = e => P.delete(e.pointerId);
+  vp.addEventListener('wheel', e => {   // scroll = geser; Ctrl+scroll dan pinch trackpad (Chrome/Firefox/Edge) = zoom
+    e.preventDefault();
+    const r = vp.getBoundingClientRect(), u = e.deltaMode === 1 ? 16 : 1;
+    if (e.ctrlKey || e.metaKey) zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * u * 0.01));
+    else { x -= e.deltaX * u; y -= e.deltaY * u; }
+    apply();
+  }, { passive: false });
+  let g0 = 1;   // pinch trackpad Safari
+  vp.addEventListener('gesturestart', e => { e.preventDefault(); g0 = s; });
+  vp.addEventListener('gesturechange', e => {
+    e.preventDefault();
+    if (P.size < 2) { const r = vp.getBoundingClientRect(); zoomAt(e.clientX - r.left, e.clientY - r.top, g0 * e.scale / s); apply(); }
+  });
+  vp.ondblclick = e => {
+    const r = vp.getBoundingClientRect(), base = vp.clientWidth / (dim()[0] || 1);
+    if (s > base * 1.2) fit(); else { zoomAt(e.clientX - r.left, e.clientY - r.top, base * 2.5 / s); apply(); }
+  };
+  const ro = new ResizeObserver(apply); ro.observe(vp);
+
+  const clean = () => { if (io) io.disconnect(); if (pdf) pdf.destroy(); if (url) URL.revokeObjectURL(url); io = pdf = url = null; inn.replaceChildren(); W = H = 0; rot = 0; };
+  const paint = async (box, pg) => {   // render halaman PDF hanya saat mendekati layar
+    const k = W / pg.getViewport({ scale: 1 }).width, v = pg.getViewport({ scale: k * Math.min(window.devicePixelRatio || 1, 1.5) }), c = document.createElement('canvas');
+    c.width = v.width; c.height = v.height; c.style.cssText = 'width:100%;height:100%;display:block';
+    box.append(c);
+    await pg.render({ canvasContext: c.getContext('2d'), viewport: v }).promise;
+  };
+  const show = async i => {
+    const my = ++gen; clean(); $('vm').textContent = 'Memuat dokumen…';
+    try {
+      const blob = await (await lpjCall({ action: 'file', ...ctx, id: files[i].id })).blob();
+      if (my !== gen) return;
+      const cw = Math.min(vp.clientWidth, 1100);
+      if (files[i].mimeType === 'application/pdf') {
+        await loadJs(PDF_JS);
+        pdfjsLib.GlobalWorkerOptions.workerSrc ||= URL.createObjectURL(new Blob([`importScripts("${PDF_WK}")`], { type: 'text/javascript' }));
+        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+        if (my !== gen) return doc.destroy();
+        pdf = doc;
+        const pgs = [];
+        for (let n = 1; n <= doc.numPages; n++) pgs.push(await doc.getPage(n));
+        io = new IntersectionObserver(es => es.forEach(en => {
+          if (en.isIntersecting && !en.target.dataset.done) { en.target.dataset.done = 1; paint(en.target, pgs[+en.target.dataset.n]); }
+        }), { root: vp, rootMargin: '100% 0px' });
+        W = cw; H = 0;
+        pgs.forEach((pg, n) => {
+          const v1 = pg.getViewport({ scale: 1 }), h = Math.round(v1.height * cw / v1.width), box = document.createElement('div');
+          box.dataset.n = n; box.style.cssText = `width:${cw}px;height:${h}px;margin-bottom:8px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25)`;
+          inn.append(box); io.observe(box); H += h + 8;
+        });
+      } else {
+        url = URL.createObjectURL(blob);
+        const img = new Image(); img.src = url; await img.decode();
+        if (my !== gen) return;
+        W = cw; H = Math.round(cw * img.naturalHeight / img.naturalWidth);
+        img.style.cssText = 'width:100%;height:100%;display:block;pointer-events:none';
+        inn.append(img);
+      }
+      inn.style.width = W + 'px'; inn.style.height = H + 'px';
+      $('vm').textContent = ''; fit();
+    } catch (e) { if (my === gen) $('vm').innerHTML = note(e.message); }
+  };
+  $('vf').onchange = () => show(+$('vf').value);
+  $('vx').onclick = () => d.close();
+  vOff = () => { gen++; clean(); ro.disconnect(); d.onclick = null; };
+  show(idx);
+}
+
+/* ====== RPD: daftar bulan dulu, tombol Detail membuka rincian per POS ====== */
 async function pageRpd() {
-  const admin = me.role === 'admin', now = new Date();
+  const admin = me.role === 'admin', y = new Date().getFullYear();
   let m;
   try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
-  $('view').innerHTML = `<div class="card"><div class="card-body">
-    <h4 class="mb-3">RPD</h4>
-    <div class="d-flex flex-wrap gap-2 mb-3">
-      ${admin ? `<select id="rk" class="form-select" style="width:auto">${m.kua.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>` : ''}
-      ${yearSel('ry', now.getFullYear())}
-      <select id="rb" class="form-select" style="width:auto">${BULAN.map((b, i) => `<option value="${i + 1}"${i === now.getMonth() ? ' selected' : ''}>${b}</option>`).join('')}</select>
-    </div>
+  if (!admin && !me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
+  $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">RPD</h4>
+    <div class="d-flex flex-wrap gap-2 mb-3">${admin ? `<select id="rk" class="form-select" style="width:auto">${m.kua.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>` : ''}${yearSel('ry', y)}</div>
     <div id="xmsg"></div><div id="rbody">Memuat…</div></div></div>`;
-  let rows = [], cap = null, t, b, kid, locked;
-  const calc = () => {
-    const others = rows.filter(x => x.bulan !== b).reduce((s, x) => s + x.nominal, 0);
-    const mine = [...$('rbody').querySelectorAll('[data-p]')].reduce((s, i) => s + num(i.value), 0);
-    const total = others + mine, sisa = (cap ?? 0) - total, over = cap == null || sisa < 0;
-    $('rsum').className = 'alert py-2 ' + (over ? 'alert-danger' : 'alert-primary');
-    $('rsum').innerHTML = cap == null ? `Anggaran Tahunan ${t} belum ditetapkan admin, jadi RPD belum bisa diisi.`
-      : `Total RPD ${t}: <b>Rp ${rp(total)}</b> · Anggaran: <b>Rp ${rp(cap)}</b> · Sisa: <b>Rp ${rp(sisa)}</b>` +
-        (sisa < 0 ? `<br>Melebihi anggaran Rp ${rp(-sisa)}. Batas Rp ${rp(cap)}; bulan lain Rp ${rp(others)}; bulan ini yang Anda isi Rp ${rp(mine)}. Kurangi isian bulan ini.` : '');
-    $('rsave').disabled = locked || over;
-    return over;
+  let rows = [], cap = null, t, kid;
+  const list = () => {
+    const tot = sumN(rows);
+    $('rbody').oninput = null;
+    $('rbody').innerHTML = `<div class="alert alert-primary py-2">Anggaran Tahunan ${t}: <b>${cap == null ? 'belum ditetapkan' : 'Rp ' + rp(cap)}</b> · Total RPD: <b>Rp ${rp(tot)}</b> · Sisa: <b>Rp ${rp((cap ?? 0) - tot)}</b></div>
+      <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Bulan</th><th class="text-end">Total RPD (Rp)</th><th></th></tr></thead><tbody>${BULAN.map((n, i) => `<tr><td>${n}</td><td class="text-end">${rp(sumN(rows.filter(x => x.bulan === i + 1)))}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${i + 1}">Detail</button></td></tr>`).join('')}</tbody>
+      <tfoot><tr class="fw-semibold"><td>Total ${t}</td><td class="text-end">${rp(tot)}</td><td></td></tr></tfoot></table></div>`;
+    $('rbody').onclick = e => { const b = e.target.closest('[data-b]'); if (b) detail(+b.dataset.b); };
   };
-  const draw = () => {
+  const detail = b => {
+    const locked = !admin && !(m.cfg.rpd_enabled === true && (m.cfg.bulan_edit_rpd || []).includes(b));
     const cur = Object.fromEntries(rows.filter(x => x.bulan === b).map(x => [x.pos_id, x.nominal]));
-    $('rbody').innerHTML = `<div id="rsum"></div>${locked ? note('Pengisian RPD untuk bulan ini ditutup. Hubungi admin bila perlu perubahan.', 'warning') : ''}
+    $('rbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="rback"><i class="bx bx-arrow-back"></i> Kembali</button>
+      <h5 class="mb-3">RPD ${BULAN[b - 1]} ${t}</h5><div id="rsum"></div>
+      ${locked ? note('Pengisian RPD untuk bulan ini ditutup. Hubungi admin bila perlu perubahan.', 'warning') : ''}
       <div class="table-responsive"><table class="table align-middle"><tbody>${m.pos.map(p => `<tr>
         <td>${esc(p.nama_rincian || p.nama_pos)}<div class="small">${esc(p.kode_pos)}${p.nama_rincian ? ' · ' + esc(p.nama_pos) : ''}</div></td>
-        <td style="width:190px"><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${cur[p.id] ? rp(cur[p.id]) : ''}"${locked ? ' disabled' : ''}></td></tr>`).join('')}</tbody></table></div>
+        <td style="width:190px"><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${cur[p.id] ? rp(cur[p.id]) : ''}"${locked ? ' disabled' : ''}></td></tr>`).join('')}</tbody>
+        <tfoot><tr class="fw-semibold"><td>Total RPD ${BULAN[b - 1]}</td><td class="text-end" id="rtot"></td></tr></tfoot></table></div>
       <button class="btn btn-primary" id="rsave">Simpan RPD ${BULAN[b - 1]}</button>`;
+    const calc = () => {
+      const others = sumN(rows.filter(x => x.bulan !== b)), mine = [...$('rbody').querySelectorAll('[data-p]')].reduce((s, i) => s + num(i.value), 0);
+      const total = others + mine, sisa = (cap ?? 0) - total, over = cap == null || sisa < 0;
+      $('rtot').textContent = 'Rp ' + rp(mine);
+      $('rsum').className = 'alert py-2 ' + (over ? 'alert-danger' : 'alert-primary');
+      $('rsum').innerHTML = cap == null ? `Anggaran Tahunan ${t} belum ditetapkan admin, jadi RPD belum bisa diisi.`
+        : `Total RPD ${t}: <b>Rp ${rp(total)}</b> · Anggaran: <b>Rp ${rp(cap)}</b> · Sisa: <b>Rp ${rp(sisa)}</b>` +
+          (sisa < 0 ? `<br>Melebihi anggaran Rp ${rp(-sisa)}. Batas Rp ${rp(cap)}; bulan lain Rp ${rp(others)}; bulan ini yang Anda isi Rp ${rp(mine)}. Kurangi isian bulan ini.` : '');
+      $('rsave').disabled = locked || over;
+      return over;
+    };
+    $('rback').onclick = list;
+    $('rbody').onclick = null;
     $('rbody').oninput = e => { if (e.target.dataset.p) { fmtIn(e.target); calc(); } };
     $('rsave').onclick = async () => {
       if (calc()) return;
@@ -307,198 +470,158 @@ async function pageRpd() {
     calc();
   };
   const load = async () => {
-    t = +$('ry').value; b = +$('rb').value; kid = admin ? +$('rk').value : me.kua_id;
+    t = +$('ry').value; kid = admin ? +$('rk').value : me.kua_id;
     $('rbody').textContent = 'Memuat…';
-    if (!kid) return $('rbody').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
     const [a, r] = await Promise.all([
       sb.from('anggaran').select('nominal_total').eq('kua_id', kid).eq('tahun', t).maybeSingle(),
       sb.from('rpd').select('bulan,pos_id,nominal').eq('kua_id', kid).eq('tahun', t)
     ]);
     if (a.error || r.error) return $('rbody').innerHTML = note((a.error || r.error).message);
-    cap = a.data ? a.data.nominal_total : null; rows = r.data;
-    locked = !admin && !(m.cfg.rpd_enabled === true && (m.cfg.bulan_edit_rpd || []).includes(b));
-    draw();
+    cap = a.data ? a.data.nominal_total : null; rows = r.data; list();
   };
-  ['ry', 'rb', 'rk'].forEach(id => { if ($(id)) $(id).onchange = () => { $('xmsg').innerHTML = ''; load(); }; });
+  ['ry', 'rk'].forEach(id => { if ($(id)) $(id).onchange = () => { $('xmsg').innerHTML = ''; load(); }; });
   load();
 }
 
-const ST = { waiting: ['bg-warning', 'Menunggu verifikasi'], approved: ['bg-info', 'Disetujui'], rejected: ['bg-danger', 'Ditolak'], paid: ['bg-success', 'Dibayar'] };
-const badge = r => r.is_autopayment ? '<span class="badge bg-success">Dibayar otomatis</span>' : `<span class="badge ${ST[r.status][0]}">${ST[r.status][1]}</span>`;
-const LPJ_RE = /^https:\/\/(drive|docs)\.google\.com\//;
-
-const GSI = 'https://accounts.google.com/gsi/client', GD = 'https://www.googleapis.com/drive/v3/files';
-const G = { tok: null, exp: 0, client: null, wait: null };
-const gToken = () => G.tok && Date.now() < G.exp ? Promise.resolve(G.tok) : new Promise((ok, no) => {   // popup login Google; wajib dipicu klik pengguna
-  G.wait = { ok, no };
-  G.client ||= google.accounts.oauth2.initTokenClient({
-    client_id: CFG.gClient, scope: 'https://www.googleapis.com/auth/drive.file',
-    callback: r => r.access_token ? (G.tok = r.access_token, G.exp = Date.now() + (r.expires_in - 60) * 1000, G.wait.ok(G.tok)) : G.wait.no(new Error('Login Google ditolak.')),
-    error_callback: () => G.wait.no(new Error('Jendela login Google ditutup atau diblokir browser. Izinkan popup, lalu coba lagi.'))
-  });
-  G.client.requestAccessToken();
-});
-async function gApi(url, opt = {}) {   // token OAuth untuk menulis, API key menyertai setiap permintaan
-  const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(CFG.gKey), { ...opt, headers: { Authorization: 'Bearer ' + G.tok, ...opt.headers } });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error?.message || 'Google Drive error ' + r.status);
-  return j;
-}
-const gQ = q => `${GD}?${new URLSearchParams({ q, fields: 'files(id)', pageSize: 100 })}`;
-async function gFolder(name, parent) {   // cari folder, bila belum ada dibuat
-  const f = (await gApi(gQ(`name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false and '${parent}' in parents`))).files[0];
-  return f ? f.id : (await gApi(GD + '?fields=id', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parent] }) })).id;
-}
-async function driveUpload(files, folderName) {   // langsung dari browser operator ke Google Drive; mengembalikan link folder
-  await gToken();
-  const dir = await gFolder(folderName, await gFolder('BOP KUA - LPJ', 'root'));
-  const ada = (await gApi(gQ(`'${dir}' in parents and trashed=false`))).files.length, maxN = M.cfg.max_file_count ?? 3;
-  if (ada + files.length > maxN) throw new Error(`Maksimal ${maxN} file per LPJ. Sudah ada ${ada} file, Anda memilih ${files.length}.`);
-  for (const f of files) {
-    const b = 'lpj' + Date.now();
-    await gApi('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b },
-      body: new Blob([`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: f.name, parents: [dir] })}\r\n--${b}\r\nContent-Type: ${f.type || 'application/octet-stream'}\r\n\r\n`, f, `\r\n--${b}--`]) });
-  }
-  await gApi(`${GD}/${dir}/permissions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'anyone', role: 'reader' }) });   // agar admin dapat membuka
-  return 'https://drive.google.com/drive/folders/' + dir;
-}
-
+/* ====== Realisasi (operator): daftar bulan dulu, Detail membuka rincian per POS ====== */
 async function pageRealisasi() {
   const now = new Date();
   let m;
   try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
   if (!me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
-  $('view').innerHTML = `<div class="card"><div class="card-body">
-    <h4 class="mb-3">Realisasi</h4>
-    <div class="d-flex flex-wrap gap-2 mb-3">${yearSel('lt', now.getFullYear())}
-      <select id="lb" class="form-select" style="width:auto">${BULAN.map((b, i) => `<option value="${i + 1}"${i === now.getMonth() ? ' selected' : ''}>${b}</option>`).join('')}</select></div>
-    <div id="lmsg"></div><div id="lbody">Memuat…</div></div></div>`;
-  let rpd = [], rl = [], cur = {}, t, b, open, okDate;
-  if (CFG.gKey && CFG.gClient) loadJs(GSI).catch(() => {});   // dimuat lebih awal agar popup login tidak diblokir browser
-  const calc = () => {
-    const inp = [...$('lbody').querySelectorAll('[data-p]')], errs = [];
-    const rpdBln = rpd.filter(x => x.bulan === b).reduce((s, x) => s + x.nominal, 0);
-    let tot = 0;
-    inp.forEach(i => {
-      const pid = +i.dataset.p, v = num(i.value), p = m.pos.find(x => x.id === pid); tot += v;
-      const cap = rpd.filter(x => x.pos_id === pid).reduce((s, x) => s + x.nominal, 0);
-      const used = rl.filter(x => x.pos_id === pid && x.bulan !== b).reduce((s, x) => s + x.nominal, 0), sisa = cap - used - v;
-      $('sisa' + pid).textContent = 'Rp ' + rp(sisa); $('sisa' + pid).className = sisa < 0 ? 'text-danger' : '';
-      if (sisa < 0) errs.push(`${p.nama_rincian || p.nama_pos}: melebihi RPD setahun. Batas Rp ${rp(cap)}; terpakai di bulan lain Rp ${rp(used)}; dimasukkan Rp ${rp(v)}; kelebihan Rp ${rp(-sisa)}.`);
-    });
-    if (tot > rpdBln) errs.push(`Total Realisasi ${BULAN[b - 1]} Rp ${rp(tot)} melebihi RPD bulan ini Rp ${rp(rpdBln)}; kelebihan Rp ${rp(tot - rpdBln)}.`);
-    $('lsum').innerHTML = `RPD ${BULAN[b - 1]}: <b>Rp ${rp(rpdBln)}</b> · Realisasi: <b>Rp ${rp(tot)}</b> · Sisa RPD bulan ini: <b>Rp ${rp(rpdBln - tot)}</b>`;
-    $('lerr').innerHTML = errs.length ? `<div class="alert alert-danger py-2">${errs.map(esc).join('<br>')}</div>` : '';
-    $('lsave').disabled = errs.length > 0 || !okDate || !open || !inp.some(i => !i.disabled);
-    return errs.length > 0;
+  $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">Realisasi</h4>
+    <div class="d-flex flex-wrap gap-2 mb-3">${yearSel('lt', now.getFullYear())}</div><div id="lmsg"></div><div id="lbody">Memuat…</div></div></div>`;
+  let rpd = [], rl = [], t;
+  const mstat = b => {
+    const r = rl.filter(x => x.bulan === b), man = r.filter(x => !x.is_autopayment), has = k => man.some(x => x.status === k);
+    if (!r.length) return ['bg-secondary', 'Belum diisi'];
+    if (!man.length) return ['bg-success', 'Dibayar otomatis'];
+    return ST[has('rejected') ? 'rejected' : has('waiting') ? 'waiting' : has('approved') ? 'approved' : 'paid'];
   };
-  const draw = () => {
-    cur = Object.fromEntries(rl.filter(x => x.bulan === b).map(x => [x.pos_id, x]));
-    open = m.cfg.realisasi_enabled === true; okDate = now >= new Date(t, b - 1, 10);
-    const lpj = Object.values(cur).find(x => x.file_lpj_url)?.file_lpj_url || '';
-    $('lbody').innerHTML = `<div id="lsum" class="alert alert-primary py-2"></div>
+  const list = () => {
+    $('lbody').oninput = null;
+    $('lbody').innerHTML = `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Bulan</th><th class="text-end">RPD (Rp)</th><th class="text-end">Realisasi (Rp)</th><th>Status</th><th></th></tr></thead><tbody>${BULAN.map((n, i) => {
+        const b = i + 1, st = mstat(b);
+        return `<tr><td>${n}</td><td class="text-end">${rp(sumN(rpd.filter(x => x.bulan === b)))}</td><td class="text-end">${rp(sumN(rl.filter(x => x.bulan === b)))}</td><td><span class="badge ${st[0]}">${st[1]}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${b}">Detail</button></td></tr>`; }).join('')}</tbody>
+      <tfoot><tr class="fw-semibold"><td>Total ${t}</td><td class="text-end">${rp(sumN(rpd))}</td><td class="text-end">${rp(sumN(rl))}</td><td colspan="2"></td></tr></tfoot></table></div>`;
+    $('lbody').onclick = e => { const b = e.target.closest('[data-b]'); if (b) detail(+b.dataset.b); };
+  };
+  const detail = b => {
+    const cur = Object.fromEntries(rl.filter(x => x.bulan === b).map(x => [x.pos_id, x])), man = Object.values(cur).filter(x => !x.is_autopayment);
+    const done = man.some(x => ['approved', 'paid'].includes(x.status));   // satu bulan penuh terkunci
+    const open = m.cfg.realisasi_enabled === true, okDate = now >= new Date(t, b - 1, 10), lock = done || !open;
+    const lpj = man.find(x => x.file_lpj_url)?.file_lpj_url || '', rpdOf = id => rpd.find(x => x.bulan === b && x.pos_id === id)?.nominal || 0;
+    let upl = '';   // folder LPJ yang sudah terunggah pada sesi ini (hindari unggah ganda bila kirim gagal)
+    $('lbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="lback"><i class="bx bx-arrow-back"></i> Kembali</button>
+      <h5 class="mb-3">Realisasi ${BULAN[b - 1]} ${t}</h5>
+      <div id="lsum" class="alert alert-primary py-2"></div>
+      ${done ? note('Realisasi bulan ini sudah disetujui/dibayar. Seluruh POS dan dokumen LPJ terkunci.', 'info') : ''}
       ${open ? '' : note('Pengisian Realisasi sedang ditutup oleh admin.', 'warning')}
       ${okDate ? '' : note(`Realisasi ${BULAN[b - 1]} ${t} baru dapat disubmit mulai 10 ${BULAN[b - 1]} ${t}.`, 'info')}
       <div id="lerr"></div>
-      <div class="table-responsive"><table class="table align-middle"><tbody>${m.pos.map(p => {
-        const r = cur[p.id], lock = !open || (r && !['waiting', 'rejected'].includes(r.status)), rm = rpd.find(x => x.bulan === b && x.pos_id === p.id)?.nominal || 0;
-        return `<tr><td>${esc(p.nama_rincian || p.nama_pos)}<div class="small">RPD bulan ini: Rp ${rp(rm)}</div>
-          ${r && r.status === 'rejected' && r.catatan_admin ? `<div class="small text-danger">Ditolak: ${esc(r.catatan_admin)}</div>` : ''}</td>
-          <td style="width:170px"><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${r ? rp(r.nominal) : ''}"${lock ? ' disabled' : ''}>
-            ${r ? `<div class="small mt-1">${badge(r)}</div>` : ''}</td>
-          <td class="text-end small">Sisa anggaran POS<br><b id="sisa${p.id}"></b></td></tr>`; }).join('')}</tbody></table></div>
-      <label class="form-label" for="lfile">Unggah file LPJ <span class="text-danger">(wajib)</span></label>
-      <input id="lfile" type="file" class="form-control mb-1" multiple accept=".pdf,.jpg,.jpeg,.png">
-      <div class="form-text mb-3">PDF, JPG, atau PNG. File diunggah langsung ke Google Drive Anda (perlu login Google). Maksimal ${m.cfg.max_file_count ?? 3} file, masing-masing ${m.cfg.max_file_size_mb ?? 5} MB.${lpj ? ' LPJ bulan ini sudah terunggah; unggah lagi untuk menambah file.' : ''}</div>
-      <label class="form-label" for="llpj">Atau tempel link Google Drive</label>
-      <input id="llpj" type="url" class="form-control mb-1" placeholder="https://drive.google.com/…" value="${esc(lpj)}">
-      <div class="form-text mb-3">Opsional. Pastikan admin dapat membuka file tersebut.</div>
-      <button class="btn btn-primary" id="lsave">Kirim Realisasi ${BULAN[b - 1]}</button>`;
+      <div class="table-responsive"><table class="table align-middle"><thead><tr><th>POS</th><th class="text-end">RPD bulan ini (Rp)</th><th style="width:190px">Realisasi (Rp)</th><th class="text-end">Sisa anggaran POS</th></tr></thead><tbody>${m.pos.map(p => {
+        const r = cur[p.id], ro = lock || (r && (r.is_autopayment || !['waiting', 'rejected'].includes(r.status)));
+        return `<tr><td>${esc(p.nama_rincian || p.nama_pos)}${r && r.status === 'rejected' && r.catatan_admin ? `<div class="small text-danger">Ditolak: ${esc(r.catatan_admin)}</div>` : ''}</td>
+          <td class="text-end">${rp(rpdOf(p.id))}</td>
+          <td><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${r ? rp(r.nominal) : ''}"${ro ? ' disabled' : ''}>${r ? `<div class="small mt-1">${badge(r)}</div>` : ''}</td>
+          <td class="text-end"><b id="sisa${p.id}"></b></td></tr>`; }).join('')}</tbody>
+        <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end" id="trpd"></td><td class="text-end" id="treal"></td><td></td></tr></tfoot></table></div>
+      <div class="mb-3"><div class="fw-semibold mb-1">Dokumen LPJ</div><div id="ldocs"><span class="small">Belum ada dokumen.</span></div></div>
+      ${lock ? '' : `<label class="form-label" for="lfile">${lpj ? 'Tambah file LPJ' : 'Unggah file LPJ <span class="text-danger">(wajib)</span>'}</label>
+        <input id="lfile" type="file" class="form-control mb-1" multiple accept=".pdf,.jpg,.jpeg,.png">
+        <div class="form-text mb-3">PDF, JPG, atau PNG. Maksimal ${m.cfg.max_file_count ?? 3} file per bulan, masing-masing ${m.cfg.max_file_size_mb ?? 5} MB.</div>
+        <button class="btn btn-primary" id="lsave">Kirim Realisasi ${BULAN[b - 1]}</button>`}`;
+    if (lpj) showDocs($('ldocs'), { kua: me.kua_id, tahun: t, bulan: b });
+    const calc = () => {
+      const inp = [...$('lbody').querySelectorAll('[data-p]')], errs = [], rpdBln = sumN(rpd.filter(x => x.bulan === b));
+      let tot = 0;
+      inp.forEach(i => {
+        const pid = +i.dataset.p, v = num(i.value), p = m.pos.find(x => x.id === pid); tot += v;
+        const cap = sumN(rpd.filter(x => x.pos_id === pid)), used = sumN(rl.filter(x => x.pos_id === pid && x.bulan !== b)), sisa = cap - used - v;
+        $('sisa' + pid).textContent = 'Rp ' + rp(sisa); $('sisa' + pid).className = sisa < 0 ? 'text-danger' : '';
+        if (sisa < 0) errs.push(`${p.nama_rincian || p.nama_pos}: melebihi RPD setahun. Batas Rp ${rp(cap)}; terpakai di bulan lain Rp ${rp(used)}; dimasukkan Rp ${rp(v)}; kelebihan Rp ${rp(-sisa)}.`);
+      });
+      if (tot > rpdBln) errs.push(`Total Realisasi ${BULAN[b - 1]} Rp ${rp(tot)} melebihi RPD bulan ini Rp ${rp(rpdBln)}; kelebihan Rp ${rp(tot - rpdBln)}.`);
+      $('trpd').textContent = rp(rpdBln); $('treal').textContent = rp(tot);
+      $('lsum').innerHTML = `RPD ${BULAN[b - 1]}: <b>Rp ${rp(rpdBln)}</b> · Realisasi: <b>Rp ${rp(tot)}</b> · Sisa RPD bulan ini: <b>Rp ${rp(rpdBln - tot)}</b>`;
+      $('lerr').innerHTML = errs.length ? `<div class="alert alert-danger py-2">${errs.map(esc).join('<br>')}</div>` : '';
+      if ($('lsave')) $('lsave').disabled = errs.length > 0 || !okDate || !open || !inp.some(i => !i.disabled);
+      return errs.length > 0;
+    };
+    $('lback').onclick = list;
+    $('lbody').onclick = null;
     $('lbody').oninput = e => { if (e.target.dataset.p) { fmtIn(e.target); calc(); } };
-    $('lsave').onclick = async () => {
+    if ($('lsave')) $('lsave').onclick = async () => {
       if (calc()) return;
-      const lpj = $('llpj').value.trim();
+      const files = [...$('lfile').files], have = upl || lpj, warn = txt => $('lmsg').innerHTML = note(txt, 'warning');
       const payload = [...$('lbody').querySelectorAll('[data-p]:not([disabled])')]
-        .map(i => ({ kua_id: me.kua_id, tahun: t, bulan: b, pos_id: +i.dataset.p, nominal: num(i.value), file_lpj_url: lpj || null }))
+        .map(i => ({ kua_id: me.kua_id, tahun: t, bulan: b, pos_id: +i.dataset.p, nominal: num(i.value), file_lpj_url: have || null }))
         .filter(x => x.nominal > 0 || cur[x.pos_id]);
-      const warn = txt => $('lmsg').innerHTML = note(txt, 'warning');
+      const maxMb = m.cfg.max_file_size_mb ?? 5, maxN = m.cfg.max_file_count ?? 3, bad = files.find(f => f.size > maxMb * 1048576 || !/\.(pdf|jpe?g|png)$/i.test(f.name));
       if (!payload.length) return warn('Belum ada nominal yang diisi.');
-      if (lpj && !LPJ_RE.test(lpj)) return warn('Link LPJ harus berupa link Google Drive (https://drive.google.com/…).');
-      const maxMb = m.cfg.max_file_size_mb ?? 5, maxN = m.cfg.max_file_count ?? 3, files = [...$('lfile').files];
-      if (files.length > maxN) return warn(`Maksimal ${maxN} file per LPJ.`);
-      const big = files.find(x => x.size > maxMb * 1048576), nope = files.find(x => !/\.(pdf|jpe?g|png)$/i.test(x.name));
-      if (big) return warn(`${big.name} melebihi ${maxMb} MB.`);
-      if (nope) return warn(`${nope.name}: hanya PDF, JPG, atau PNG.`);
-      if (!lpj && !files.length && payload.some(x => x.nominal > 0)) return warn('LPJ wajib dilampirkan: unggah file atau tempel link Google Drive.');
+      if (files.length > maxN) return warn(`Maksimal ${maxN} file per bulan.`);
+      if (bad) return warn(`${bad.name}: hanya PDF, JPG, atau PNG dan maksimal ${maxMb} MB.`);
+      if (!have && !files.length && payload.some(x => x.nominal > 0)) return warn('LPJ wajib dilampirkan: unggah minimal satu file.');
       $('lsave').disabled = true;
+      let url = have || null;
       if (files.length) {
-        try {
-          if (!(CFG.gKey && CFG.gClient)) throw new Error('Unggah ke Google Drive belum dikonfigurasi (CFG.gKey dan CFG.gClient). Tempel link Google Drive sebagai gantinya.');
-          await loadJs(GSI);
-          $('lmsg').innerHTML = note('Login Google, lalu mengunggah LPJ ke Google Drive Anda…', 'info');
-          const url = await driveUpload(files, `${t}-${String(b).padStart(2, '0')} ${me.kua}`);
-          $('llpj').value = url; $('lfile').value = '';   // jika pengiriman gagal, coba ulang tanpa mengunggah ulang
-          payload.forEach(x => x.file_lpj_url = url);
-        } catch (e) { $('lmsg').innerHTML = note(e.message); return calc(); }
+        $('lmsg').innerHTML = note('Mengunggah dokumen LPJ…', 'info');
+        const fd = new FormData(); fd.append('tahun', t); fd.append('bulan', b); files.forEach(f => fd.append('files', f));
+        try { url = upl = (await (await lpjCall({ action: 'upload' }, { method: 'POST', body: fd })).json()).folderUrl; $('lfile').value = ''; }
+        catch (e) { $('lmsg').innerHTML = note(e.message); return calc(); }
       }
+      payload.forEach(x => x.file_lpj_url = url);
       const { error } = await sb.from('realisasi').upsert(payload, { onConflict: 'kua_id,tahun,bulan,pos_id' });
       if (error) { $('lmsg').innerHTML = note(error.message); return calc(); }
       $('lmsg').innerHTML = note('Realisasi terkirim dan menunggu verifikasi admin.', 'success');
-      load(true);
+      await load(b);
     };
     calc();
   };
-  const load = async keep => {
-    t = +$('lt').value; b = +$('lb').value;
-    if (!keep) $('lmsg').innerHTML = '';
-    $('lbody').textContent = 'Memuat…';
+  const load = async b => {
+    t = +$('lt').value;
     const [p, r] = await Promise.all([
       sb.from('rpd').select('bulan,pos_id,nominal').eq('kua_id', me.kua_id).eq('tahun', t),
       sb.from('realisasi').select('bulan,pos_id,nominal,status,is_autopayment,catatan_admin,file_lpj_url').eq('kua_id', me.kua_id).eq('tahun', t)
     ]);
     if (p.error || r.error) return $('lbody').innerHTML = note((p.error || r.error).message);
-    rpd = p.data; rl = r.data; draw();
+    rpd = p.data; rl = r.data; b ? detail(b) : list();
   };
-  $('lt').onchange = $('lb').onchange = () => load();
+  $('lt').onchange = () => { $('lmsg').innerHTML = ''; $('lbody').textContent = 'Memuat…'; load(); };
   load();
 }
 
+/* ====== Verifikasi (admin): tabel dulu, Detail menampilkan POS + dokumen LPJ ====== */
 async function pageVerifikasi() {
   $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">Verifikasi Realisasi</h4><div id="vmsg"></div><div id="vbody">Memuat…</div></div></div>`;
-  const load = async () => {
-    let m, r;
-    try {
-      m = await master();
-      r = await sb.from('realisasi').select('kua_id,tahun,bulan,pos_id,nominal,status,file_lpj_url')
-        .in('status', ['waiting', 'approved']).order('tahun').order('bulan').order('kua_id');
-      if (r.error) throw r.error;
-    } catch (e) { return $('vbody').innerHTML = note(e.message); }
-    const kn = Object.fromEntries(m.kua.map(k => [k.id, k.nama_kua])), pn = Object.fromEntries(m.pos.map(p => [p.id, p.nama_rincian || p.nama_pos]));
-    const G = {};
-    r.data.forEach(x => (G[`${x.kua_id}|${x.tahun}|${x.bulan}|${x.status}`] ||= []).push(x));
+  let m, G = {};
+  const kn = id => m.kua.find(k => k.id === id)?.nama_kua || id;
+  const stText = f => f.status === 'waiting' ? 'Menunggu verifikasi' : 'Disetujui, belum dibayar';
+  const list = () => {
     const keys = Object.keys(G);
-    $('vbody').innerHTML = keys.length ? keys.map(k => {
-      const g = G[k], f = g[0], wait = f.status === 'waiting';
-      return `<div class="border rounded p-3 mb-3"><div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-        <b class="me-auto">${esc(kn[f.kua_id])} · ${BULAN[f.bulan - 1]} ${f.tahun}</b>
-        <span class="badge ${ST[f.status][0]}">${wait ? 'Menunggu verifikasi' : 'Disetujui, belum dibayar'}</span></div>
-        <ul class="mb-2">${g.map(x => `<li>${esc(pn[x.pos_id])}: Rp ${rp(x.nominal)}</li>`).join('')}</ul>
-        <div class="mb-2">Total: <b>Rp ${rp(g.reduce((s, x) => s + x.nominal, 0))}</b> · ${f.file_lpj_url ? `<a href="${esc(f.file_lpj_url)}" target="_blank" rel="noopener">Buka LPJ</a>` : 'Tanpa LPJ'}</div>
-        ${wait ? `<button class="btn btn-sm btn-primary" data-a="approved" data-g="${esc(k)}">Setujui</button>
-                  <button class="btn btn-sm btn-outline-danger" data-a="rejected" data-g="${esc(k)}">Tolak…</button>`
-               : `<button class="btn btn-sm btn-primary" data-a="paid" data-g="${esc(k)}">Tandai dibayar</button>`}</div>`;
-    }).join('') : '<p class="mb-0">Tidak ada Realisasi yang perlu diproses.</p>';
+    $('vbody').onclick = e => { const b = e.target.closest('[data-g]'); if (b) detail(b.dataset.g); };
+    $('vbody').innerHTML = keys.length ? `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>KUA</th><th>Periode</th><th class="text-end">Total (Rp)</th><th>Status</th><th></th></tr></thead><tbody>${keys.map(k => {
+        const g = G[k], f = g[0];
+        return `<tr><td>${esc(kn(f.kua_id))}</td><td>${BULAN[f.bulan - 1]} ${f.tahun}</td><td class="text-end">${rp(sumN(g))}</td><td><span class="badge ${ST[f.status][0]}">${stText(f)}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-g="${esc(k)}">Detail</button></td></tr>`; }).join('')}</tbody></table></div>`
+      : '<p class="mb-0">Tidak ada Realisasi yang perlu diproses.</p>';
+  };
+  const detail = k => {
+    const g = G[k], f = g[0], wait = f.status === 'waiting', pn = id => { const p = m.pos.find(x => x.id === id); return p.nama_rincian || p.nama_pos; };
+    $('vbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="vback"><i class="bx bx-arrow-back"></i> Kembali</button>
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">${esc(kn(f.kua_id))} · ${BULAN[f.bulan - 1]} ${f.tahun}</h5><span class="badge ${ST[f.status][0]}">${stText(f)}</span></div>
+      <div class="table-responsive"><table class="table align-middle"><thead><tr><th>POS</th><th class="text-end">Realisasi (Rp)</th></tr></thead><tbody>${g.map(x => `<tr><td>${esc(pn(x.pos_id))}</td><td class="text-end">${rp(x.nominal)}</td></tr>`).join('')}</tbody>
+        <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end">${rp(sumN(g))}</td></tr></tfoot></table></div>
+      <div class="fw-semibold mb-1">Dokumen LPJ</div><div id="vdocs" class="mb-3"></div>
+      <div class="d-flex gap-2">${wait ? '<button class="btn btn-primary" data-a="approved">Setujui</button><button class="btn btn-outline-danger" data-a="rejected">Tolak…</button>' : '<button class="btn btn-primary" data-a="paid">Tandai dibayar</button>'}</div>`;
+    showDocs($('vdocs'), { kua: f.kua_id, tahun: f.tahun, bulan: f.bulan });
+    const run = patch => sb.from('realisasi').update(patch).eq('kua_id', f.kua_id).eq('tahun', f.tahun).eq('bulan', f.bulan).eq('status', f.status).eq('is_autopayment', false).then(r => r.error);
     $('vbody').onclick = async e => {
+      if (e.target.closest('#vback')) return list();
       const b = e.target.closest('[data-a]'); if (!b) return;
-      const [kua, tahun, bulan, st] = b.dataset.g.split('|'), a = b.dataset.a;
-      const run = async patch => {
-        const { error } = await sb.from('realisasi').update(patch).eq('kua_id', kua).eq('tahun', tahun).eq('bulan', bulan).eq('status', st);
-        if (!error) $('vmsg').innerHTML = note('Status Realisasi diperbarui.', 'success');
-        return error;
-      };
+      const a = b.dataset.a;
       if (a === 'rejected') {
         const d = $('dlg');
+        d.className = '';
         d.innerHTML = `<form id="nf" class="p-4"><h5 class="mb-2">Tolak Realisasi</h5><div id="nmsg"></div>
           <label class="form-label" for="nt">Alasan penolakan (wajib)</label>
           <textarea id="nt" class="form-control mb-3" rows="3" required></textarea>
@@ -509,15 +632,26 @@ async function pageVerifikasi() {
           ev.preventDefault();
           const er = await run({ status: 'rejected', catatan_admin: $('nt').value.trim() });
           if (er) return $('nmsg').innerHTML = note(er.message);
-          d.close(); load();
+          d.close(); $('vmsg').innerHTML = note('Realisasi ditolak dan dikembalikan ke operator.', 'success'); load();
         };
         return d.showModal();
       }
       if (a === 'paid' && !confirm('Tandai Realisasi ini sebagai sudah dibayar? Tindakan ini tidak dapat dibatalkan.')) return;
       b.disabled = true;
       const er = await run({ status: a });
-      if (er) { $('vmsg').innerHTML = note(er.message); b.disabled = false; } else load();
+      if (er) { $('vmsg').innerHTML = note(er.message); b.disabled = false; }
+      else { $('vmsg').innerHTML = note('Status Realisasi diperbarui.', 'success'); load(); }
     };
+  };
+  const load = async () => {
+    try {
+      m = await master();
+      const r = await sb.from('realisasi').select('kua_id,tahun,bulan,pos_id,nominal,status')
+        .eq('is_autopayment', false).in('status', ['waiting', 'approved']).order('tahun').order('bulan').order('kua_id');
+      if (r.error) throw r.error;
+      G = {}; r.data.forEach(x => (G[`${x.kua_id}|${x.tahun}|${x.bulan}|${x.status}`] ||= []).push(x));
+    } catch (e) { return $('vbody').innerHTML = note(e.message); }
+    list();
   };
   load();
 }
