@@ -24,6 +24,9 @@ h4,h5{color:#566a7f;font-weight:600}
 #main{margin-left:260px}
 #topbar{background:#fff;margin:1rem 1.5rem 0;padding:.6rem 1.2rem;border-radius:.5rem;box-shadow:0 0 .375rem .25rem rgba(161,172,184,.15)}
 .avatar{width:38px;height:38px;border-radius:50%;background:rgba(105,108,255,.16);color:#696cff;display:grid;place-items:center;font-weight:600}
+#side summary{list-style:none;cursor:pointer;user-select:none}#side summary::-webkit-details-marker{display:none}
+#side summary:hover{background:rgba(67,89,113,.06)}#side details[open]>summary .bx-chevron-down{transform:rotate(180deg)}
+#side .nav-link.sub{padding-left:2.4rem}
 dialog{border:0;border-radius:.5rem;padding:0;width:min(440px,calc(100% - 2rem));box-shadow:0 .5rem 2rem rgba(67,89,113,.3);color:var(--bs-body-color)}
 dialog::backdrop{background:rgba(67,89,113,.5)}
 @media(max-width:991px){#side{transform:translateX(-100%)}#side.open{transform:none}#main{margin-left:0}#topbar{margin:.75rem}}
@@ -57,9 +60,18 @@ dialog::backdrop{background:rgba(67,89,113,.5)}
 
 <div id="app" class="d-none">
   <aside id="side">
-    <div class="p-4 pb-3"><span class="brand"><i class="bx bxs-wallet"></i> BOP KUA</span></div>
+    <div class="p-4 pb-3"><a href="#bop" class="text-decoration-none"><span class="brand"><i class="bx bxs-wallet"></i> BOP KUA</span></a></div>
     <nav class="nav flex-column">
-      <a class="nav-link" href="#bop"><i class="bx bx-wallet"></i>BOP</a>
+      <details open>
+        <summary class="nav-link"><i class="bx bx-wallet"></i>BOP<i class="bx bx-chevron-down ms-auto"></i></summary>
+        <a class="nav-link sub" href="#rpd"><i class="bx bx-calendar-edit"></i>RPD</a>
+        <a class="nav-link sub admin-only d-none" href="#anggaran"><i class="bx bx-coin-stack"></i>Anggaran</a>
+        <a class="nav-link sub op-only" href="#realisasi"><i class="bx bx-receipt"></i>Realisasi</a>
+        <a class="nav-link sub admin-only d-none" href="#verifikasi"><i class="bx bx-check-shield"></i>Verifikasi</a>
+        <a class="nav-link sub admin-only d-none" href="#autopayment"><i class="bx bx-transfer"></i>AutoPayment</a>
+        <a class="nav-link sub admin-only d-none" href="#config"><i class="bx bx-slider"></i>Config</a>
+        <a class="nav-link sub" href="#laporan"><i class="bx bx-file"></i>Laporan</a>
+      </details>
       <a class="nav-link" href="#pengaturan"><i class="bx bx-cog"></i>Pengaturan</a>
     </nav>
   </aside>
@@ -83,6 +95,8 @@ dialog::backdrop{background:rgba(67,89,113,.5)}
 const CFG = {
   url: 'https://lpfwkitppdnlcakkncov.supabase.co',
   key: 'sb_publishable_AfVmUT86ttPMaiO3iUmJew_u3l3IBPF',
+  gKey: 'AIzaSyAq4VCOiSyvf4DriZk1RDR--m8u4iX11U8',      // API key Google (batasi: HTTP referrer = domain GitHub Pages Anda, API = Google Drive API)
+  gClient: '423936927025-nj5e6s5pkpvujm3b41vb3j47u8o5tbvu.apps.googleusercontent.com',   // OAuth Client ID tipe Web (Authorized JavaScript origins = domain GitHub Pages Anda)
   turnstile: '0x4AAAAAAFKG36vwdFMGZBiz'   // test key; ganti dengan Site Key Turnstile Anda
 };
 /* ============================= */
@@ -165,6 +179,8 @@ async function boot(session) {
   $('uName').textContent = me.nama;
   $('uRole').textContent = me.role === 'admin' ? 'Admin' : (me.kua || 'Operator');
   $('uAv').textContent = me.nama.charAt(0).toUpperCase();
+  document.querySelectorAll('.admin-only').forEach(a => a.classList.toggle('d-none', me.role !== 'admin'));
+  document.querySelectorAll('.op-only').forEach(a => a.classList.toggle('d-none', me.role === 'admin'));
   $('pw').value = ''; show('app'); route();
 }
 // setTimeout menghindari deadlock pemanggilan Supabase di dalam callback auth
@@ -173,21 +189,536 @@ sb.auth.onAuthStateChange((ev, s) => { if (ev !== 'TOKEN_REFRESHED') setTimeout(
 $('out').onclick = () => sb.auth.signOut();
 $('burger').onclick = () => $('side').classList.toggle('open');
 
-const pages = { bop: pageBop, pengaturan: pagePengaturan };
+const pages = { bop: pageBop, rpd: pageRpd, laporan: pageLaporan, realisasi: pageRealisasi, anggaran: pageAnggaran, verifikasi: pageVerifikasi, autopayment: pageAutopay, config: pageConfig, pengaturan: pagePengaturan };
 function route() {
   if (!me) return;
-  const k = location.hash.slice(1) in pages ? location.hash.slice(1) : 'bop';
+  let k = location.hash.slice(1) in pages ? location.hash.slice(1) : 'bop';
+  if (['anggaran', 'verifikasi', 'autopayment', 'config'].includes(k) && me.role !== 'admin') k = 'bop'; // dijaga juga oleh RLS
+  if (k === 'realisasi' && me.role === 'admin') k = 'bop';
   document.querySelectorAll('#side .nav-link').forEach(a => a.classList.toggle('active', a.hash === '#' + k));
   $('side').classList.remove('open');
+  if (k !== 'pengaturan') $('side').querySelector('details').open = true;
   pages[k]();
 }
 addEventListener('hashchange', route);
 
-function pageBop() {
+/* ====== Data master (cache di memori), format rupiah ====== */
+const M = {};
+const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+async function master() {
+  if (!M.pos) {
+    const [k, p, c] = await Promise.all([
+      sb.from('kua').select('id,nama_kua').order('nama_kua'),
+      sb.from('pos').select('id,kode_pos,nama_pos,nama_rincian').order('urutan'),
+      sb.from('config').select('key,value')
+    ]);
+    const err = k.error || p.error || c.error;
+    if (err) throw err;
+    M.kua = k.data; M.pos = p.data; M.cfg = Object.fromEntries(c.data.map(r => [r.key, r.value]));
+  }
+  return M;
+}
+const rp = n => String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+const num = s => parseInt(String(s).replace(/\D/g, '') || '0', 10);   // tanpa minus => tidak pernah negatif
+const fmtIn = el => {   // format 1.500.000 saat mengetik, kursor tetap di tempatnya
+  const d = el.value.slice(0, el.selectionStart).replace(/\D/g, '').length;
+  el.value = el.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  let i = 0, c = 0;
+  while (i < el.value.length && c < d) if (/\d/.test(el.value[i++])) c++;
+  el.setSelectionRange(i, i);
+};
+const yearSel = (id, y) => `<select id="${id}" class="form-select" style="width:auto">${[y - 1, y, y + 1].map(v => `<option${v === y ? ' selected' : ''}>${v}</option>`).join('')}</select>`;
+
+async function pageAnggaran() {
   $('view').innerHTML = `<div class="card"><div class="card-body">
-    <h4 class="mb-1">BOP</h4>
-    <p>Halo, <b>${esc(me.nama)}</b>. Modul BOP akan dibangun pada tahap berikutnya.</p>
-    <span class="badge bg-label-primary">Segera hadir</span></div></div>`;
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3"><h4 class="mb-0 me-auto">Anggaran Tahunan</h4>${yearSel('ay', new Date().getFullYear())}</div>
+    <div id="amsg"></div><div class="table-responsive" id="atab">Memuat…</div></div></div>`;
+  const load = async () => {
+    const t = +$('ay').value;
+    let m, a;
+    try { [m, a] = await Promise.all([master(), sb.from('anggaran').select('kua_id,nominal_total').eq('tahun', t)]); if (a.error) throw a.error; }
+    catch (e) { return $('atab').innerHTML = note(e.message); }
+    const set = Object.fromEntries(a.data.map(r => [r.kua_id, r.nominal_total]));
+    const n = m.kua.filter(k => set[k.id] != null).length;
+    $('atab').innerHTML = `<p class="mb-2"><b>${n}</b> dari ${m.kua.length} KUA sudah diset untuk ${t}.</p>
+      <table class="table table-hover align-middle"><thead><tr><th>KUA</th><th>Status</th><th>Anggaran (Rp)</th></tr></thead><tbody>${m.kua.map(k => `<tr>
+        <td>${esc(k.nama_kua)}</td>
+        <td><span class="badge ${set[k.id] != null ? 'bg-label-primary' : 'bg-secondary'}">${set[k.id] != null ? 'Sudah diset' : 'Belum diset'}</span></td>
+        <td><input class="form-control form-control-sm text-end" style="min-width:140px" inputmode="numeric" placeholder="0" data-k="${k.id}" value="${set[k.id] != null ? rp(set[k.id]) : ''}"></td>
+        </tr>`).join('')}</tbody></table>
+      <button class="btn btn-primary" id="asave">Simpan Anggaran ${t}</button>`;
+    $('atab').oninput = e => { if (e.target.dataset.k) fmtIn(e.target); };
+    $('asave').onclick = async () => {
+      const rows = [...$('atab').querySelectorAll('[data-k]')]
+        .filter(i => i.value.trim() && num(i.value) !== set[i.dataset.k])
+        .map(i => ({ kua_id: +i.dataset.k, tahun: t, nominal_total: num(i.value) }));
+      if (!rows.length) return $('amsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
+      $('asave').disabled = true;
+      const { error } = await sb.from('anggaran').upsert(rows, { onConflict: 'kua_id,tahun' });   // satu transaksi: gagal satu = batal semua
+      $('amsg').innerHTML = error ? note(error.message) : note(`Anggaran ${t} tersimpan untuk ${rows.length} KUA.`, 'success');
+      if (error) $('asave').disabled = false; else load();
+    };
+  };
+  $('ay').onchange = () => { $('amsg').innerHTML = ''; load(); };
+  load();
+}
+
+async function pageRpd() {
+  const admin = me.role === 'admin', now = new Date();
+  let m;
+  try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
+  $('view').innerHTML = `<div class="card"><div class="card-body">
+    <h4 class="mb-3">RPD</h4>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      ${admin ? `<select id="rk" class="form-select" style="width:auto">${m.kua.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>` : ''}
+      ${yearSel('ry', now.getFullYear())}
+      <select id="rb" class="form-select" style="width:auto">${BULAN.map((b, i) => `<option value="${i + 1}"${i === now.getMonth() ? ' selected' : ''}>${b}</option>`).join('')}</select>
+    </div>
+    <div id="xmsg"></div><div id="rbody">Memuat…</div></div></div>`;
+  let rows = [], cap = null, t, b, kid, locked;
+  const calc = () => {
+    const others = rows.filter(x => x.bulan !== b).reduce((s, x) => s + x.nominal, 0);
+    const mine = [...$('rbody').querySelectorAll('[data-p]')].reduce((s, i) => s + num(i.value), 0);
+    const total = others + mine, sisa = (cap ?? 0) - total, over = cap == null || sisa < 0;
+    $('rsum').className = 'alert py-2 ' + (over ? 'alert-danger' : 'alert-primary');
+    $('rsum').innerHTML = cap == null ? `Anggaran Tahunan ${t} belum ditetapkan admin, jadi RPD belum bisa diisi.`
+      : `Total RPD ${t}: <b>Rp ${rp(total)}</b> · Anggaran: <b>Rp ${rp(cap)}</b> · Sisa: <b>Rp ${rp(sisa)}</b>` +
+        (sisa < 0 ? `<br>Melebihi anggaran Rp ${rp(-sisa)}. Batas Rp ${rp(cap)}; bulan lain Rp ${rp(others)}; bulan ini yang Anda isi Rp ${rp(mine)}. Kurangi isian bulan ini.` : '');
+    $('rsave').disabled = locked || over;
+    return over;
+  };
+  const draw = () => {
+    const cur = Object.fromEntries(rows.filter(x => x.bulan === b).map(x => [x.pos_id, x.nominal]));
+    $('rbody').innerHTML = `<div id="rsum"></div>${locked ? note('Pengisian RPD untuk bulan ini ditutup. Hubungi admin bila perlu perubahan.', 'warning') : ''}
+      <div class="table-responsive"><table class="table align-middle"><tbody>${m.pos.map(p => `<tr>
+        <td>${esc(p.nama_rincian || p.nama_pos)}<div class="small">${esc(p.kode_pos)}${p.nama_rincian ? ' · ' + esc(p.nama_pos) : ''}</div></td>
+        <td style="width:190px"><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${cur[p.id] ? rp(cur[p.id]) : ''}"${locked ? ' disabled' : ''}></td></tr>`).join('')}</tbody></table></div>
+      <button class="btn btn-primary" id="rsave">Simpan RPD ${BULAN[b - 1]}</button>`;
+    $('rbody').oninput = e => { if (e.target.dataset.p) { fmtIn(e.target); calc(); } };
+    $('rsave').onclick = async () => {
+      if (calc()) return;
+      const payload = [...$('rbody').querySelectorAll('[data-p]')].map(i => ({ kua_id: kid, tahun: t, bulan: b, pos_id: +i.dataset.p, nominal: num(i.value) }));
+      $('rsave').disabled = true;
+      const { error } = await sb.from('rpd').upsert(payload, { onConflict: 'kua_id,tahun,bulan,pos_id' });
+      $('xmsg').innerHTML = error ? note(error.message) : note(`RPD ${BULAN[b - 1]} ${t} tersimpan.`, 'success');
+      if (!error) rows = rows.filter(x => x.bulan !== b).concat(payload);
+      calc();
+    };
+    calc();
+  };
+  const load = async () => {
+    t = +$('ry').value; b = +$('rb').value; kid = admin ? +$('rk').value : me.kua_id;
+    $('rbody').textContent = 'Memuat…';
+    if (!kid) return $('rbody').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
+    const [a, r] = await Promise.all([
+      sb.from('anggaran').select('nominal_total').eq('kua_id', kid).eq('tahun', t).maybeSingle(),
+      sb.from('rpd').select('bulan,pos_id,nominal').eq('kua_id', kid).eq('tahun', t)
+    ]);
+    if (a.error || r.error) return $('rbody').innerHTML = note((a.error || r.error).message);
+    cap = a.data ? a.data.nominal_total : null; rows = r.data;
+    locked = !admin && !(m.cfg.rpd_enabled === true && (m.cfg.bulan_edit_rpd || []).includes(b));
+    draw();
+  };
+  ['ry', 'rb', 'rk'].forEach(id => { if ($(id)) $(id).onchange = () => { $('xmsg').innerHTML = ''; load(); }; });
+  load();
+}
+
+const ST = { waiting: ['bg-warning', 'Menunggu verifikasi'], approved: ['bg-info', 'Disetujui'], rejected: ['bg-danger', 'Ditolak'], paid: ['bg-success', 'Dibayar'] };
+const badge = r => r.is_autopayment ? '<span class="badge bg-success">Dibayar otomatis</span>' : `<span class="badge ${ST[r.status][0]}">${ST[r.status][1]}</span>`;
+const LPJ_RE = /^https:\/\/(drive|docs)\.google\.com\//;
+
+const GSI = 'https://accounts.google.com/gsi/client', GD = 'https://www.googleapis.com/drive/v3/files';
+const G = { tok: null, exp: 0, client: null, wait: null };
+const gToken = () => G.tok && Date.now() < G.exp ? Promise.resolve(G.tok) : new Promise((ok, no) => {   // popup login Google; wajib dipicu klik pengguna
+  G.wait = { ok, no };
+  G.client ||= google.accounts.oauth2.initTokenClient({
+    client_id: CFG.gClient, scope: 'https://www.googleapis.com/auth/drive.file',
+    callback: r => r.access_token ? (G.tok = r.access_token, G.exp = Date.now() + (r.expires_in - 60) * 1000, G.wait.ok(G.tok)) : G.wait.no(new Error('Login Google ditolak.')),
+    error_callback: () => G.wait.no(new Error('Jendela login Google ditutup atau diblokir browser. Izinkan popup, lalu coba lagi.'))
+  });
+  G.client.requestAccessToken();
+});
+async function gApi(url, opt = {}) {   // token OAuth untuk menulis, API key menyertai setiap permintaan
+  const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(CFG.gKey), { ...opt, headers: { Authorization: 'Bearer ' + G.tok, ...opt.headers } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error?.message || 'Google Drive error ' + r.status);
+  return j;
+}
+const gQ = q => `${GD}?${new URLSearchParams({ q, fields: 'files(id)', pageSize: 100 })}`;
+async function gFolder(name, parent) {   // cari folder, bila belum ada dibuat
+  const f = (await gApi(gQ(`name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false and '${parent}' in parents`))).files[0];
+  return f ? f.id : (await gApi(GD + '?fields=id', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parent] }) })).id;
+}
+async function driveUpload(files, folderName) {   // langsung dari browser operator ke Google Drive; mengembalikan link folder
+  await gToken();
+  const dir = await gFolder(folderName, await gFolder('BOP KUA - LPJ', 'root'));
+  const ada = (await gApi(gQ(`'${dir}' in parents and trashed=false`))).files.length, maxN = M.cfg.max_file_count ?? 3;
+  if (ada + files.length > maxN) throw new Error(`Maksimal ${maxN} file per LPJ. Sudah ada ${ada} file, Anda memilih ${files.length}.`);
+  for (const f of files) {
+    const b = 'lpj' + Date.now();
+    await gApi('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b },
+      body: new Blob([`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: f.name, parents: [dir] })}\r\n--${b}\r\nContent-Type: ${f.type || 'application/octet-stream'}\r\n\r\n`, f, `\r\n--${b}--`]) });
+  }
+  await gApi(`${GD}/${dir}/permissions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'anyone', role: 'reader' }) });   // agar admin dapat membuka
+  return 'https://drive.google.com/drive/folders/' + dir;
+}
+
+async function pageRealisasi() {
+  const now = new Date();
+  let m;
+  try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
+  if (!me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
+  $('view').innerHTML = `<div class="card"><div class="card-body">
+    <h4 class="mb-3">Realisasi</h4>
+    <div class="d-flex flex-wrap gap-2 mb-3">${yearSel('lt', now.getFullYear())}
+      <select id="lb" class="form-select" style="width:auto">${BULAN.map((b, i) => `<option value="${i + 1}"${i === now.getMonth() ? ' selected' : ''}>${b}</option>`).join('')}</select></div>
+    <div id="lmsg"></div><div id="lbody">Memuat…</div></div></div>`;
+  let rpd = [], rl = [], cur = {}, t, b, open, okDate;
+  if (CFG.gKey && CFG.gClient) loadJs(GSI).catch(() => {});   // dimuat lebih awal agar popup login tidak diblokir browser
+  const calc = () => {
+    const inp = [...$('lbody').querySelectorAll('[data-p]')], errs = [];
+    const rpdBln = rpd.filter(x => x.bulan === b).reduce((s, x) => s + x.nominal, 0);
+    let tot = 0;
+    inp.forEach(i => {
+      const pid = +i.dataset.p, v = num(i.value), p = m.pos.find(x => x.id === pid); tot += v;
+      const cap = rpd.filter(x => x.pos_id === pid).reduce((s, x) => s + x.nominal, 0);
+      const used = rl.filter(x => x.pos_id === pid && x.bulan !== b).reduce((s, x) => s + x.nominal, 0), sisa = cap - used - v;
+      $('sisa' + pid).textContent = 'Rp ' + rp(sisa); $('sisa' + pid).className = sisa < 0 ? 'text-danger' : '';
+      if (sisa < 0) errs.push(`${p.nama_rincian || p.nama_pos}: melebihi RPD setahun. Batas Rp ${rp(cap)}; terpakai di bulan lain Rp ${rp(used)}; dimasukkan Rp ${rp(v)}; kelebihan Rp ${rp(-sisa)}.`);
+    });
+    if (tot > rpdBln) errs.push(`Total Realisasi ${BULAN[b - 1]} Rp ${rp(tot)} melebihi RPD bulan ini Rp ${rp(rpdBln)}; kelebihan Rp ${rp(tot - rpdBln)}.`);
+    $('lsum').innerHTML = `RPD ${BULAN[b - 1]}: <b>Rp ${rp(rpdBln)}</b> · Realisasi: <b>Rp ${rp(tot)}</b> · Sisa RPD bulan ini: <b>Rp ${rp(rpdBln - tot)}</b>`;
+    $('lerr').innerHTML = errs.length ? `<div class="alert alert-danger py-2">${errs.map(esc).join('<br>')}</div>` : '';
+    $('lsave').disabled = errs.length > 0 || !okDate || !open || !inp.some(i => !i.disabled);
+    return errs.length > 0;
+  };
+  const draw = () => {
+    cur = Object.fromEntries(rl.filter(x => x.bulan === b).map(x => [x.pos_id, x]));
+    open = m.cfg.realisasi_enabled === true; okDate = now >= new Date(t, b - 1, 10);
+    const lpj = Object.values(cur).find(x => x.file_lpj_url)?.file_lpj_url || '';
+    $('lbody').innerHTML = `<div id="lsum" class="alert alert-primary py-2"></div>
+      ${open ? '' : note('Pengisian Realisasi sedang ditutup oleh admin.', 'warning')}
+      ${okDate ? '' : note(`Realisasi ${BULAN[b - 1]} ${t} baru dapat disubmit mulai 10 ${BULAN[b - 1]} ${t}.`, 'info')}
+      <div id="lerr"></div>
+      <div class="table-responsive"><table class="table align-middle"><tbody>${m.pos.map(p => {
+        const r = cur[p.id], lock = !open || (r && !['waiting', 'rejected'].includes(r.status)), rm = rpd.find(x => x.bulan === b && x.pos_id === p.id)?.nominal || 0;
+        return `<tr><td>${esc(p.nama_rincian || p.nama_pos)}<div class="small">RPD bulan ini: Rp ${rp(rm)}</div>
+          ${r && r.status === 'rejected' && r.catatan_admin ? `<div class="small text-danger">Ditolak: ${esc(r.catatan_admin)}</div>` : ''}</td>
+          <td style="width:170px"><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${r ? rp(r.nominal) : ''}"${lock ? ' disabled' : ''}>
+            ${r ? `<div class="small mt-1">${badge(r)}</div>` : ''}</td>
+          <td class="text-end small">Sisa anggaran POS<br><b id="sisa${p.id}"></b></td></tr>`; }).join('')}</tbody></table></div>
+      <label class="form-label" for="lfile">Unggah file LPJ <span class="text-danger">(wajib)</span></label>
+      <input id="lfile" type="file" class="form-control mb-1" multiple accept=".pdf,.jpg,.jpeg,.png">
+      <div class="form-text mb-3">PDF, JPG, atau PNG. File diunggah langsung ke Google Drive Anda (perlu login Google). Maksimal ${m.cfg.max_file_count ?? 3} file, masing-masing ${m.cfg.max_file_size_mb ?? 5} MB.${lpj ? ' LPJ bulan ini sudah terunggah; unggah lagi untuk menambah file.' : ''}</div>
+      <label class="form-label" for="llpj">Atau tempel link Google Drive</label>
+      <input id="llpj" type="url" class="form-control mb-1" placeholder="https://drive.google.com/…" value="${esc(lpj)}">
+      <div class="form-text mb-3">Opsional. Pastikan admin dapat membuka file tersebut.</div>
+      <button class="btn btn-primary" id="lsave">Kirim Realisasi ${BULAN[b - 1]}</button>`;
+    $('lbody').oninput = e => { if (e.target.dataset.p) { fmtIn(e.target); calc(); } };
+    $('lsave').onclick = async () => {
+      if (calc()) return;
+      const lpj = $('llpj').value.trim();
+      const payload = [...$('lbody').querySelectorAll('[data-p]:not([disabled])')]
+        .map(i => ({ kua_id: me.kua_id, tahun: t, bulan: b, pos_id: +i.dataset.p, nominal: num(i.value), file_lpj_url: lpj || null }))
+        .filter(x => x.nominal > 0 || cur[x.pos_id]);
+      const warn = txt => $('lmsg').innerHTML = note(txt, 'warning');
+      if (!payload.length) return warn('Belum ada nominal yang diisi.');
+      if (lpj && !LPJ_RE.test(lpj)) return warn('Link LPJ harus berupa link Google Drive (https://drive.google.com/…).');
+      const maxMb = m.cfg.max_file_size_mb ?? 5, maxN = m.cfg.max_file_count ?? 3, files = [...$('lfile').files];
+      if (files.length > maxN) return warn(`Maksimal ${maxN} file per LPJ.`);
+      const big = files.find(x => x.size > maxMb * 1048576), nope = files.find(x => !/\.(pdf|jpe?g|png)$/i.test(x.name));
+      if (big) return warn(`${big.name} melebihi ${maxMb} MB.`);
+      if (nope) return warn(`${nope.name}: hanya PDF, JPG, atau PNG.`);
+      if (!lpj && !files.length && payload.some(x => x.nominal > 0)) return warn('LPJ wajib dilampirkan: unggah file atau tempel link Google Drive.');
+      $('lsave').disabled = true;
+      if (files.length) {
+        try {
+          if (!(CFG.gKey && CFG.gClient)) throw new Error('Unggah ke Google Drive belum dikonfigurasi (CFG.gKey dan CFG.gClient). Tempel link Google Drive sebagai gantinya.');
+          await loadJs(GSI);
+          $('lmsg').innerHTML = note('Login Google, lalu mengunggah LPJ ke Google Drive Anda…', 'info');
+          const url = await driveUpload(files, `${t}-${String(b).padStart(2, '0')} ${me.kua}`);
+          $('llpj').value = url; $('lfile').value = '';   // jika pengiriman gagal, coba ulang tanpa mengunggah ulang
+          payload.forEach(x => x.file_lpj_url = url);
+        } catch (e) { $('lmsg').innerHTML = note(e.message); return calc(); }
+      }
+      const { error } = await sb.from('realisasi').upsert(payload, { onConflict: 'kua_id,tahun,bulan,pos_id' });
+      if (error) { $('lmsg').innerHTML = note(error.message); return calc(); }
+      $('lmsg').innerHTML = note('Realisasi terkirim dan menunggu verifikasi admin.', 'success');
+      load(true);
+    };
+    calc();
+  };
+  const load = async keep => {
+    t = +$('lt').value; b = +$('lb').value;
+    if (!keep) $('lmsg').innerHTML = '';
+    $('lbody').textContent = 'Memuat…';
+    const [p, r] = await Promise.all([
+      sb.from('rpd').select('bulan,pos_id,nominal').eq('kua_id', me.kua_id).eq('tahun', t),
+      sb.from('realisasi').select('bulan,pos_id,nominal,status,is_autopayment,catatan_admin,file_lpj_url').eq('kua_id', me.kua_id).eq('tahun', t)
+    ]);
+    if (p.error || r.error) return $('lbody').innerHTML = note((p.error || r.error).message);
+    rpd = p.data; rl = r.data; draw();
+  };
+  $('lt').onchange = $('lb').onchange = () => load();
+  load();
+}
+
+async function pageVerifikasi() {
+  $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">Verifikasi Realisasi</h4><div id="vmsg"></div><div id="vbody">Memuat…</div></div></div>`;
+  const load = async () => {
+    let m, r;
+    try {
+      m = await master();
+      r = await sb.from('realisasi').select('kua_id,tahun,bulan,pos_id,nominal,status,file_lpj_url')
+        .in('status', ['waiting', 'approved']).order('tahun').order('bulan').order('kua_id');
+      if (r.error) throw r.error;
+    } catch (e) { return $('vbody').innerHTML = note(e.message); }
+    const kn = Object.fromEntries(m.kua.map(k => [k.id, k.nama_kua])), pn = Object.fromEntries(m.pos.map(p => [p.id, p.nama_rincian || p.nama_pos]));
+    const G = {};
+    r.data.forEach(x => (G[`${x.kua_id}|${x.tahun}|${x.bulan}|${x.status}`] ||= []).push(x));
+    const keys = Object.keys(G);
+    $('vbody').innerHTML = keys.length ? keys.map(k => {
+      const g = G[k], f = g[0], wait = f.status === 'waiting';
+      return `<div class="border rounded p-3 mb-3"><div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+        <b class="me-auto">${esc(kn[f.kua_id])} · ${BULAN[f.bulan - 1]} ${f.tahun}</b>
+        <span class="badge ${ST[f.status][0]}">${wait ? 'Menunggu verifikasi' : 'Disetujui, belum dibayar'}</span></div>
+        <ul class="mb-2">${g.map(x => `<li>${esc(pn[x.pos_id])}: Rp ${rp(x.nominal)}</li>`).join('')}</ul>
+        <div class="mb-2">Total: <b>Rp ${rp(g.reduce((s, x) => s + x.nominal, 0))}</b> · ${f.file_lpj_url ? `<a href="${esc(f.file_lpj_url)}" target="_blank" rel="noopener">Buka LPJ</a>` : 'Tanpa LPJ'}</div>
+        ${wait ? `<button class="btn btn-sm btn-primary" data-a="approved" data-g="${esc(k)}">Setujui</button>
+                  <button class="btn btn-sm btn-outline-danger" data-a="rejected" data-g="${esc(k)}">Tolak…</button>`
+               : `<button class="btn btn-sm btn-primary" data-a="paid" data-g="${esc(k)}">Tandai dibayar</button>`}</div>`;
+    }).join('') : '<p class="mb-0">Tidak ada Realisasi yang perlu diproses.</p>';
+    $('vbody').onclick = async e => {
+      const b = e.target.closest('[data-a]'); if (!b) return;
+      const [kua, tahun, bulan, st] = b.dataset.g.split('|'), a = b.dataset.a;
+      const run = async patch => {
+        const { error } = await sb.from('realisasi').update(patch).eq('kua_id', kua).eq('tahun', tahun).eq('bulan', bulan).eq('status', st);
+        if (!error) $('vmsg').innerHTML = note('Status Realisasi diperbarui.', 'success');
+        return error;
+      };
+      if (a === 'rejected') {
+        const d = $('dlg');
+        d.innerHTML = `<form id="nf" class="p-4"><h5 class="mb-2">Tolak Realisasi</h5><div id="nmsg"></div>
+          <label class="form-label" for="nt">Alasan penolakan (wajib)</label>
+          <textarea id="nt" class="form-control mb-3" rows="3" required></textarea>
+          <div class="d-flex justify-content-end gap-2"><button type="button" class="btn btn-outline-secondary" id="nx">Batal</button>
+          <button class="btn btn-danger">Tolak Realisasi</button></div></form>`;
+        $('nx').onclick = () => d.close();
+        $('nf').onsubmit = async ev => {
+          ev.preventDefault();
+          const er = await run({ status: 'rejected', catatan_admin: $('nt').value.trim() });
+          if (er) return $('nmsg').innerHTML = note(er.message);
+          d.close(); load();
+        };
+        return d.showModal();
+      }
+      if (a === 'paid' && !confirm('Tandai Realisasi ini sebagai sudah dibayar? Tindakan ini tidak dapat dibatalkan.')) return;
+      b.disabled = true;
+      const er = await run({ status: a });
+      if (er) { $('vmsg').innerHTML = note(er.message); b.disabled = false; } else load();
+    };
+  };
+  load();
+}
+
+async function pageAutopay() {
+  let m;
+  try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
+  const P = m.pos.filter(p => ['522111', '522112', '522113'].includes(p.kode_pos));   // Listrik, Telepon/Internet, Air
+  sb.rpc('generate_autopayment');   // penyusul penerbitan bulan berjalan (cadangan jika pg_cron belum aktif)
+  $('view').innerHTML = `<div class="card"><div class="card-body">
+    <h4 class="mb-1">AutoPayment</h4>
+    <p class="mb-3">Pembayaran otomatis lewat SAKTI. Isi nominal per bulan sekali saja: berlaku tetap setiap bulan, mulai bulan ini, sampai Anda mengubahnya. Kosongkan kolom untuk menonaktifkan.</p>
+    <div id="apmsg"></div><div id="apbody">Memuat…</div></div></div>`;
+  const r = await sb.from('autopayment_pos').select('kua_id,pos_id,nominal').gt('nominal', 0);
+  if (r.error) return $('apbody').innerHTML = note(r.error.message);
+  const cur = {}; r.data.forEach(x => cur[x.kua_id + '|' + x.pos_id] = x.nominal);
+  $('apbody').innerHTML = `<div class="table-responsive"><table class="table align-middle"><thead><tr><th>KUA</th>${P.map(p => `<th>${esc(p.nama_pos.replace('Belanja Langganan ', ''))} (Rp)</th>`).join('')}</tr></thead>
+    <tbody>${m.kua.map(k => `<tr><td>${esc(k.nama_kua)}</td>${P.map(p => `<td><input class="form-control form-control-sm text-end" style="min-width:130px" inputmode="numeric" placeholder="Kosong" data-k="${k.id}" data-p="${p.id}" value="${cur[k.id + '|' + p.id] ? rp(cur[k.id + '|' + p.id]) : ''}"></td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    <button class="btn btn-primary" id="apsave">Simpan AutoPayment</button>`;
+  $('apbody').oninput = e => { if (e.target.dataset.p) fmtIn(e.target); };
+  $('apsave').onclick = async () => {
+    const up = [], del = {};
+    $('apbody').querySelectorAll('[data-p]').forEach(i => {
+      const k = +i.dataset.k, p = +i.dataset.p, v = num(i.value), old = cur[k + '|' + p];
+      if (v > 0 && v !== old) up.push({ kua_id: k, pos_id: p, nominal: v });
+      else if (!v && old) (del[p] ||= []).push(k);
+    });
+    if (!up.length && !Object.keys(del).length) return $('apmsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
+    $('apsave').disabled = true;
+    let err = up.length ? (await sb.from('autopayment_pos').upsert(up, { onConflict: 'kua_id,pos_id' })).error : null;
+    for (const p of Object.keys(del)) if (!err) err = (await sb.from('autopayment_pos').delete().eq('pos_id', p).in('kua_id', del[p])).error;
+    if (!err) err = (await sb.rpc('generate_autopayment')).error;   // terbitkan Realisasi bulan ini (Dibayar otomatis)
+    $('apmsg').innerHTML = err ? note(err.message) : note('AutoPayment tersimpan. Realisasi bulan ini sudah terbit dan akan terbit otomatis setiap bulan.', 'success');
+    $('apsave').disabled = false;
+    if (!err) { up.forEach(x => cur[x.kua_id + '|' + x.pos_id] = x.nominal); Object.entries(del).forEach(([p, ks]) => ks.forEach(k => delete cur[k + '|' + p])); }
+  };
+}
+
+async function pageConfig() {
+  $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">Config</h4><div id="cmsg"></div><div id="cbody">Memuat…</div></div></div>`;
+  const c = await sb.from('config').select('key,value');
+  if (c.error) return $('cbody').innerHTML = note(c.error.message);
+  const cfg = M.cfg = Object.fromEntries(c.data.map(r => [r.key, r.value]));
+  const sw = (id, label, on) => `<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="${id}"${on ? ' checked' : ''}><label class="form-check-label" for="${id}">${label}</label></div>`;
+  const nm = (id, label, v, max) => `<div class="col-sm-6"><label class="form-label" for="${id}">${label}</label><input id="${id}" type="number" min="1" max="${max}" class="form-control" value="${v}" required></div>`;
+  $('cbody').innerHTML = `<form id="cf">
+    ${sw('crp', 'Operator boleh mengisi RPD', cfg.rpd_enabled === true)}
+    ${sw('crl', 'Operator boleh mengisi Realisasi', cfg.realisasi_enabled === true)}
+    <div class="row g-3 my-1">${nm('cmb', 'Maksimal ukuran file (MB)', cfg.max_file_size_mb ?? 5, 100)}${nm('cfc', 'Maksimal jumlah file', cfg.max_file_count ?? 3, 20)}</div>
+    <div class="mt-3 mb-1">Bulan yang dibuka untuk edit RPD (operator)</div>
+    <div class="d-flex flex-wrap gap-3 mb-3">${BULAN.map((x, i) => `<div class="form-check"><input class="form-check-input" type="checkbox" name="bln" id="bln${i + 1}" value="${i + 1}"${(cfg.bulan_edit_rpd || []).includes(i + 1) ? ' checked' : ''}><label class="form-check-label" for="bln${i + 1}">${x}</label></div>`).join('')}</div>
+    <button class="btn btn-primary" id="csave">Simpan pengaturan</button></form>`;
+  $('cf').onsubmit = async e => {
+    e.preventDefault();
+    const v = { rpd_enabled: $('crp').checked, realisasi_enabled: $('crl').checked,
+      max_file_size_mb: +$('cmb').value, max_file_count: +$('cfc').value,
+      bulan_edit_rpd: [...document.querySelectorAll('[name=bln]:checked')].map(i => +i.value) };
+    $('csave').disabled = true;
+    const at = new Date().toISOString();
+    const { error } = await sb.from('config').upsert(Object.entries(v).map(([key, value]) => ({ key, value, updated_by: me.id, updated_at: at })), { onConflict: 'key' });
+    $('csave').disabled = false;
+    if (!error) Object.assign(M.cfg, v);
+    $('cmsg').innerHTML = error ? note(error.message) : note('Pengaturan tersimpan.', 'success');
+  };
+}
+
+/* ====== Laporan ====== */
+const BLN3 = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const CDN = {
+  xlsx: 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+  pdf: 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+  at: 'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'
+};
+const libs = {};
+const loadJs = src => libs[src] ||= new Promise((ok, no) => {   // library ekspor hanya dimuat saat tombol unduh ditekan
+  const el = document.createElement('script'); el.src = src; el.onload = ok;
+  el.onerror = () => { delete libs[src]; no(new Error('Gagal memuat library ekspor. Periksa koneksi internet lalu coba lagi.')); };
+  document.head.append(el);
+});
+const fetchAll = async mk => {   // halaman 1000 baris (batas default Supabase)
+  let out = [], from = 0;
+  for (;;) {
+    const { data, error } = await mk().range(from, from + 999);
+    if (error) throw error;
+    out = out.concat(data);
+    if (data.length < 1000) return out;
+    from += 1000;
+  }
+};
+
+async function buildReport(f, m) {
+  const tbl = f.nom === 'rpd' ? 'rpd' : 'realisasi', stf = { ok: ['approved', 'paid'], paid: ['paid'] }[f.st];
+  const rows = await fetchAll(() => {
+    let q = sb.from(tbl).select('kua_id,bulan,pos_id,nominal').eq('tahun', f.tahun);
+    if (f.kid) q = q.eq('kua_id', f.kid);
+    if (f.per === 'bulan') q = q.eq('bulan', f.bulan);
+    if (tbl === 'realisasi' && stf) q = q.in('status', stf);
+    return q.order('kua_id').order('bulan').order('pos_id');
+  });
+  const all = !f.kid, det = f.bentuk === 'detail', lead = all ? 3 : 2;
+  const cols = f.per === 'bulan' ? [f.bulan] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  const agg = {};
+  rows.forEach(r => (agg[r.kua_id + '|' + r.pos_id] ||= Array(12).fill(0))[r.bulan - 1] += r.nominal);
+  const head = [...(all ? ['KUA'] : []), 'Kode POS', 'POS / Rincian', ...(det ? cols.map(c => BLN3[c - 1]) : []), det ? 'Total' : 'Nominal'];
+  const body = [];
+  (all ? m.kua : m.kua.filter(k => k.id === f.kid)).forEach(k => m.pos.forEach(p => {
+    const a = agg[k.id + '|' + p.id] || Array(12).fill(0), v = cols.map(c => a[c - 1]);
+    body.push([...(all ? [k.nama_kua] : []), p.kode_pos, p.nama_rincian || p.nama_pos, ...(det ? v : []), v.reduce((s, x) => s + x, 0)]);
+  }));
+  const total = head.map((h, i) => i < lead ? (i === lead - 1 ? 'TOTAL' : '') : body.reduce((s, r) => s + r[i], 0));
+  const kn = all ? 'Seluruh KUA' : m.kua.find(k => k.id === f.kid)?.nama_kua || '';
+  const jenis = f.nom === 'rpd' ? 'RPD' : 'Realisasi';
+  return {
+    head, body, total, lead, det,
+    title: `Laporan ${jenis} ${det ? 'Detail' : 'Rekap'} ${f.tahun}`,
+    sub: [kn, f.per === 'bulan' ? `${BULAN[f.bulan - 1]} ${f.tahun}` : `Tahun ${f.tahun}`,
+      f.nom === 'realisasi' ? { ok: 'Disetujui + Dibayar', paid: 'Dibayar saja', all: 'Semua status' }[f.st] : null,
+      'Dicetak ' + new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })].filter(Boolean).join(' · '),
+    name: `laporan-${f.nom}-${f.bentuk}-${f.tahun}${f.per === 'bulan' ? '-' + String(f.bulan).padStart(2, '0') : ''}-${all ? 'semua-kua' : kn.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+  };
+}
+
+async function toXlsx(r) {
+  await loadJs(CDN.xlsx);
+  const ws = XLSX.utils.aoa_to_sheet([[r.title], [r.sub], [], r.head, ...r.body, r.total]);
+  ws['!cols'] = r.head.map((h, i) => ({ wch: i >= r.lead ? 14 : i === r.lead - 1 || h === 'KUA' ? 30 : 11 }));
+  Object.keys(ws).forEach(a => { if (a[0] !== '!' && ws[a].t === 'n') ws[a].z = '#,##0'; });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Laporan');
+  XLSX.writeFile(wb, r.name + '.xlsx');
+}
+
+async function toPdf(r) {
+  await loadJs(CDN.pdf); await loadJs(CDN.at);   // autotable butuh jsPDF lebih dulu
+  const doc = new window.jspdf.jsPDF({ orientation: r.head.length > 6 ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' });
+  doc.setFontSize(13); doc.text(r.title, 40, 40); doc.setFontSize(9); doc.text(r.sub, 40, 56);
+  const right = {}; r.head.forEach((h, i) => { if (i >= r.lead) right[i] = { halign: 'right' }; });
+  doc.autoTable({
+    head: [r.head], startY: 68, theme: 'grid', columnStyles: right,
+    body: [...r.body, r.total].map(x => x.map((v, i) => i >= r.lead ? rp(v) : v)),
+    styles: { fontSize: r.head.length > 10 ? 6.5 : 8, cellPadding: 3 }, headStyles: { fillColor: [105, 108, 255] },
+    didParseCell: d => { if (d.section === 'body' && d.row.index === r.body.length) d.cell.styles.fontStyle = 'bold'; }
+  });
+  doc.save(r.name + '.pdf');
+}
+
+async function pageLaporan() {
+  const admin = me.role === 'admin', y = new Date().getFullYear();
+  let m;
+  try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
+  if (!admin && !me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
+  const opt = (arr, cur) => arr.map(([v, t]) => `<option value="${v}"${v == cur ? ' selected' : ''}>${esc(t)}</option>`).join('');
+  const col = (id, label, arr, cur, extra = '') => `<div class="col-sm-6 col-lg-4"><label class="form-label" for="${id}">${label}</label><select id="${id}" class="form-select">${opt(arr, cur)}</select>${extra}</div>`;
+  $('view').innerHTML = `<div class="card"><div class="card-body">
+    <h4 class="mb-3">Laporan</h4><div id="gmsg"></div>
+    <div class="row g-3" id="gform">
+      ${col('gn', 'Jenis nominal', [['realisasi', 'Realisasi'], ['rpd', 'RPD']], 'realisasi')}
+      ${col('gf', 'Bentuk laporan', [['rekap', 'Rekap (total per POS)'], ['detail', 'Detail per bulan (matriks)']], 'rekap')}
+      ${col('gt', 'Tahun', [y - 1, y, y + 1].map(v => [v, v]), y)}
+      ${col('gp', 'Periode', [['tahun', 'Satu tahun'], ['bulan', 'Satu bulan']], 'tahun',
+        `<select id="gb" class="form-select mt-2 d-none" aria-label="Bulan">${opt(BULAN.map((b, i) => [i + 1, b]), new Date().getMonth() + 1)}</select>`)}
+      ${admin ? col('gc', 'Cakupan', [['', 'Seluruh KUA'], ...m.kua.map(k => [k.id, k.nama_kua])], '')
+              : `<div class="col-sm-6 col-lg-4"><label class="form-label" for="gc">Cakupan</label><input id="gc" class="form-control" value="${esc(me.kua || '')}" disabled></div>`}
+      ${col('gs', 'Status Realisasi', [['ok', 'Disetujui + Dibayar'], ['paid', 'Dibayar saja'], ['all', 'Semua status']], 'ok')}
+    </div>
+    <div class="mt-4 d-flex flex-wrap gap-2">
+      <button class="btn btn-primary" data-x="xlsx"><i class="bx bx-spreadsheet"></i> Unduh Excel</button>
+      <button class="btn btn-outline-primary" data-x="pdf"><i class="bx bxs-file-pdf"></i> Unduh PDF</button></div></div></div>`;
+  const sync = () => {
+    $('gb').classList.toggle('d-none', $('gp').value !== 'bulan');
+    $('gs').closest('.col-sm-6').classList.toggle('d-none', $('gn').value !== 'realisasi');
+  };
+  $('gform').onchange = sync; sync();
+  $('view').onclick = async e => {
+    const b = e.target.closest('[data-x]'); if (!b) return;
+    const f = { nom: $('gn').value, bentuk: $('gf').value, tahun: +$('gt').value, per: $('gp').value, bulan: +$('gb').value, st: $('gs').value,
+      kid: admin ? +$('gc').value || 0 : me.kua_id };
+    const btns = $('view').querySelectorAll('[data-x]');
+    btns.forEach(x => x.disabled = true); $('gmsg').innerHTML = note('Menyiapkan laporan…', 'info');
+    try {
+      const r = await buildReport(f, m);
+      await (b.dataset.x === 'xlsx' ? toXlsx : toPdf)(r);
+      $('gmsg').innerHTML = note(`Laporan berisi ${r.body.length} baris dan sudah diunduh.`, 'success');
+    } catch (err) { $('gmsg').innerHTML = note(err.message); }
+    btns.forEach(x => x.disabled = false);
+  };
+}
+
+function pageBop() {
+  const items = [
+    ['rpd', 'RPD', 'bx-calendar-edit', 'Rencana penarikan dana bulanan', ''],
+    ['realisasi', 'Realisasi', 'bx-receipt', 'Isi realisasi dan unggah LPJ', 'o'],
+    ['anggaran', 'Anggaran', 'bx-coin-stack', 'Anggaran tahunan setiap KUA', 'a'],
+    ['verifikasi', 'Verifikasi', 'bx-check-shield', 'Setujui atau tolak realisasi', 'a'],
+    ['autopayment', 'AutoPayment', 'bx-transfer', 'Pembayaran otomatis yang tetap', 'a'],
+    ['config', 'Config', 'bx-slider', 'Pengaturan sistem', 'a'],
+    ['laporan', 'Laporan', 'bx-file', 'Unduh Excel dan PDF', '']];
+  $('view').innerHTML = `<h4 class="mb-1">BOP</h4><p class="mb-3">Halo, <b>${esc(me.nama)}</b>. Pilih modul:</p>
+    <div class="row g-3">${items.filter(i => !i[4] || (i[4] === 'a') === (me.role === 'admin')).map(i => `<div class="col-sm-6 col-lg-4">
+      <a class="card h-100 text-decoration-none" href="#${i[0]}"><div class="card-body d-flex gap-3 align-items-center">
+        <div class="avatar"><i class="bx ${i[2]} fs-4"></i></div><div><h5 class="mb-0">${i[1]}</h5><small>${i[3]}</small></div></div></a></div>`).join('')}</div>`;
 }
 
 function openReset(r) {
