@@ -264,8 +264,17 @@ async function pageAnggaran() {
 }
 
 const ST = { waiting: ['bg-warning', 'Menunggu verifikasi'], approved: ['bg-info', 'Disetujui'], rejected: ['bg-danger', 'Ditolak'], paid: ['bg-success', 'Dibayar'] };
-const badge = r => r.is_autopayment ? '<span class="badge bg-success">Dibayar otomatis</span>' : `<span class="badge ${ST[r.status][0]}">${ST[r.status][1]}</span>`;
-const sumN = a => a.reduce((s, x) => s + x.nominal, 0);
+const sumT = a => a.reduce((s, x) => s + x.total, 0);
+const isum = o => Object.values(o || {}).reduce((s, v) => s + v, 0);
+const posLabel = p => `${p.kode_pos} · ${p.nama_rincian || p.nama_pos}`;   // kode akun + nama POS/rincian
+const mfirst = (t, b) => `${t}-${String(b).padStart(2, '0')}-01`;
+const autoOf = (cfg, t, b) => {   // AutoPayment virtual: nominal tetap selama versi konfigurasi berlaku, sampai bulan berjalan
+  const d = mfirst(t, b), n = new Date(), o = {};
+  if (d > mfirst(n.getFullYear(), n.getMonth() + 1)) return o;
+  cfg.forEach(c => { if (c.nominal > 0 && c.mulai <= d && (!c.sampai || d <= c.sampai)) o[c.pos_id] = c.nominal; });
+  return o;
+};
+const autoYear = (cfg, t, pid) => { let s = 0; for (let b = 1; b <= 12; b++) s += autoOf(cfg, t, b)[pid] || 0; return s; };
 
 /* ====== LPJ: unggah, daftar, baca file lewat Edge Function "lpj" (file tersimpan di folder pusat Google Drive) ====== */
 async function lpjCall(q, opt = {}) {
@@ -279,13 +288,21 @@ async function lpjCall(q, opt = {}) {
   }
   return r;
 }
-async function showDocs(el, ctx) {   // ctx = { kua, tahun, bulan }; daftar dokumen + tombol Lihat
+async function showDocs(el, ctx, opt = {}) {   // ctx = { kua, tahun, bulan }; opt = { del, onCount }
   el.textContent = 'Memuat dokumen…';
   try {
     const { files } = await (await lpjCall({ action: 'list', ...ctx })).json();
-    el.innerHTML = files.length ? `<ul class="list-unstyled mb-0">${files.map((f, i) => `<li class="d-flex align-items-center gap-2 mb-1"><i class="bx bx-file"></i><span class="me-auto text-break">${esc(f.name)}</span><button class="btn btn-sm btn-outline-primary" data-f="${i}">Lihat</button></li>`).join('')}</ul>` : '<span class="small">Belum ada dokumen.</span>';
-    el.onclick = e => { const b = e.target.closest('[data-f]'); if (b) openViewer(files, +b.dataset.f, ctx); };
-  } catch (e) { el.innerHTML = note(e.message); }
+    if (opt.onCount) opt.onCount(files.length);
+    el.innerHTML = files.length ? `<ul class="list-unstyled mb-0">${files.map((f, i) => `<li class="d-flex align-items-center gap-2 mb-1"><i class="bx bx-file"></i><span class="me-auto text-break">${esc(f.name)}</span><button class="btn btn-sm btn-outline-primary" data-f="${i}">Lihat</button>${opt.del ? `<button class="btn btn-sm btn-outline-danger" data-x="${i}" aria-label="Hapus"><i class="bx bx-trash"></i></button>` : ''}</li>`).join('')}</ul>` : '<span class="small">Belum ada dokumen.</span>';
+    el.onclick = async e => {
+      const v = e.target.closest('[data-f]'), x = e.target.closest('[data-x]');
+      if (v) return openViewer(files, +v.dataset.f, ctx);
+      if (!x || !confirm(`Hapus file "${files[+x.dataset.x].name}" dari Google Drive?`)) return;
+      x.disabled = true;
+      try { await lpjCall({ action: 'delete', ...ctx, id: files[+x.dataset.x].id }, { method: 'POST' }); showDocs(el, ctx, opt); }
+      catch (er) { x.disabled = false; el.insertAdjacentHTML('beforeend', note(er.message)); }
+    };
+  } catch (e) { el.innerHTML = note(e.message); if (opt.onCount) opt.onCount(null); }
 }
 
 /* ====== Pratinjau dokumen: zoom (mouse/trackpad/sentuh), geser, putar. Posisi dijepit agar dokumen tak pernah hilang dari layar ====== */
@@ -415,43 +432,54 @@ async function openViewer(files, idx, ctx) {
   show(idx);
 }
 
-/* ====== RPD: daftar bulan dulu, tombol Detail membuka rincian per POS ====== */
+/* ====== RPD: daftar dulu (admin: filter semua kecamatan), Detail membuka rincian per POS. 1 record = 1 bulan ====== */
 async function pageRpd() {
   const admin = me.role === 'admin', y = new Date().getFullYear();
   let m;
   try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
   if (!admin && !me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
   $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">RPD</h4>
-    <div class="d-flex flex-wrap gap-2 mb-3">${admin ? `<select id="rk" class="form-select" style="width:auto">${m.kua.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>` : ''}${yearSel('ry', y)}</div>
+    <div class="d-flex flex-wrap gap-2 mb-3">${admin ? `<select id="rk" class="form-select" style="width:auto" aria-label="Kecamatan"><option value="0">Semua Kecamatan</option>${m.kua.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>` : ''}${yearSel('ry', y)}</div>
     <div id="xmsg"></div><div id="rbody">Memuat…</div></div></div>`;
-  let rows = [], cap = null, t, kid;
-  const list = () => {
-    const tot = sumN(rows);
+  let rows = [], ang = [], cap = null, t, kid;
+  const listAll = () => {   // admin: semua kecamatan sekaligus
+    const A = Object.fromEntries(ang.map(a => [a.kua_id, a.nominal_total])), R = {};
+    rows.forEach(r => R[r.kua_id] = (R[r.kua_id] || 0) + r.total);
+    const ta = ang.reduce((s, a) => s + a.nominal_total, 0), tr = sumT(rows);
     $('rbody').oninput = null;
-    $('rbody').innerHTML = `<div class="alert alert-primary py-2">Anggaran Tahunan ${t}: <b>${cap == null ? 'belum ditetapkan' : 'Rp ' + rp(cap)}</b> · Total RPD: <b>Rp ${rp(tot)}</b> · Sisa: <b>Rp ${rp((cap ?? 0) - tot)}</b></div>
-      <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Bulan</th><th class="text-end">Total RPD (Rp)</th><th></th></tr></thead><tbody>${BULAN.map((n, i) => `<tr><td>${n}</td><td class="text-end">${rp(sumN(rows.filter(x => x.bulan === i + 1)))}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${i + 1}">Detail</button></td></tr>`).join('')}</tbody>
+    $('rbody').innerHTML = `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Kecamatan</th><th class="text-end">Anggaran (Rp)</th><th class="text-end">Total RPD (Rp)</th><th class="text-end">Sisa (Rp)</th><th></th></tr></thead><tbody>${m.kua.map(k => `<tr><td>${esc(k.nama_kua)}</td><td class="text-end">${A[k.id] != null ? rp(A[k.id]) : '<span class="badge bg-secondary">Belum diset</span>'}</td><td class="text-end">${rp(R[k.id])}</td><td class="text-end">${A[k.id] != null ? rp(A[k.id] - (R[k.id] || 0)) : '-'}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-k="${k.id}">Detail</button></td></tr>`).join('')}</tbody>
+      <tfoot><tr class="fw-semibold"><td>Total ${t}</td><td class="text-end">${rp(ta)}</td><td class="text-end">${rp(tr)}</td><td class="text-end">${rp(ta - tr)}</td><td></td></tr></tfoot></table></div>`;
+    $('rbody').onclick = e => { const b = e.target.closest('[data-k]'); if (b) { $('rk').value = b.dataset.k; load(); } };
+  };
+  const list = () => {   // satu kecamatan: 12 bulan
+    const tot = sumT(rows);
+    $('rbody').oninput = null;
+    $('rbody').innerHTML = `${admin ? '<button class="btn btn-sm btn-outline-secondary mb-3" id="rall"><i class="bx bx-arrow-back"></i> Semua kecamatan</button>' : ''}
+      <div class="alert alert-primary py-2">Anggaran Tahunan ${t}: <b>${cap == null ? 'belum ditetapkan' : 'Rp ' + rp(cap)}</b> · Total RPD: <b>Rp ${rp(tot)}</b> · Sisa: <b>Rp ${rp((cap ?? 0) - tot)}</b></div>
+      <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Bulan</th><th class="text-end">Total RPD (Rp)</th><th></th></tr></thead><tbody>${BULAN.map((n, i) => `<tr><td>${n}</td><td class="text-end">${rp(rows.find(x => x.bulan === i + 1)?.total)}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${i + 1}">Detail</button></td></tr>`).join('')}</tbody>
       <tfoot><tr class="fw-semibold"><td>Total ${t}</td><td class="text-end">${rp(tot)}</td><td></td></tr></tfoot></table></div>`;
+    if (admin) $('rall').onclick = () => { $('rk').value = 0; load(); };
     $('rbody').onclick = e => { const b = e.target.closest('[data-b]'); if (b) detail(+b.dataset.b); };
   };
   const detail = b => {
     const locked = !admin && !(m.cfg.rpd_enabled === true && (m.cfg.bulan_edit_rpd || []).includes(b));
-    const cur = Object.fromEntries(rows.filter(x => x.bulan === b).map(x => [x.pos_id, x.nominal]));
+    const cur = rows.find(x => x.bulan === b)?.items || {};
     $('rbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="rback"><i class="bx bx-arrow-back"></i> Kembali</button>
-      <h5 class="mb-3">RPD ${BULAN[b - 1]} ${t}</h5><div id="rsum"></div>
+      <h5 class="mb-3">RPD ${BULAN[b - 1]} ${t}${admin ? ' · ' + esc(m.kua.find(k => k.id === kid).nama_kua) : ''}</h5><div id="rsum"></div>
       ${locked ? note('Pengisian RPD untuk bulan ini ditutup. Hubungi admin bila perlu perubahan.', 'warning') : ''}
       <div class="table-responsive"><table class="table align-middle"><tbody>${m.pos.map(p => `<tr>
-        <td>${esc(p.nama_rincian || p.nama_pos)}<div class="small">${esc(p.kode_pos)}${p.nama_rincian ? ' · ' + esc(p.nama_pos) : ''}</div></td>
+        <td>${esc(posLabel(p))}${p.nama_rincian ? `<div class="small">${esc(p.nama_pos)}</div>` : ''}</td>
         <td style="width:190px"><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${cur[p.id] ? rp(cur[p.id]) : ''}"${locked ? ' disabled' : ''}></td></tr>`).join('')}</tbody>
         <tfoot><tr class="fw-semibold"><td>Total RPD ${BULAN[b - 1]}</td><td class="text-end" id="rtot"></td></tr></tfoot></table></div>
       <button class="btn btn-primary" id="rsave">Simpan RPD ${BULAN[b - 1]}</button>`;
     const calc = () => {
-      const others = sumN(rows.filter(x => x.bulan !== b)), mine = [...$('rbody').querySelectorAll('[data-p]')].reduce((s, i) => s + num(i.value), 0);
+      const others = sumT(rows.filter(x => x.bulan !== b)), mine = [...$('rbody').querySelectorAll('[data-p]')].reduce((s, i) => s + num(i.value), 0);
       const total = others + mine, sisa = (cap ?? 0) - total, over = cap == null || sisa < 0;
       $('rtot').textContent = 'Rp ' + rp(mine);
       $('rsum').className = 'alert py-2 ' + (over ? 'alert-danger' : 'alert-primary');
       $('rsum').innerHTML = cap == null ? `Anggaran Tahunan ${t} belum ditetapkan admin, jadi RPD belum bisa diisi.`
         : `Total RPD ${t}: <b>Rp ${rp(total)}</b> · Anggaran: <b>Rp ${rp(cap)}</b> · Sisa: <b>Rp ${rp(sisa)}</b>` +
-          (sisa < 0 ? `<br>Melebihi anggaran Rp ${rp(-sisa)}. Batas Rp ${rp(cap)}; bulan lain Rp ${rp(others)}; bulan ini yang Anda isi Rp ${rp(mine)}. Kurangi isian bulan ini.` : '');
+          (sisa < 0 ? `<br>Melebihi anggaran Rp ${rp(-sisa)}. Batas Rp ${rp(cap)}; bulan lain Rp ${rp(others)}; bulan ini yang diisi Rp ${rp(mine)}. Kurangi isian bulan ini.` : '');
       $('rsave').disabled = locked || over;
       return over;
     };
@@ -460,11 +488,12 @@ async function pageRpd() {
     $('rbody').oninput = e => { if (e.target.dataset.p) { fmtIn(e.target); calc(); } };
     $('rsave').onclick = async () => {
       if (calc()) return;
-      const payload = [...$('rbody').querySelectorAll('[data-p]')].map(i => ({ kua_id: kid, tahun: t, bulan: b, pos_id: +i.dataset.p, nominal: num(i.value) }));
+      const items = {};
+      $('rbody').querySelectorAll('[data-p]').forEach(i => { const v = num(i.value); if (v > 0) items[i.dataset.p] = v; });
       $('rsave').disabled = true;
-      const { error } = await sb.from('rpd').upsert(payload, { onConflict: 'kua_id,tahun,bulan,pos_id' });
+      const { error } = await sb.from('rpd').upsert({ kua_id: kid, tahun: t, bulan: b, items }, { onConflict: 'kua_id,tahun,bulan' });   // 1 bulan = 1 record
       $('xmsg').innerHTML = error ? note(error.message) : note(`RPD ${BULAN[b - 1]} ${t} tersimpan.`, 'success');
-      if (!error) rows = rows.filter(x => x.bulan !== b).concat(payload);
+      if (!error) rows = rows.filter(x => x.bulan !== b).concat({ kua_id: kid, bulan: b, items, total: isum(items) });
       calc();
     };
     calc();
@@ -472,18 +501,17 @@ async function pageRpd() {
   const load = async () => {
     t = +$('ry').value; kid = admin ? +$('rk').value : me.kua_id;
     $('rbody').textContent = 'Memuat…';
-    const [a, r] = await Promise.all([
-      sb.from('anggaran').select('nominal_total').eq('kua_id', kid).eq('tahun', t).maybeSingle(),
-      sb.from('rpd').select('bulan,pos_id,nominal').eq('kua_id', kid).eq('tahun', t)
-    ]);
+    const qa = sb.from('anggaran').select('kua_id,nominal_total').eq('tahun', t), qr = sb.from('rpd').select('kua_id,bulan,items,total').eq('tahun', t);
+    const [a, r] = await Promise.all([kid ? qa.eq('kua_id', kid) : qa, kid ? qr.eq('kua_id', kid) : qr]);
     if (a.error || r.error) return $('rbody').innerHTML = note((a.error || r.error).message);
-    cap = a.data ? a.data.nominal_total : null; rows = r.data; list();
+    ang = a.data; rows = r.data; cap = kid ? (ang[0] ? ang[0].nominal_total : null) : null;
+    kid ? list() : listAll();
   };
   ['ry', 'rk'].forEach(id => { if ($(id)) $(id).onchange = () => { $('xmsg').innerHTML = ''; load(); }; });
   load();
 }
 
-/* ====== Realisasi (operator): daftar bulan dulu, Detail membuka rincian per POS ====== */
+/* ====== Realisasi (operator): daftar bulan dulu. Hanya yang belum diisi / ditolak yang bisa diedit ====== */
 async function pageRealisasi() {
   const now = new Date();
   let m;
@@ -491,61 +519,56 @@ async function pageRealisasi() {
   if (!me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
   $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">Realisasi</h4>
     <div class="d-flex flex-wrap gap-2 mb-3">${yearSel('lt', now.getFullYear())}</div><div id="lmsg"></div><div id="lbody">Memuat…</div></div></div>`;
-  let rpd = [], rl = [], t;
-  const mstat = b => {
-    const r = rl.filter(x => x.bulan === b), man = r.filter(x => !x.is_autopayment), has = k => man.some(x => x.status === k);
-    if (!r.length) return ['bg-secondary', 'Belum diisi'];
-    if (!man.length) return ['bg-success', 'Dibayar otomatis'];
-    return ST[has('rejected') ? 'rejected' : has('waiting') ? 'waiting' : has('approved') ? 'approved' : 'paid'];
-  };
+  let rpd = [], rl = [], cfg = null, t;
+  const rec = b => rl.find(x => x.bulan === b), rpdOf = b => rpd.find(x => x.bulan === b);
   const list = () => {
+    let ta = 0;
     $('lbody').oninput = null;
     $('lbody').innerHTML = `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Bulan</th><th class="text-end">RPD (Rp)</th><th class="text-end">Realisasi (Rp)</th><th>Status</th><th></th></tr></thead><tbody>${BULAN.map((n, i) => {
-        const b = i + 1, st = mstat(b);
-        return `<tr><td>${n}</td><td class="text-end">${rp(sumN(rpd.filter(x => x.bulan === b)))}</td><td class="text-end">${rp(sumN(rl.filter(x => x.bulan === b)))}</td><td><span class="badge ${st[0]}">${st[1]}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${b}">Detail</button></td></tr>`; }).join('')}</tbody>
-      <tfoot><tr class="fw-semibold"><td>Total ${t}</td><td class="text-end">${rp(sumN(rpd))}</td><td class="text-end">${rp(sumN(rl))}</td><td colspan="2"></td></tr></tfoot></table></div>`;
+        const b = i + 1, r = rec(b), st = r ? ST[r.status] : ['bg-secondary', 'Belum diisi'], au = isum(autoOf(cfg, t, b)); ta += au;
+        return `<tr><td>${n}</td><td class="text-end">${rp(rpdOf(b)?.total)}</td><td class="text-end">${rp((r?.total || 0) + au)}</td><td><span class="badge ${st[0]}">${st[1]}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${b}">Detail</button></td></tr>`; }).join('')}</tbody>
+      <tfoot><tr class="fw-semibold"><td>Total ${t}</td><td class="text-end">${rp(sumT(rpd))}</td><td class="text-end">${rp(sumT(rl) + ta)}</td><td colspan="2"></td></tr></tfoot></table></div>`;
     $('lbody').onclick = e => { const b = e.target.closest('[data-b]'); if (b) detail(+b.dataset.b); };
   };
   const detail = b => {
-    const cur = Object.fromEntries(rl.filter(x => x.bulan === b).map(x => [x.pos_id, x])), man = Object.values(cur).filter(x => !x.is_autopayment);
-    const done = man.some(x => ['approved', 'paid'].includes(x.status));   // satu bulan penuh terkunci
-    const open = m.cfg.realisasi_enabled === true, okDate = now >= new Date(t, b - 1, 10), lock = done || !open;
-    const lpj = man.find(x => x.file_lpj_url)?.file_lpj_url || '', rpdOf = id => rpd.find(x => x.bulan === b && x.pos_id === id)?.nominal || 0;
-    let upl = '';   // folder LPJ yang sudah terunggah pada sesi ini (hindari unggah ganda bila kirim gagal)
+    const r = rec(b), au = autoOf(cfg, t, b), cur = r ? r.items : {}, ri = rpdOf(b)?.items || {}, lpj = r?.file_lpj_url || '';
+    const open = m.cfg.realisasi_enabled === true, okDate = now >= new Date(t, b - 1, 10), edit = open && (!r || r.status === 'rejected');
+    let nDocs = lpj ? null : 0, upl = '';   // jumlah dokumen LPJ di Drive; upl = folder yang baru diunggah pada sesi ini
     $('lbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="lback"><i class="bx bx-arrow-back"></i> Kembali</button>
-      <h5 class="mb-3">Realisasi ${BULAN[b - 1]} ${t}</h5>
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">Realisasi ${BULAN[b - 1]} ${t}</h5>${r ? `<span class="badge ${ST[r.status][0]}">${ST[r.status][1]}</span>` : ''}</div>
       <div id="lsum" class="alert alert-primary py-2"></div>
-      ${done ? note('Realisasi bulan ini sudah disetujui/dibayar. Seluruh POS dan dokumen LPJ terkunci.', 'info') : ''}
+      ${r && r.status === 'rejected' ? note('Ditolak admin' + (r.catatan_admin ? ': ' + r.catatan_admin : '') + '. Perbaiki nominal atau dokumen LPJ, lalu kirim ulang.', 'danger') : ''}
+      ${r && r.status !== 'rejected' ? note(`Realisasi berstatus ${ST[r.status][1]} dan tidak dapat diubah. Hanya Realisasi yang ditolak yang dapat diperbaiki.`, 'info') : ''}
       ${open ? '' : note('Pengisian Realisasi sedang ditutup oleh admin.', 'warning')}
-      ${okDate ? '' : note(`Realisasi ${BULAN[b - 1]} ${t} baru dapat disubmit mulai 10 ${BULAN[b - 1]} ${t}.`, 'info')}
+      ${edit && !okDate ? note(`Realisasi ${BULAN[b - 1]} ${t} baru dapat disubmit mulai 10 ${BULAN[b - 1]} ${t}.`, 'info') : ''}
       <div id="lerr"></div>
       <div class="table-responsive"><table class="table align-middle"><thead><tr><th>POS</th><th class="text-end">RPD bulan ini (Rp)</th><th style="width:190px">Realisasi (Rp)</th><th class="text-end">Sisa anggaran POS</th></tr></thead><tbody>${m.pos.map(p => {
-        const r = cur[p.id], ro = lock || (r && (r.is_autopayment || !['waiting', 'rejected'].includes(r.status)));
-        return `<tr><td>${esc(p.nama_rincian || p.nama_pos)}${r && r.status === 'rejected' && r.catatan_admin ? `<div class="small text-danger">Ditolak: ${esc(r.catatan_admin)}</div>` : ''}</td>
-          <td class="text-end">${rp(rpdOf(p.id))}</td>
-          <td><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${r ? rp(r.nominal) : ''}"${ro ? ' disabled' : ''}>${r ? `<div class="small mt-1">${badge(r)}</div>` : ''}</td>
+        const a = au[p.id], ro = !edit || a;
+        return `<tr><td>${esc(posLabel(p))}${p.nama_rincian ? `<div class="small">${esc(p.nama_pos)}</div>` : ''}</td>
+          <td class="text-end">${rp(ri[p.id])}</td>
+          <td><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${a ? rp(a) : cur[p.id] ? rp(cur[p.id]) : ''}"${ro ? ' disabled' : ''}>${a ? '<div class="small mt-1"><span class="badge bg-success">Dibayar otomatis</span></div>' : ''}</td>
           <td class="text-end"><b id="sisa${p.id}"></b></td></tr>`; }).join('')}</tbody>
         <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end" id="trpd"></td><td class="text-end" id="treal"></td><td></td></tr></tfoot></table></div>
       <div class="mb-3"><div class="fw-semibold mb-1">Dokumen LPJ</div><div id="ldocs"><span class="small">Belum ada dokumen.</span></div></div>
-      ${lock ? '' : `<label class="form-label" for="lfile">${lpj ? 'Tambah file LPJ' : 'Unggah file LPJ <span class="text-danger">(wajib)</span>'}</label>
+      ${edit ? `<label class="form-label" for="lfile">${lpj ? 'Tambah file LPJ' : 'Unggah file LPJ <span class="text-danger">(wajib)</span>'}</label>
         <input id="lfile" type="file" class="form-control mb-1" multiple accept=".pdf,.jpg,.jpeg,.png">
         <div class="form-text mb-3">PDF, JPG, atau PNG. Maksimal ${m.cfg.max_file_count ?? 3} file per bulan, masing-masing ${m.cfg.max_file_size_mb ?? 5} MB.</div>
-        <button class="btn btn-primary" id="lsave">Kirim Realisasi ${BULAN[b - 1]}</button>`}`;
-    if (lpj) showDocs($('ldocs'), { kua: me.kua_id, tahun: t, bulan: b });
+        <button class="btn btn-primary" id="lsave">Kirim Realisasi ${BULAN[b - 1]}</button>` : ''}`;
+    if (lpj) showDocs($('ldocs'), { kua: me.kua_id, tahun: t, bulan: b }, { del: edit, onCount: n => nDocs = n });
     const calc = () => {
-      const inp = [...$('lbody').querySelectorAll('[data-p]')], errs = [], rpdBln = sumN(rpd.filter(x => x.bulan === b));
-      let tot = 0;
+      const inp = [...$('lbody').querySelectorAll('[data-p]')], errs = [], aTot = isum(au), rpdBln = rpdOf(b)?.total || 0;
+      let man = 0;
       inp.forEach(i => {
-        const pid = +i.dataset.p, v = num(i.value), p = m.pos.find(x => x.id === pid); tot += v;
-        const cap = sumN(rpd.filter(x => x.pos_id === pid)), used = sumN(rl.filter(x => x.pos_id === pid && x.bulan !== b)), sisa = cap - used - v;
+        const pid = +i.dataset.p, p = m.pos.find(x => x.id === pid), v = au[pid] ? 0 : num(i.value); man += v;
+        const cap = rpd.reduce((s, x) => s + (x.items[pid] || 0), 0), used = rl.filter(x => x.bulan !== b).reduce((s, x) => s + (x.items[pid] || 0), 0) + autoYear(cfg, t, pid), sisa = cap - used - v;
         $('sisa' + pid).textContent = 'Rp ' + rp(sisa); $('sisa' + pid).className = sisa < 0 ? 'text-danger' : '';
-        if (sisa < 0) errs.push(`${p.nama_rincian || p.nama_pos}: melebihi RPD setahun. Batas Rp ${rp(cap)}; terpakai di bulan lain Rp ${rp(used)}; dimasukkan Rp ${rp(v)}; kelebihan Rp ${rp(-sisa)}.`);
+        if (sisa < 0) errs.push(`${posLabel(p)}: melebihi RPD setahun. Batas Rp ${rp(cap)}; terpakai di bulan lain dan AutoPayment Rp ${rp(used)}; dimasukkan Rp ${rp(v)}; kelebihan Rp ${rp(-sisa)}.`);
       });
-      if (tot > rpdBln) errs.push(`Total Realisasi ${BULAN[b - 1]} Rp ${rp(tot)} melebihi RPD bulan ini Rp ${rp(rpdBln)}; kelebihan Rp ${rp(tot - rpdBln)}.`);
-      $('trpd').textContent = rp(rpdBln); $('treal').textContent = rp(tot);
-      $('lsum').innerHTML = `RPD ${BULAN[b - 1]}: <b>Rp ${rp(rpdBln)}</b> · Realisasi: <b>Rp ${rp(tot)}</b> · Sisa RPD bulan ini: <b>Rp ${rp(rpdBln - tot)}</b>`;
+      if (man + aTot > rpdBln) errs.push(`Total Realisasi ${BULAN[b - 1]} Rp ${rp(man + aTot)} melebihi RPD bulan ini Rp ${rp(rpdBln)}; kelebihan Rp ${rp(man + aTot - rpdBln)}.`);
+      $('trpd').textContent = rp(rpdBln); $('treal').textContent = rp(man + aTot);
+      $('lsum').innerHTML = `RPD ${BULAN[b - 1]}: <b>Rp ${rp(rpdBln)}</b> · Realisasi: <b>Rp ${rp(man + aTot)}</b> · Sisa RPD bulan ini: <b>Rp ${rp(rpdBln - man - aTot)}</b>`;
       $('lerr').innerHTML = errs.length ? `<div class="alert alert-danger py-2">${errs.map(esc).join('<br>')}</div>` : '';
-      if ($('lsave')) $('lsave').disabled = errs.length > 0 || !okDate || !open || !inp.some(i => !i.disabled);
+      if ($('lsave')) $('lsave').disabled = errs.length > 0 || !okDate || !inp.some(i => !i.disabled);
       return errs.length > 0;
     };
     $('lback').onclick = list;
@@ -553,106 +576,104 @@ async function pageRealisasi() {
     $('lbody').oninput = e => { if (e.target.dataset.p) { fmtIn(e.target); calc(); } };
     if ($('lsave')) $('lsave').onclick = async () => {
       if (calc()) return;
-      const files = [...$('lfile').files], have = upl || lpj, warn = txt => $('lmsg').innerHTML = note(txt, 'warning');
-      const payload = [...$('lbody').querySelectorAll('[data-p]:not([disabled])')]
-        .map(i => ({ kua_id: me.kua_id, tahun: t, bulan: b, pos_id: +i.dataset.p, nominal: num(i.value), file_lpj_url: have || null }))
-        .filter(x => x.nominal > 0 || cur[x.pos_id]);
+      const files = [...$('lfile').files], warn = txt => $('lmsg').innerHTML = note(txt, 'warning'), items = {};
+      $('lbody').querySelectorAll('[data-p]:not([disabled])').forEach(i => { const v = num(i.value); if (v > 0) items[i.dataset.p] = v; });
       const maxMb = m.cfg.max_file_size_mb ?? 5, maxN = m.cfg.max_file_count ?? 3, bad = files.find(f => f.size > maxMb * 1048576 || !/\.(pdf|jpe?g|png)$/i.test(f.name));
-      if (!payload.length) return warn('Belum ada nominal yang diisi.');
+      if (!Object.keys(items).length) return warn('Belum ada nominal yang diisi.');
       if (files.length > maxN) return warn(`Maksimal ${maxN} file per bulan.`);
       if (bad) return warn(`${bad.name}: hanya PDF, JPG, atau PNG dan maksimal ${maxMb} MB.`);
-      if (!have && !files.length && payload.some(x => x.nominal > 0)) return warn('LPJ wajib dilampirkan: unggah minimal satu file.');
+      if (nDocs === null && !files.length) return warn('Dokumen LPJ masih dimuat. Coba lagi sebentar.');
+      if (!(nDocs > 0) && !files.length) return warn('LPJ wajib dilampirkan: unggah minimal satu file.');
       $('lsave').disabled = true;
-      let url = have || null;
+      let url = upl || lpj || null;
       if (files.length) {
         $('lmsg').innerHTML = note('Mengunggah dokumen LPJ…', 'info');
         const fd = new FormData(); fd.append('tahun', t); fd.append('bulan', b); files.forEach(f => fd.append('files', f));
-        try { url = upl = (await (await lpjCall({ action: 'upload' }, { method: 'POST', body: fd })).json()).folderUrl; $('lfile').value = ''; }
+        try { const j = await (await lpjCall({ action: 'upload' }, { method: 'POST', body: fd })).json(); url = upl = j.folderUrl; nDocs = j.total; $('lfile').value = ''; }
         catch (e) { $('lmsg').innerHTML = note(e.message); return calc(); }
       }
-      payload.forEach(x => x.file_lpj_url = url);
-      const { error } = await sb.from('realisasi').upsert(payload, { onConflict: 'kua_id,tahun,bulan,pos_id' });
+      const { error } = await sb.from('realisasi').upsert({ kua_id: me.kua_id, tahun: t, bulan: b, items, file_lpj_url: url }, { onConflict: 'kua_id,tahun,bulan' });   // 1 bulan = 1 record
       if (error) { $('lmsg').innerHTML = note(error.message); return calc(); }
-      $('lmsg').innerHTML = note('Realisasi terkirim dan menunggu verifikasi admin.', 'success');
+      $('lmsg').innerHTML = note('Realisasi terkirim dan menunggu verifikasi admin. Selama menunggu, nominal dan dokumen tidak dapat diubah.', 'success');
       await load(b);
     };
     calc();
   };
   const load = async b => {
     t = +$('lt').value;
-    const [p, r] = await Promise.all([
-      sb.from('rpd').select('bulan,pos_id,nominal').eq('kua_id', me.kua_id).eq('tahun', t),
-      sb.from('realisasi').select('bulan,pos_id,nominal,status,is_autopayment,catatan_admin,file_lpj_url').eq('kua_id', me.kua_id).eq('tahun', t)
+    const [p, r, c] = await Promise.all([
+      sb.from('rpd').select('bulan,items,total').eq('kua_id', me.kua_id).eq('tahun', t),
+      sb.from('realisasi').select('bulan,items,total,status,catatan_admin,file_lpj_url').eq('kua_id', me.kua_id).eq('tahun', t),
+      cfg ? { data: cfg } : sb.from('autopayment_pos').select('pos_id,nominal,mulai,sampai').eq('kua_id', me.kua_id)   // konfigurasi AutoPayment cukup dimuat sekali
     ]);
-    if (p.error || r.error) return $('lbody').innerHTML = note((p.error || r.error).message);
-    rpd = p.data; rl = r.data; b ? detail(b) : list();
+    const err = p.error || r.error || c.error;
+    if (err) return $('lbody').innerHTML = note(err.message);
+    rpd = p.data; rl = r.data; cfg = c.data; b ? detail(b) : list();
   };
   $('lt').onchange = () => { $('lmsg').innerHTML = ''; $('lbody').textContent = 'Memuat…'; load(); };
   load();
 }
 
-/* ====== Verifikasi (admin): tabel dulu, Detail menampilkan POS + dokumen LPJ ====== */
+/* ====== Verifikasi (admin): filter kecamatan/tahun/status, tabel dulu, Detail = POS + dokumen + ubah status ====== */
 async function pageVerifikasi() {
-  $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">Verifikasi Realisasi</h4><div id="vmsg"></div><div id="vbody">Memuat…</div></div></div>`;
-  let m, G = {};
+  let m;
+  try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
+  $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">Verifikasi Realisasi</h4>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <select id="vk" class="form-select" style="width:auto" aria-label="Kecamatan"><option value="0">Semua Kecamatan</option>${m.kua.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>
+      ${yearSel('vy', new Date().getFullYear())}
+      <select id="vs" class="form-select" style="width:auto" aria-label="Status"><option value="">Semua status</option>${Object.entries(ST).map(([k, v]) => `<option value="${k}"${k === 'waiting' ? ' selected' : ''}>${v[1]}</option>`).join('')}</select></div>
+    <div id="vmsg"></div><div id="vbody">Memuat…</div></div></div>`;
+  let G = [];
   const kn = id => m.kua.find(k => k.id === id)?.nama_kua || id;
-  const stText = f => f.status === 'waiting' ? 'Menunggu verifikasi' : 'Disetujui, belum dibayar';
   const list = () => {
-    const keys = Object.keys(G);
-    $('vbody').onclick = e => { const b = e.target.closest('[data-g]'); if (b) detail(b.dataset.g); };
-    $('vbody').innerHTML = keys.length ? `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>KUA</th><th>Periode</th><th class="text-end">Total (Rp)</th><th>Status</th><th></th></tr></thead><tbody>${keys.map(k => {
-        const g = G[k], f = g[0];
-        return `<tr><td>${esc(kn(f.kua_id))}</td><td>${BULAN[f.bulan - 1]} ${f.tahun}</td><td class="text-end">${rp(sumN(g))}</td><td><span class="badge ${ST[f.status][0]}">${stText(f)}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-g="${esc(k)}">Detail</button></td></tr>`; }).join('')}</tbody></table></div>`
-      : '<p class="mb-0">Tidak ada Realisasi yang perlu diproses.</p>';
+    $('vbody').innerHTML = G.length ? `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Kecamatan</th><th>Periode</th><th class="text-end">Total (Rp)</th><th>Status</th><th></th></tr></thead><tbody>${G.map((f, i) =>
+        `<tr><td>${esc(kn(f.kua_id))}</td><td>${BULAN[f.bulan - 1]} ${f.tahun}</td><td class="text-end">${rp(f.total)}</td><td><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-i="${i}">Detail</button></td></tr>`).join('')}</tbody></table></div>`
+      : '<p class="mb-0">Tidak ada Realisasi untuk filter ini.</p>';
+    $('vbody').onclick = e => { const b = e.target.closest('[data-i]'); if (b) detail(+b.dataset.i); };
   };
-  const detail = k => {
-    const g = G[k], f = g[0], wait = f.status === 'waiting', pn = id => { const p = m.pos.find(x => x.id === id); return p.nama_rincian || p.nama_pos; };
+  const detail = async i => {
+    const f = G[i];
+    $('vbody').onclick = null; $('vbody').textContent = 'Memuat…';
+    const rr = await sb.from('rpd').select('items').eq('kua_id', f.kua_id).eq('tahun', f.tahun).eq('bulan', f.bulan).maybeSingle();
+    const ri = rr.data?.items || {};
     $('vbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="vback"><i class="bx bx-arrow-back"></i> Kembali</button>
-      <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">${esc(kn(f.kua_id))} · ${BULAN[f.bulan - 1]} ${f.tahun}</h5><span class="badge ${ST[f.status][0]}">${stText(f)}</span></div>
-      <div class="table-responsive"><table class="table align-middle"><thead><tr><th>POS</th><th class="text-end">Realisasi (Rp)</th></tr></thead><tbody>${g.map(x => `<tr><td>${esc(pn(x.pos_id))}</td><td class="text-end">${rp(x.nominal)}</td></tr>`).join('')}</tbody>
-        <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end">${rp(sumN(g))}</td></tr></tfoot></table></div>
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">${esc(kn(f.kua_id))} · ${BULAN[f.bulan - 1]} ${f.tahun}</h5><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span></div>
+      ${f.status === 'rejected' && f.catatan_admin ? note('Alasan penolakan: ' + f.catatan_admin, 'danger') : ''}
+      <div class="table-responsive"><table class="table align-middle"><thead><tr><th>POS</th><th class="text-end">RPD bulan ini (Rp)</th><th class="text-end">Realisasi (Rp)</th></tr></thead><tbody>${m.pos.filter(p => f.items[p.id] || ri[p.id]).map(p => `<tr><td>${esc(posLabel(p))}</td><td class="text-end">${rp(ri[p.id])}</td><td class="text-end">${rp(f.items[p.id])}</td></tr>`).join('')}</tbody>
+        <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end">${rp(isum(ri))}</td><td class="text-end">${rp(f.total)}</td></tr></tfoot></table></div>
       <div class="fw-semibold mb-1">Dokumen LPJ</div><div id="vdocs" class="mb-3"></div>
-      <div class="d-flex gap-2">${wait ? '<button class="btn btn-primary" data-a="approved">Setujui</button><button class="btn btn-outline-danger" data-a="rejected">Tolak…</button>' : '<button class="btn btn-primary" data-a="paid">Tandai dibayar</button>'}</div>`;
+      <div class="border rounded p-3"><div class="fw-semibold mb-2">Ubah status</div>
+        <select id="vst" class="form-select mb-2" style="max-width:260px">${Object.entries(ST).map(([k, v]) => `<option value="${k}"${k === f.status ? ' selected' : ''}>${v[1]}</option>`).join('')}</select>
+        <textarea id="vnote" class="form-control mb-2${f.status === 'rejected' ? '' : ' d-none'}" rows="2" placeholder="Alasan penolakan (wajib)">${esc(f.catatan_admin || '')}</textarea>
+        <div id="vperr"></div>
+        <button class="btn btn-primary" id="vsave">Simpan status</button>
+        <div class="form-text mt-2">Admin dapat mengubah status kapan saja, tetapi tidak dapat mengubah nominal atau dokumen LPJ.</div></div>`;
     showDocs($('vdocs'), { kua: f.kua_id, tahun: f.tahun, bulan: f.bulan });
-    const run = patch => sb.from('realisasi').update(patch).eq('kua_id', f.kua_id).eq('tahun', f.tahun).eq('bulan', f.bulan).eq('status', f.status).eq('is_autopayment', false).then(r => r.error);
-    $('vbody').onclick = async e => {
-      if (e.target.closest('#vback')) return list();
-      const b = e.target.closest('[data-a]'); if (!b) return;
-      const a = b.dataset.a;
-      if (a === 'rejected') {
-        const d = $('dlg');
-        d.className = '';
-        d.innerHTML = `<form id="nf" class="p-4"><h5 class="mb-2">Tolak Realisasi</h5><div id="nmsg"></div>
-          <label class="form-label" for="nt">Alasan penolakan (wajib)</label>
-          <textarea id="nt" class="form-control mb-3" rows="3" required></textarea>
-          <div class="d-flex justify-content-end gap-2"><button type="button" class="btn btn-outline-secondary" id="nx">Batal</button>
-          <button class="btn btn-danger">Tolak Realisasi</button></div></form>`;
-        $('nx').onclick = () => d.close();
-        $('nf').onsubmit = async ev => {
-          ev.preventDefault();
-          const er = await run({ status: 'rejected', catatan_admin: $('nt').value.trim() });
-          if (er) return $('nmsg').innerHTML = note(er.message);
-          d.close(); $('vmsg').innerHTML = note('Realisasi ditolak dan dikembalikan ke operator.', 'success'); load();
-        };
-        return d.showModal();
-      }
-      if (a === 'paid' && !confirm('Tandai Realisasi ini sebagai sudah dibayar? Tindakan ini tidak dapat dibatalkan.')) return;
-      b.disabled = true;
-      const er = await run({ status: a });
-      if (er) { $('vmsg').innerHTML = note(er.message); b.disabled = false; }
-      else { $('vmsg').innerHTML = note('Status Realisasi diperbarui.', 'success'); load(); }
+    $('vback').onclick = list;
+    $('vst').onchange = () => $('vnote').classList.toggle('d-none', $('vst').value !== 'rejected');
+    $('vsave').onclick = async () => {
+      const st = $('vst').value, why = $('vnote').value.trim(), warn = txt => $('vperr').innerHTML = note(txt, 'warning');
+      if (st === f.status && st !== 'rejected') return warn('Status belum diubah.');
+      if (st === 'rejected' && !why) return warn('Alasan penolakan wajib diisi.');
+      $('vsave').disabled = true;
+      const { error } = await sb.from('realisasi').update(st === 'rejected' ? { status: st, catatan_admin: why } : { status: st })
+        .eq('kua_id', f.kua_id).eq('tahun', f.tahun).eq('bulan', f.bulan);
+      if (error) { $('vperr').innerHTML = note(error.message); $('vsave').disabled = false; return; }
+      $('vmsg').innerHTML = note(`Status ${kn(f.kua_id)} ${BULAN[f.bulan - 1]} ${f.tahun} diubah menjadi ${ST[st][1]}.`, 'success');
+      await load();
     };
   };
   const load = async () => {
-    try {
-      m = await master();
-      const r = await sb.from('realisasi').select('kua_id,tahun,bulan,pos_id,nominal,status')
-        .eq('is_autopayment', false).in('status', ['waiting', 'approved']).order('tahun').order('bulan').order('kua_id');
-      if (r.error) throw r.error;
-      G = {}; r.data.forEach(x => (G[`${x.kua_id}|${x.tahun}|${x.bulan}|${x.status}`] ||= []).push(x));
-    } catch (e) { return $('vbody').innerHTML = note(e.message); }
-    list();
+    $('vbody').textContent = 'Memuat…';
+    let q = sb.from('realisasi').select('kua_id,tahun,bulan,items,total,status,catatan_admin').eq('tahun', +$('vy').value);
+    if (+$('vk').value) q = q.eq('kua_id', +$('vk').value);
+    if ($('vs').value) q = q.eq('status', $('vs').value);
+    const r = await q.order('bulan').order('kua_id');
+    if (r.error) return $('vbody').innerHTML = note(r.error.message);
+    G = r.data; list();
   };
+  ['vk', 'vy', 'vs'].forEach(id => $(id).onchange = () => { $('vmsg').innerHTML = ''; load(); });
   load();
 }
 
@@ -660,33 +681,29 @@ async function pageAutopay() {
   let m;
   try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
   const P = m.pos.filter(p => ['522111', '522112', '522113'].includes(p.kode_pos));   // Listrik, Telepon/Internet, Air
-  sb.rpc('generate_autopayment');   // penyusul penerbitan bulan berjalan (cadangan jika pg_cron belum aktif)
   $('view').innerHTML = `<div class="card"><div class="card-body">
     <h4 class="mb-1">AutoPayment</h4>
-    <p class="mb-3">Pembayaran otomatis lewat SAKTI. Isi nominal per bulan sekali saja: berlaku tetap setiap bulan, mulai bulan ini, sampai Anda mengubahnya. Kosongkan kolom untuk menonaktifkan.</p>
+    <p class="mb-3">Pembayaran otomatis lewat SAKTI. Isi nominal per bulan sekali saja: berlaku tetap setiap bulan, mulai bulan ini, sampai Anda mengubahnya. Bulan sebelumnya tidak berubah. Kosongkan kolom untuk menonaktifkan. Nominal dihitung langsung dari pengaturan ini, jadi tidak ada data yang dibuat tiap bulan.</p>
     <div id="apmsg"></div><div id="apbody">Memuat…</div></div></div>`;
-  const r = await sb.from('autopayment_pos').select('kua_id,pos_id,nominal').gt('nominal', 0);
+  const r = await sb.from('autopayment_pos').select('kua_id,pos_id,nominal').is('sampai', null).gt('nominal', 0);
   if (r.error) return $('apbody').innerHTML = note(r.error.message);
   const cur = {}; r.data.forEach(x => cur[x.kua_id + '|' + x.pos_id] = x.nominal);
-  $('apbody').innerHTML = `<div class="table-responsive"><table class="table align-middle"><thead><tr><th>KUA</th>${P.map(p => `<th>${esc(p.nama_pos.replace('Belanja Langganan ', ''))} (Rp)</th>`).join('')}</tr></thead>
+  $('apbody').innerHTML = `<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Kecamatan</th>${P.map(p => `<th>${esc(p.kode_pos)} · ${esc(p.nama_pos.replace('Belanja Langganan ', ''))} (Rp)</th>`).join('')}</tr></thead>
     <tbody>${m.kua.map(k => `<tr><td>${esc(k.nama_kua)}</td>${P.map(p => `<td><input class="form-control form-control-sm text-end" style="min-width:130px" inputmode="numeric" placeholder="Kosong" data-k="${k.id}" data-p="${p.id}" value="${cur[k.id + '|' + p.id] ? rp(cur[k.id + '|' + p.id]) : ''}"></td>`).join('')}</tr>`).join('')}</tbody></table></div>
     <button class="btn btn-primary" id="apsave">Simpan AutoPayment</button>`;
   $('apbody').oninput = e => { if (e.target.dataset.p) fmtIn(e.target); };
   $('apsave').onclick = async () => {
-    const up = [], del = {};
+    const items = [];
     $('apbody').querySelectorAll('[data-p]').forEach(i => {
-      const k = +i.dataset.k, p = +i.dataset.p, v = num(i.value), old = cur[k + '|' + p];
-      if (v > 0 && v !== old) up.push({ kua_id: k, pos_id: p, nominal: v });
-      else if (!v && old) (del[p] ||= []).push(k);
+      const k = +i.dataset.k, p = +i.dataset.p, v = num(i.value);
+      if (v !== (cur[k + '|' + p] || 0)) items.push({ kua_id: k, pos_id: p, nominal: v });   // v = 0 berarti nonaktifkan
     });
-    if (!up.length && !Object.keys(del).length) return $('apmsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
+    if (!items.length) return $('apmsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
     $('apsave').disabled = true;
-    let err = up.length ? (await sb.from('autopayment_pos').upsert(up, { onConflict: 'kua_id,pos_id' })).error : null;
-    for (const p of Object.keys(del)) if (!err) err = (await sb.from('autopayment_pos').delete().eq('pos_id', p).in('kua_id', del[p])).error;
-    if (!err) err = (await sb.rpc('generate_autopayment')).error;   // terbitkan Realisasi bulan ini (Dibayar otomatis)
-    $('apmsg').innerHTML = err ? note(err.message) : note('AutoPayment tersimpan. Realisasi bulan ini sudah terbit dan akan terbit otomatis setiap bulan.', 'success');
+    const { error } = await sb.rpc('set_autopayment', { p_items: items });   // satu permintaan, atomik
+    $('apmsg').innerHTML = error ? note(error.message) : note(`AutoPayment tersimpan (${items.length} perubahan), berlaku mulai bulan ini.`, 'success');
     $('apsave').disabled = false;
-    if (!err) { up.forEach(x => cur[x.kua_id + '|' + x.pos_id] = x.nominal); Object.entries(del).forEach(([p, ks]) => ks.forEach(k => delete cur[k + '|' + p])); }
+    if (!error) items.forEach(x => { if (x.nominal) cur[x.kua_id + '|' + x.pos_id] = x.nominal; else delete cur[x.kua_id + '|' + x.pos_id]; });
   };
 }
 
@@ -745,16 +762,24 @@ const fetchAll = async mk => {   // halaman 1000 baris (batas default Supabase)
 async function buildReport(f, m) {
   const tbl = f.nom === 'rpd' ? 'rpd' : 'realisasi', stf = { ok: ['approved', 'paid'], paid: ['paid'] }[f.st];
   const rows = await fetchAll(() => {
-    let q = sb.from(tbl).select('kua_id,bulan,pos_id,nominal').eq('tahun', f.tahun);
+    let q = sb.from(tbl).select('kua_id,bulan,items').eq('tahun', f.tahun);
     if (f.kid) q = q.eq('kua_id', f.kid);
     if (f.per === 'bulan') q = q.eq('bulan', f.bulan);
     if (tbl === 'realisasi' && stf) q = q.in('status', stf);
-    return q.order('kua_id').order('bulan').order('pos_id');
+    return q.order('kua_id').order('bulan');
   });
+  let cfg = [];
+  if (tbl === 'realisasi') {   // AutoPayment dihitung dari konfigurasi (selalu berstatus dibayar)
+    let q = sb.from('autopayment_pos').select('kua_id,pos_id,nominal,mulai,sampai');
+    if (f.kid) q = q.eq('kua_id', f.kid);
+    const r = await q; if (r.error) throw r.error; cfg = r.data;
+  }
   const all = !f.kid, det = f.bentuk === 'detail', lead = all ? 3 : 2;
   const cols = f.per === 'bulan' ? [f.bulan] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-  const agg = {};
-  rows.forEach(r => (agg[r.kua_id + '|' + r.pos_id] ||= Array(12).fill(0))[r.bulan - 1] += r.nominal);
+  const agg = {}, add = (k, pid, b, n) => { (agg[k + '|' + pid] ||= Array(12).fill(0))[b - 1] += n; };
+  rows.forEach(r => Object.entries(r.items).forEach(([pid, n]) => add(r.kua_id, pid, r.bulan, n)));
+  (all ? m.kua : m.kua.filter(k => k.id === f.kid)).forEach(k => cols.forEach(b =>
+    Object.entries(autoOf(cfg.filter(c => c.kua_id === k.id), f.tahun, b)).forEach(([pid, n]) => add(k.id, pid, b, n))));
   const head = [...(all ? ['KUA'] : []), 'Kode POS', 'POS / Rincian', ...(det ? cols.map(c => BLN3[c - 1]) : []), det ? 'Total' : 'Nominal'];
   const body = [];
   (all ? m.kua : m.kua.filter(k => k.id === f.kid)).forEach(k => m.pos.forEach(p => {

@@ -1,4 +1,5 @@
-// LPJ di Google Drive: unggah, daftar file, dan baca file (untuk pratinjau di website).
+// LPJ di Google Drive: unggah, hapus, daftar file, dan baca file (untuk pratinjau di website).
+// Tanpa console.log/error sengaja (hemat kuota log Supabase); kesalahan dikembalikan ke klien sebagai JSON.
 // Berjalan di server Supabase, jadi secret Google tidak pernah ada di frontend/GitHub.
 //
 // Secrets (sama seperti sebelumnya): GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, DRIVE_ROOT_FOLDER_ID
@@ -37,7 +38,7 @@ async function googleToken(): Promise<string> {
     }),
   });
   const j = await r.json();
-  if (!r.ok || !j.access_token) { console.error('token Google gagal', j); throw new Error('Gagal terhubung ke Google Drive. Hubungi admin.'); }
+  if (!r.ok || !j.access_token) { throw new Error('Gagal terhubung ke Google Drive. Hubungi admin.'); }
   return j.access_token;
 }
 
@@ -45,8 +46,9 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   try {
     const url = new URL(req.url), action = url.searchParams.get('action');
-    if (!['upload', 'list', 'file'].includes(action ?? '')) return json({ error: 'Aksi tidak dikenal.' }, 400);
-    if ((action === 'upload') !== (req.method === 'POST')) return json({ error: 'Metode tidak didukung.' }, 405);
+    if (!['upload', 'delete', 'list', 'file'].includes(action ?? '')) return json({ error: 'Aksi tidak dikenal.' }, 400);
+    const own = action === 'upload' || action === 'delete';   // mengubah dokumen: hanya operator, untuk KUA-nya sendiri
+    if (own !== (req.method === 'POST')) return json({ error: 'Metode tidak didukung.' }, 405);
 
     const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -66,12 +68,12 @@ Deno.serve(async (req) => {
     if (!Number.isInteger(tahun) || tahun < 2020 || tahun > 2100 || !Number.isInteger(bulan) || bulan < 1 || bulan > 12) {
       return json({ error: 'Tahun atau bulan tidak valid.' }, 400);
     }
-    const kuaId = action === 'upload' ? me.kua_id : Number(get('kua'));
-    const boleh = action === 'upload' ? me.role === 'operator' && !!me.kua_id : me.role === 'admin' || (!!me.kua_id && me.kua_id === kuaId);
+    const kuaId = own ? me.kua_id : Number(get('kua'));
+    const boleh = own ? me.role === 'operator' && !!me.kua_id : me.role === 'admin' || (!!me.kua_id && me.kua_id === kuaId);
     if (!boleh) return json({ error: 'Anda tidak berhak mengakses dokumen ini.' }, 403);
     const { data: kua } = await db.from('kua').select('nama_kua').eq('id', kuaId).maybeSingle();
     if (!kua) return json({ error: 'KUA tidak ditemukan.' }, 404);
-    const jenis = action !== 'upload' && get('jenis') === 'rpd' ? 'RPD' : 'Realisasi';
+    const jenis = !own && get('jenis') === 'rpd' ? 'RPD' : 'Realisasi';
 
     // 3) Drive: folder tahun / KUA / jenis / bulan (dicari, dan dibuat bila upload)
     const auth = { Authorization: `Bearer ${await googleToken()}` };
@@ -113,7 +115,22 @@ Deno.serve(async (req) => {
       return new Response(r.body, { headers: { ...cors, 'Content-Type': meta.mimeType, 'Cache-Control': 'private, max-age=300' } });
     }
 
-    // 4) Upload: aturan yang sama dengan form (dijaga ulang di server)
+    // 4) Unggah/hapus dokumen: hanya bila Realisasi bulan itu belum dikirim atau berstatus Ditolak (rejected)
+    const { data: rec } = await db.from('realisasi').select('status').eq('kua_id', kuaId).eq('tahun', tahun).eq('bulan', bulan).maybeSingle();
+    if (rec && rec.status !== 'rejected') return json({ error: 'Dokumen LPJ hanya dapat diubah saat Realisasi berstatus Ditolak (atau belum dikirim).' }, 403);
+
+    if (action === 'delete') {   // dipindah ke Sampah Google Drive (masih bisa dipulihkan pemilik folder)
+      const id = url.searchParams.get('id') ?? '';
+      if (!/^[\w-]{10,100}$/.test(id)) return json({ error: 'ID file tidak valid.' }, 400);
+      const f = await folder(false);
+      const meta = await (await fetch(`${API}/${id}?fields=parents,trashed`, { headers: auth })).json();
+      if (!f || meta.trashed || !meta.parents?.includes(f)) return json({ error: 'Dokumen tidak ditemukan.' }, 404);
+      const r = await fetch(`${API}/${id}`, { method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) });
+      if (!r.ok) throw new Error('Gagal menghapus dokumen di Google Drive.');
+      return json({ ok: true, remaining: (await search(`'${f}' in parents and trashed=false`, 'files(id)')).length });
+    }
+
+    // 5) Upload: aturan yang sama dengan form (dijaga ulang di server)
     const { data: rows } = await db.from('config').select('key, value').in('key', ['realisasi_enabled', 'max_file_size_mb', 'max_file_count']);
     const cfg = Object.fromEntries((rows ?? []).map((r) => [r.key, r.value]));
     if (cfg.realisasi_enabled !== true) return json({ error: 'Pengisian Realisasi sedang ditutup oleh admin.' }, 403);
@@ -121,9 +138,6 @@ Deno.serve(async (req) => {
     if (Date.UTC(wib.getUTCFullYear(), wib.getUTCMonth(), wib.getUTCDate()) < Date.UTC(tahun, bulan - 1, 10)) {
       return json({ error: `Realisasi ${BULAN[bulan - 1]} ${tahun} baru dapat disubmit mulai tanggal 10.` }, 403);
     }
-    const { count } = await db.from('realisasi').select('id', { count: 'exact', head: true })
-      .eq('kua_id', kuaId).eq('tahun', tahun).eq('bulan', bulan).eq('is_autopayment', false).in('status', ['approved', 'paid']);
-    if (count) return json({ error: 'Realisasi bulan ini sudah disetujui/dibayar; dokumen LPJ terkunci.' }, 403);
 
     const maxMb = Number(cfg.max_file_size_mb ?? 5), maxN = Number(cfg.max_file_count ?? 3);
     const files = form!.getAll('files').filter((f): f is File => f instanceof File);
@@ -148,11 +162,10 @@ Deno.serve(async (req) => {
       const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
         method: 'POST', headers: { ...auth, 'Content-Type': `multipart/related; boundary=${b}` }, body,
       });
-      if (!r.ok) { console.error('upload gagal', r.status, await r.text()); throw new Error(`Gagal mengunggah ${f.name} ke Google Drive.`); }
+      if (!r.ok) { throw new Error(`Gagal mengunggah ${f.name} ke Google Drive.`); }
     }
     return json({ ok: true, folderUrl: `https://drive.google.com/drive/folders/${dir}`, total: ada + items.length });
   } catch (e) {
-    console.error(e);
     return json({ error: (e as Error).message || 'Terjadi kesalahan di server.' }, 500);
   }
 });
