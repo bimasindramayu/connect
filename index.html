@@ -29,6 +29,16 @@ h4,h5{color:#566a7f;font-weight:600}
 #side .nav-link.sub{padding-left:2.4rem}
 dialog{border:0;border-radius:.5rem;padding:0;width:min(440px,calc(100% - 2rem));box-shadow:0 .5rem 2rem rgba(67,89,113,.3);color:var(--bs-body-color)}
 dialog::backdrop{background:rgba(67,89,113,.5)}
+.ms{position:relative}
+.ms-box{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;min-height:calc(1.5em + .75rem + 2px);cursor:text;padding:.3rem .5rem}
+.ms-box.focus{border-color:#696cff;box-shadow:0 0 .25rem .05rem rgba(105,108,255,.1)}
+.ms-chip{display:inline-flex;align-items:center;gap:.4rem;background:rgba(105,108,255,.16);color:#696cff;border-radius:.25rem;padding:.1rem .5rem;font-size:.85rem}
+.ms-chip button{border:0;background:none;color:inherit;padding:0;line-height:1;font-size:1.15rem;cursor:pointer}
+.ms-input{flex:1 1 6rem;min-width:4rem;border:0;outline:0;background:transparent;padding:.15rem 0;color:inherit}
+.ms-menu{position:absolute;z-index:1050;left:0;right:0;top:calc(100% + 2px);max-height:240px;overflow:auto;margin:0;padding:.25rem 0;list-style:none;background:#fff;border:1px solid #d9dee3;border-radius:.375rem;box-shadow:0 .25rem 1rem rgba(67,89,113,.15)}
+.ms-menu li{display:flex;justify-content:space-between;padding:.4rem .9rem;cursor:pointer}
+.ms-menu li:hover{background:rgba(105,108,255,.08)}.ms-menu li.on{color:#696cff;font-weight:600}
+.ms-menu li.hl{background:#696cff;color:#fff}.ms-menu li.empty{color:#a1acb8;cursor:default}
 dialog.wide{width:min(1100px,calc(100% - 1rem));height:calc(100% - 1rem);max-width:none;max-height:none;overflow:hidden}
 @media(max-width:575px){dialog.wide{width:100%;height:100%;border-radius:0}}
 @media(max-width:991px){#side{transform:translateX(-100%)}#side.open{transform:none}#main{margin-left:0}#topbar{margin:.75rem}}
@@ -66,8 +76,8 @@ dialog.wide{width:min(1100px,calc(100% - 1rem));height:calc(100% - 1rem);max-wid
     <nav class="nav flex-column">
       <details open>
         <summary class="nav-link"><i class="bx bx-wallet"></i>BOP<i class="bx bx-chevron-down ms-auto"></i></summary>
-        <a class="nav-link sub" href="#rpd"><i class="bx bx-calendar-edit"></i>RPD</a>
         <a class="nav-link sub admin-only d-none" href="#anggaran"><i class="bx bx-coin-stack"></i>Anggaran</a>
+        <a class="nav-link sub" href="#rpd"><i class="bx bx-calendar-edit"></i>RPD</a>
         <a class="nav-link sub op-only" href="#realisasi"><i class="bx bx-receipt"></i>Realisasi</a>
         <a class="nav-link sub admin-only d-none" href="#verifikasi"><i class="bx bx-check-shield"></i>Verifikasi</a>
         <a class="nav-link sub admin-only d-none" href="#autopayment"><i class="bx bx-transfer"></i>AutoPayment</a>
@@ -276,22 +286,22 @@ const autoOf = (cfg, t, b) => {   // AutoPayment virtual: nominal tetap selama v
 };
 const autoYear = (cfg, t, pid) => { let s = 0; for (let b = 1; b <= 12; b++) s += autoOf(cfg, t, b)[pid] || 0; return s; };
 
-/* ====== LPJ: unggah, daftar, baca file lewat Edge Function "lpj" (file tersimpan di folder pusat Google Drive) ====== */
-async function lpjCall(q, opt = {}) {
+/* ====== Edge Function "bop": reset password, unggah/hapus/daftar/baca dokumen LPJ (folder pusat Google Drive) ====== */
+async function api(q, opt = {}) {
   const { data: { session } } = await sb.auth.getSession();
   let r;
-  try { r = await fetch(`${CFG.url}/functions/v1/lpj?${new URLSearchParams(q)}`, { ...opt, headers: { Authorization: 'Bearer ' + session.access_token, apikey: CFG.key } }); }
-  catch { throw new Error('Tidak dapat menghubungi server LPJ. Periksa koneksi internet dan pastikan Edge Function lpj sudah di-deploy.'); }
+  try { r = await fetch(`${CFG.url}/functions/v1/bop?${new URLSearchParams(q)}`, { ...opt, headers: { Authorization: 'Bearer ' + session.access_token, apikey: CFG.key, ...opt.headers } }); }
+  catch { throw new Error('Tidak dapat menghubungi server. Periksa koneksi internet dan pastikan Edge Function bop sudah di-deploy.'); }
   if (!r.ok) {
     const j = await r.json().catch(() => null);
-    throw new Error(j?.error || `Server LPJ tidak merespons (kode ${r.status}). Pastikan Edge Function lpj sudah di-deploy.`);
+    throw new Error(j?.error || `Server tidak merespons (kode ${r.status}). Pastikan Edge Function bop sudah di-deploy.`);
   }
   return r;
 }
 async function showDocs(el, ctx, opt = {}) {   // ctx = { kua, tahun, bulan }; opt = { del, onCount }
   el.textContent = 'Memuat dokumen…';
   try {
-    const { files } = await (await lpjCall({ action: 'list', ...ctx })).json();
+    const { files } = await (await api({ action: 'list', ...ctx })).json();
     if (opt.onCount) opt.onCount(files.length);
     el.innerHTML = files.length ? `<ul class="list-unstyled mb-0">${files.map((f, i) => `<li class="d-flex align-items-center gap-2 mb-1"><i class="bx bx-file"></i><span class="me-auto text-break">${esc(f.name)}</span><button class="btn btn-sm btn-outline-primary" data-f="${i}">Lihat</button>${opt.del ? `<button class="btn btn-sm btn-outline-danger" data-x="${i}" aria-label="Hapus"><i class="bx bx-trash"></i></button>` : ''}</li>`).join('')}</ul>` : '<span class="small">Belum ada dokumen.</span>';
     el.onclick = async e => {
@@ -299,7 +309,7 @@ async function showDocs(el, ctx, opt = {}) {   // ctx = { kua, tahun, bulan }; o
       if (v) return openViewer(files, +v.dataset.f, ctx);
       if (!x || !confirm(`Hapus file "${files[+x.dataset.x].name}" dari Google Drive?`)) return;
       x.disabled = true;
-      try { await lpjCall({ action: 'delete', ...ctx, id: files[+x.dataset.x].id }, { method: 'POST' }); showDocs(el, ctx, opt); }
+      try { await api({ action: 'delete', ...ctx, id: files[+x.dataset.x].id }, { method: 'POST' }); showDocs(el, ctx, opt); }
       catch (er) { x.disabled = false; el.insertAdjacentHTML('beforeend', note(er.message)); }
     };
   } catch (e) { el.innerHTML = note(e.message); if (opt.onCount) opt.onCount(null); }
@@ -394,7 +404,7 @@ async function openViewer(files, idx, ctx) {
   const show = async i => {
     const my = ++gen; clean(); $('vm').textContent = 'Memuat dokumen…';
     try {
-      const blob = await (await lpjCall({ action: 'file', ...ctx, id: files[i].id })).blob();
+      const blob = await (await api({ action: 'file', ...ctx, id: files[i].id })).blob();
       if (my !== gen) return;
       const cw = Math.min(vp.clientWidth, 1100);
       if (files[i].mimeType === 'application/pdf') {
@@ -518,16 +528,17 @@ async function pageRealisasi() {
   try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
   if (!me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
   $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">Realisasi</h4>
-    <div class="d-flex flex-wrap gap-2 mb-3">${yearSel('lt', now.getFullYear())}</div><div id="lmsg"></div><div id="lbody">Memuat…</div></div></div>`;
+    <div class="d-flex flex-wrap gap-2 mb-3">${yearSel('lt', now.getFullYear())}<select id="lm" class="form-select" style="width:auto" aria-label="Bulan"><option value="0">Semua bulan</option>${BULAN.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('')}</select></div><div id="lmsg"></div><div id="lbody">Memuat…</div></div></div>`;
   let rpd = [], rl = [], cfg = null, t;
   const rec = b => rl.find(x => x.bulan === b), rpdOf = b => rpd.find(x => x.bulan === b);
   const list = () => {
-    let ta = 0;
+    let ta = 0; const ms = +$('lm').value;   // filter bulan (0 = semua)
     $('lbody').oninput = null;
     $('lbody').innerHTML = `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Bulan</th><th class="text-end">RPD (Rp)</th><th class="text-end">Realisasi (Rp)</th><th>Status</th><th></th></tr></thead><tbody>${BULAN.map((n, i) => {
+        if (ms && ms !== i + 1) return '';
         const b = i + 1, r = rec(b), st = r ? ST[r.status] : ['bg-secondary', 'Belum diisi'], au = isum(autoOf(cfg, t, b)); ta += au;
         return `<tr><td>${n}</td><td class="text-end">${rp(rpdOf(b)?.total)}</td><td class="text-end">${rp((r?.total || 0) + au)}</td><td><span class="badge ${st[0]}">${st[1]}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${b}">Detail</button></td></tr>`; }).join('')}</tbody>
-      <tfoot><tr class="fw-semibold"><td>Total ${t}</td><td class="text-end">${rp(sumT(rpd))}</td><td class="text-end">${rp(sumT(rl) + ta)}</td><td colspan="2"></td></tr></tfoot></table></div>`;
+      <tfoot><tr class="fw-semibold"><td>Total ${ms ? BULAN[ms - 1] + ' ' : ''}${t}</td><td class="text-end">${rp(sumT(rpd.filter(x => !ms || x.bulan === ms)))}</td><td class="text-end">${rp(sumT(rl.filter(x => !ms || x.bulan === ms)) + ta)}</td><td colspan="2"></td></tr></tfoot></table></div>`;
     $('lbody').onclick = e => { const b = e.target.closest('[data-b]'); if (b) detail(+b.dataset.b); };
   };
   const detail = b => {
@@ -589,7 +600,7 @@ async function pageRealisasi() {
       if (files.length) {
         $('lmsg').innerHTML = note('Mengunggah dokumen LPJ…', 'info');
         const fd = new FormData(); fd.append('tahun', t); fd.append('bulan', b); files.forEach(f => fd.append('files', f));
-        try { const j = await (await lpjCall({ action: 'upload' }, { method: 'POST', body: fd })).json(); url = upl = j.folderUrl; nDocs = j.total; $('lfile').value = ''; }
+        try { const j = await (await api({ action: 'upload' }, { method: 'POST', body: fd })).json(); url = upl = j.folderUrl; nDocs = j.total; $('lfile').value = ''; }
         catch (e) { $('lmsg').innerHTML = note(e.message); return calc(); }
       }
       const { error } = await sb.from('realisasi').upsert({ kua_id: me.kua_id, tahun: t, bulan: b, items, file_lpj_url: url }, { onConflict: 'kua_id,tahun,bulan' });   // 1 bulan = 1 record
@@ -610,6 +621,7 @@ async function pageRealisasi() {
     if (err) return $('lbody').innerHTML = note(err.message);
     rpd = p.data; rl = r.data; cfg = c.data; b ? detail(b) : list();
   };
+  $('lm').onchange = () => list();
   $('lt').onchange = () => { $('lmsg').innerHTML = ''; $('lbody').textContent = 'Memuat…'; load(); };
   load();
 }
@@ -622,6 +634,7 @@ async function pageVerifikasi() {
     <div class="d-flex flex-wrap gap-2 mb-3">
       <select id="vk" class="form-select" style="width:auto" aria-label="Kecamatan"><option value="0">Semua Kecamatan</option>${m.kua.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>
       ${yearSel('vy', new Date().getFullYear())}
+      <select id="vb" class="form-select" style="width:auto" aria-label="Bulan"><option value="0">Semua bulan</option>${BULAN.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('')}</select>
       <select id="vs" class="form-select" style="width:auto" aria-label="Status"><option value="">Semua status</option>${Object.entries(ST).map(([k, v]) => `<option value="${k}"${k === 'waiting' ? ' selected' : ''}>${v[1]}</option>`).join('')}</select></div>
     <div id="vmsg"></div><div id="vbody">Memuat…</div></div></div>`;
   let G = [];
@@ -668,12 +681,13 @@ async function pageVerifikasi() {
     $('vbody').textContent = 'Memuat…';
     let q = sb.from('realisasi').select('kua_id,tahun,bulan,items,total,status,catatan_admin').eq('tahun', +$('vy').value);
     if (+$('vk').value) q = q.eq('kua_id', +$('vk').value);
+    if (+$('vb').value) q = q.eq('bulan', +$('vb').value);
     if ($('vs').value) q = q.eq('status', $('vs').value);
     const r = await q.order('bulan').order('kua_id');
     if (r.error) return $('vbody').innerHTML = note(r.error.message);
     G = r.data; list();
   };
-  ['vk', 'vy', 'vs'].forEach(id => $(id).onchange = () => { $('vmsg').innerHTML = ''; load(); });
+  ['vk', 'vy', 'vb', 'vs'].forEach(id => $(id).onchange = () => { $('vmsg').innerHTML = ''; load(); });
   load();
 }
 
@@ -707,6 +721,48 @@ async function pageAutopay() {
   };
 }
 
+/* ====== Multi-select dengan chip (tanpa library): pilih banyak, cari dengan mengetik, hapus lewat tombol x.
+   options: [[nilai bilangan, teks]]; selected: array nilai. Mengembalikan { values(), all(true|false) } ====== */
+function multiSelect(host, options, selected, label) {
+  const sel = new Set(selected), id = host.id;
+  host.innerHTML = `<div class="ms"><div class="ms-box form-control"><input id="${id}-in" class="ms-input" type="search" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="${id}-list" aria-autocomplete="list" aria-label="${esc(label)}"></div><ul id="${id}-list" class="ms-menu d-none" role="listbox" aria-multiselectable="true"></ul></div>`;
+  const box = host.querySelector('.ms-box'), inp = host.querySelector('input'), menu = host.querySelector('ul');
+  let shown = [], hl = 0;
+  const picked = () => options.filter(([v]) => sel.has(v));
+  const chips = () => {
+    box.querySelectorAll('.ms-chip').forEach(c => c.remove());
+    picked().forEach(([v, t]) => inp.insertAdjacentHTML('beforebegin', `<span class="ms-chip">${esc(t)}<button type="button" data-rm="${v}" aria-label="Hapus ${esc(t)}">×</button></span>`));
+    inp.placeholder = sel.size ? '' : 'Pilih…';
+  };
+  const draw = () => {
+    const q = inp.value.trim().toLowerCase();
+    shown = options.filter(([, t]) => t.toLowerCase().includes(q));
+    hl = Math.max(0, Math.min(hl, shown.length - 1));
+    menu.innerHTML = shown.length ? shown.map(([v, t], i) => `<li role="option" aria-selected="${sel.has(v)}" data-v="${v}" class="${sel.has(v) ? 'on' : ''}${i === hl ? ' hl' : ''}"><span>${esc(t)}</span>${sel.has(v) ? '<span aria-hidden="true">✓</span>' : ''}</li>`).join('') : '<li class="empty">Tidak ada hasil</li>';
+  };
+  const open = o => { menu.classList.toggle('d-none', !o); inp.setAttribute('aria-expanded', o); box.classList.toggle('focus', o); if (o) draw(); };
+  const toggle = v => { sel.has(v) ? sel.delete(v) : sel.add(v); inp.value = ''; chips(); draw(); };
+  box.onclick = e => {
+    const x = e.target.closest('[data-rm]');
+    if (x) { sel.delete(+x.dataset.rm); chips(); draw(); } else { inp.focus(); open(true); }
+  };
+  inp.onfocus = () => open(true);
+  inp.oninput = () => { hl = 0; open(true); };
+  inp.onkeydown = e => {
+    if (e.key === 'Backspace' && !inp.value && sel.size) { sel.delete(picked().pop()[0]); chips(); draw(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); open(true); hl = Math.min(hl + 1, shown.length - 1); draw(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); hl = Math.max(hl - 1, 0); draw(); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (!menu.classList.contains('d-none') && shown[hl]) toggle(shown[hl][0]); }
+    else if (e.key === 'Escape') open(false);
+  };
+  menu.onmousedown = e => e.preventDefault();   // fokus tetap di kolom ketik
+  menu.onclick = e => { const li = e.target.closest('[data-v]'); if (li) toggle(+li.dataset.v); };
+  const away = e => { if (!host.isConnected) document.removeEventListener('pointerdown', away); else if (!host.contains(e.target)) open(false); };
+  document.addEventListener('pointerdown', away);
+  chips();
+  return { values: () => picked().map(([v]) => v), all: on => { on ? options.forEach(([v]) => sel.add(v)) : sel.clear(); chips(); draw(); } };
+}
+
 async function pageConfig() {
   $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">Config</h4><div id="cmsg"></div><div id="cbody">Memuat…</div></div></div>`;
   const c = await sb.from('config').select('key,value');
@@ -718,14 +774,18 @@ async function pageConfig() {
     ${sw('crp', 'Operator boleh mengisi RPD', cfg.rpd_enabled === true)}
     ${sw('crl', 'Operator boleh mengisi Realisasi', cfg.realisasi_enabled === true)}
     <div class="row g-3 my-1">${nm('cmb', 'Maksimal ukuran file (MB)', cfg.max_file_size_mb ?? 5, 100)}${nm('cfc', 'Maksimal jumlah file', cfg.max_file_count ?? 3, 20)}</div>
-    <div class="mt-3 mb-1">Bulan yang dibuka untuk edit RPD (operator)</div>
-    <div class="d-flex flex-wrap gap-3 mb-3">${BULAN.map((x, i) => `<div class="form-check"><input class="form-check-input" type="checkbox" name="bln" id="bln${i + 1}" value="${i + 1}"${(cfg.bulan_edit_rpd || []).includes(i + 1) ? ' checked' : ''}><label class="form-check-label" for="bln${i + 1}">${x}</label></div>`).join('')}</div>
+    <label class="form-label mt-3" for="blnms-in">Bulan yang dibuka untuk edit RPD (operator)</label>
+    <div id="blnms"></div>
+    <div class="form-text mb-3">Operator hanya dapat mengisi RPD pada bulan yang dipilih. <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="bln-all">Pilih semua</button> · <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="bln-none">Kosongkan</button></div>
     <button class="btn btn-primary" id="csave">Simpan pengaturan</button></form>`;
+  const bm = multiSelect($('blnms'), BULAN.map((n, i) => [i + 1, n]), cfg.bulan_edit_rpd || [], 'Bulan yang dibuka untuk edit RPD');
+  $('bln-all').onclick = () => bm.all(true);
+  $('bln-none').onclick = () => bm.all(false);
   $('cf').onsubmit = async e => {
     e.preventDefault();
     const v = { rpd_enabled: $('crp').checked, realisasi_enabled: $('crl').checked,
       max_file_size_mb: +$('cmb').value, max_file_count: +$('cfc').value,
-      bulan_edit_rpd: [...document.querySelectorAll('[name=bln]:checked')].map(i => +i.value) };
+      bulan_edit_rpd: bm.values() };
     $('csave').disabled = true;
     const at = new Date().toISOString();
     const { error } = await sb.from('config').upsert(Object.entries(v).map(([key, value]) => ({ key, value, updated_by: me.id, updated_at: at })), { onConflict: 'key' });
@@ -867,9 +927,9 @@ async function pageLaporan() {
 
 function pageBop() {
   const items = [
+    ['anggaran', 'Anggaran', 'bx-coin-stack', 'Anggaran tahunan setiap KUA', 'a'],
     ['rpd', 'RPD', 'bx-calendar-edit', 'Rencana penarikan dana bulanan', ''],
     ['realisasi', 'Realisasi', 'bx-receipt', 'Isi realisasi dan unggah LPJ', 'o'],
-    ['anggaran', 'Anggaran', 'bx-coin-stack', 'Anggaran tahunan setiap KUA', 'a'],
     ['verifikasi', 'Verifikasi', 'bx-check-shield', 'Setujui atau tolak realisasi', 'a'],
     ['autopayment', 'AutoPayment', 'bx-transfer', 'Pembayaran otomatis yang tetap', 'a'],
     ['config', 'Config', 'bx-slider', 'Pengaturan sistem', 'a'],
@@ -903,11 +963,10 @@ function openReset(r) {
     e.preventDefault();
     if (!pairOk('rp')) return $('rmsg').innerHTML = note(PW_ERR, 'warning');
     $('rgo').disabled = true; $('rmsg').innerHTML = '';
-    const { error } = await sb.functions.invoke('reset-password', { body: { user_id: r.id, password: $('rp1').value } });
-    if (!error) { d.close(); return $('amsg').innerHTML = note(`Password ${r.nama} berhasil direset.`, 'success'); }
-    const j = typeof error.context?.json === 'function' ? await error.context.json().catch(() => null) : null;
-    $('rgo').disabled = false;
-    $('rmsg').innerHTML = note(j?.error || 'Gagal menghubungi server. Pastikan Edge Function reset-password sudah di-deploy.');
+    try {
+      await api({ action: 'reset-password' }, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: r.id, password: $('rp1').value }) });
+      d.close(); return $('amsg').innerHTML = note(`Password ${r.nama} berhasil direset.`, 'success');
+    } catch (er) { $('rgo').disabled = false; $('rmsg').innerHTML = note(er.message); }
   };
   d.showModal();
 }
