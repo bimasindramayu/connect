@@ -82,6 +82,7 @@ Struktur Drive: `DRIVE_ROOT_FOLDER_ID / <tahun> / <nama KUA> / Realisasi / <MM B
 | Realisasi | baca semua; ubah **status** saja | buat/perbaiki (lihat aturan 9) KUA sendiri |
 | AutoPayment, Config | tulis | tidak ada akses (operator hanya membaca konfigurasi KUA-nya) |
 | Jaspro Transport | baca/tulis (RLS `jaspro_admin`) | tidak ada akses |
+| BAST NR | baca/tulis (RLS `bast_*_admin`) | tidak ada akses |
 | Reset password | operator mana pun (Edge `reset-password`) | ubah password sendiri |
 
 ## 7. Frontend (`index.html`)
@@ -120,6 +121,7 @@ Scope Google `drive.file`: hanya folder/file buatan aplikasi, jadi root harus di
 | Aksi server baru | `bop/index.ts` (daftar aksi + metode di `Deno.serve`), lalu panggil lewat `api()` |
 | Kolom baru di `items`/tabel | `bop.sql` (DDL idempotent), `buildReport`, halaman terkait |
 | Mengubah alat Jaspro Transport | `bop.sql` bagian 12 **dan** blok `Jaspro Transport` di `index.html` (`JX` = logika hitung/ekspor asli, `J*`/`jp*` = tampilan + simpan) |
+| Mengubah BAST NR | `bop.sql` bagian 13, blok `BAST NR` di `index.html` (`BX` = kode lama script.js/pdf.js, `B`/`bn*`/`bb*`/`bp*` = tampilan), aksi `bast-*` di `bop/index.ts`, perintah `bast` di `bop.mjs` |
 | Nama function/secret berubah | `PANDUAN-INSTALASI.md`, `bop.mjs` (teks cetak), pesan error di `api()` |
 
 ## 11. Cara memverifikasi (pengujian tidak disertakan sebagai file; cara menyusunnya)
@@ -146,3 +148,10 @@ Alat "Laporan Nominatif PNBP NR" (Jasa Profesi dan Transport Penghulu), berjalan
 - **Data**: tabel `jaspro_data` hanya punya **satu baris** (`id = 1`) berisi `master`, `laporan`, `settings` (jsonb). Setiap simpan menimpa data lama (upsert), tanpa riwayat/log/cron. Hanya admin (RLS). Trigger `jaspro_guard` membatasi bentuk dan ukuran (master <= 2000, laporan <= 5000 baris).
 - **Kode**: `JX` (di dalam `index.html`) disalin apa adanya dari `jaspro.html` (pencocokan nama, klasifikasi golongan/PPh, pembuat workbook ExcelJS, CSV). `J`, `jp*`, `pageJaspro` = tampilan (gaya Sneat) dan penyimpanan. ExcelJS dimuat malas dari CDN (`CDN.exceljs`) saat dibutuhkan.
 - Hasil "Cocokkan dan Pratinjau" (`J.rows`) dan suntingan manual di tabel tinjauan hanya di memori; yang tersimpan hanya master, laporan terakhir, dan pengaturan (debounce 0,8 detik).
+
+## 15. Modul BAST NR (grup menu sidebar, khusus admin)
+Berita Acara Serah Terima Sarana Administrasi NR, pindahan dari Apps Script/Spreadsheet. Halaman: Riwayat (ringkasan, filter, detail, arsip, status SIMKAH, PDF), Buat BA, Pegawai, Pengaturan BAST.
+- **Data**: `bast_pegawai` (PK `nip`), `bast_ba` (unik `nomor_urut`+`tahun`; rincian pihak disimpan sebagai potret seperti sheet Master lama), `bast_setting` (key/value teks; `LAST_NUMBER`/`LAST_NUMBER_YEAR` dimajukan trigger). Trigger `bast_ba_guard` menjaga nomor ganda, porporasi tumpang-tindih, pihak/Kasi wajib. Jalur tanpa `auth.uid()` (skrip migrasi, SQL Editor) tidak diperiksa.
+- **Migrasi**: `node --env-file=.env bop.mjs bast` membaca Web App lama lewat aksi GET dan memasukkan data ke tabel di atas (aman diulang, tidak menimpa). Arsip lama hanya menjadi `arsip_link` (tautan Drive); arsip yang diunggah lewat aplikasi punya `arsip_id` dan bisa dipratinjau/diganti/dihapus.
+- **Arsip**: Edge Function `bop` aksi `bast-upload`/`bast-file`/`bast-delete` (admin). Folder Drive: `<root> / BAST NR / <tahun> / <MM Bulan> / BAST KUA <KUA> - <nnn>-<tahun>.<ext>`.
+- **PDF**: `pdf.js` lama disalin apa adanya ke `BX`; logo kop dimuat malas dari `logo-data.js` (harus ikut diunggah ke GitHub Pages di samping `index.html`).

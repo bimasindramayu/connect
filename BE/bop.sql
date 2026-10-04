@@ -8,7 +8,7 @@
 --       lalu tabel lama (rpd_lama, realisasi_lama) dihapus setelah dipastikan datanya sudah pindah.
 --
 -- Isi: 0 Persiapan | 1 Profil dan hak akses | 2 KUA | 3 Fungsi bantu | 4 POS | 5 Config | 6 Anggaran |
---      7 AutoPayment | 8 RPD | 9 Realisasi | 10 Salin data lama | 11 Pembersihan | 12 Jaspro Transport
+--      7 AutoPayment | 8 RPD | 9 Realisasi | 10 Salin data lama | 11 Pembersihan | 12 Jaspro Transport | 13 BAST NR
 --
 -- Model data: RPD dan Realisasi = 1 record per KUA per bulan; rincian POS disimpan di kolom JSON
 --   items = {"<id POS>": nominal, ...}. Total dihitung otomatis oleh trigger. AutoPayment tidak disimpan per bulan:
@@ -521,3 +521,85 @@ create policy jaspro_admin on public.jaspro_data for all to authenticated using 
 revoke all on public.jaspro_data from anon;
 grant select, insert, update on public.jaspro_data to authenticated;
 insert into public.jaspro_data (id) values (1) on conflict (id) do nothing;
+
+-- 13) BAST NR (Berita Acara Serah Terima Sarana Administrasi NR) -------------------------------------------------
+-- Pindahan dari Google Spreadsheet/Apps Script. Hanya admin (RLS). Data lama dipindahkan dengan: node --env-file=.env bop.mjs bast
+-- bast_ba menyimpan "potret" pihak pertama/kedua (nama, jabatan, alamat) seperti sheet Master lama; arsip dokumen ada di Google Drive
+-- (arsip_id = file yang diunggah lewat aplikasi; arsip_link saja = arsip lama dari Apps Script, hanya tautan).
+create table if not exists public.bast_pegawai (
+  nip      text primary key,
+  nama     text not null,
+  kategori text not null check (kategori in ('Bimas Islam', 'KUA')),
+  jabatan  text not null,
+  kua      text not null default '',
+  alamat   text not null
+);
+create table if not exists public.bast_ba (
+  id                  bigint generated always as identity primary key,
+  nomor_urut          int  not null check (nomor_urut > 0),
+  tahun               int  not null check (tahun between 2000 and 2100),
+  bln_srt             int,
+  hari                text not null default '', tgl text not null default '', bln text not null default '',
+  pihak_satu_nip      text not null default '', pihak_satu_nama   text not null default '',
+  pihak_satu_jabatan  text not null default '', pihak_satu_alamat text not null default '',
+  pihak_kedua_nip     text not null default '', pihak_kedua_nama   text not null default '',
+  pihak_kedua_jabatan text not null default '', pihak_kedua_alamat text not null default '',
+  banyak_na_buku int, banyak_n int, banyak_nb int,
+  no_seri             text not null default '',
+  porporasi           text not null default '',          -- rentang sebagai teks, mis. "115827401- 115827600" (format data lama)
+  kasi_nama           text not null default '', kasi_nip text not null default '',
+  status_simkah       text not null default 'Belum' check (status_simkah in ('Sudah', 'Belum')),
+  arsip_id            text,
+  arsip_link          text,
+  updated_by          uuid references auth.users(id),
+  updated_at          timestamptz not null default now(),
+  unique (nomor_urut, tahun)
+);
+create table if not exists public.bast_setting (
+  key   text primary key,   -- KASI_NAMA, KASI_NIP, NOMOR_AWAL_SURAT, KODE_KANTOR, KODE_KLASIFIKASI, NOMOR_FORMAT_TEMPLATE, ALAMAT_BIMAS_LENGKAP, LAST_NUMBER, LAST_NUMBER_YEAR
+  value text not null default ''
+);
+
+-- Aturan penyimpanan BA baru (dijaga di database): nomor tidak ganda, porporasi tidak tumpang-tindih, pihak dan Kasi terisi,
+-- LAST_NUMBER hanya maju. auth.uid() kosong = jalur server tepercaya (skrip migrasi / SQL Editor) -> tidak diperiksa.
+create or replace function public.bast_ba_guard() returns trigger
+language plpgsql set search_path = public as $$
+declare a bigint; b bigint; m text[]; r record; v_last int; v_year text;
+begin
+  if auth.uid() is null then return new; end if;
+  new.updated_by := auth.uid(); new.updated_at := now();
+  if tg_op = 'UPDATE' then return new; end if;
+  perform pg_advisory_xact_lock(7001);
+  if exists (select 1 from bast_ba where nomor_urut = new.nomor_urut and tahun = new.tahun) then
+    raise exception 'Nomor Urut % untuk tahun % sudah dipakai. Muat ulang halaman untuk usulan nomor terbaru.', new.nomor_urut, new.tahun; end if;
+  if new.pihak_satu_nip = '' or new.pihak_kedua_nip = '' then raise exception 'Pihak Pertama dan Pihak Kedua wajib dipilih.'; end if;
+  if new.kasi_nama = '' or new.kasi_nip = '' then raise exception 'Data Kepala Seksi (Mengetahui) wajib diisi: periksa Pengaturan BAST.'; end if;
+  m := regexp_match(new.porporasi, '(\d+)\s*-\s*(\d+)');
+  if m is null then raise exception 'Nomor porporasi awal dan akhir wajib diisi dengan angka.'; end if;
+  a := m[1]::bigint; b := m[2]::bigint;
+  if b < a then raise exception 'Nomor porporasi akhir tidak boleh lebih kecil dari awal.'; end if;
+  for r in select nomor_urut, porporasi from bast_ba where porporasi ~ '\d+\s*-\s*\d+' loop
+    m := regexp_match(r.porporasi, '(\d+)\s*-\s*(\d+)');
+    if a <= m[2]::bigint and b >= m[1]::bigint then
+      raise exception 'Nomor porporasi sudah digunakan pada BA Nomor % (rentang %).', lpad(r.nomor_urut::text, 3, '0'), r.porporasi; end if;
+  end loop;
+  select value::int into v_last from bast_setting where key = 'LAST_NUMBER' and value ~ '^\d+$';
+  select value into v_year from bast_setting where key = 'LAST_NUMBER_YEAR';
+  if v_year is distinct from new.tahun::text or new.nomor_urut > coalesce(v_last, 0) then
+    insert into bast_setting (key, value) values ('LAST_NUMBER', new.nomor_urut::text), ('LAST_NUMBER_YEAR', new.tahun::text)
+    on conflict (key) do update set value = excluded.value;
+  end if;
+  return new;
+end $$;
+drop trigger if exists bast_ba_guard on public.bast_ba;
+create trigger bast_ba_guard before insert or update on public.bast_ba for each row execute function public.bast_ba_guard();
+
+do $$ declare t text; begin
+  foreach t in array array['bast_pegawai', 'bast_ba', 'bast_setting'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists %I on public.%I', t || '_admin', t);
+    execute format('create policy %I on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t || '_admin', t);
+    execute format('revoke all on public.%I from anon', t);
+    execute format('grant select, insert, update, delete on public.%I to authenticated', t);
+  end loop;
+end $$;
