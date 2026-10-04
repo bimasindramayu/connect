@@ -8,7 +8,7 @@
 --       lalu tabel lama (rpd_lama, realisasi_lama) dihapus setelah dipastikan datanya sudah pindah.
 --
 -- Isi: 0 Persiapan | 1 Profil dan hak akses | 2 KUA | 3 Fungsi bantu | 4 POS | 5 Config | 6 Anggaran |
---      7 AutoPayment | 8 RPD | 9 Realisasi | 10 Salin data lama | 11 Pembersihan
+--      7 AutoPayment | 8 RPD | 9 Realisasi | 10 Salin data lama | 11 Pembersihan | 12 Jaspro Transport
 --
 -- Model data: RPD dan Realisasi = 1 record per KUA per bulan; rincian POS disimpan di kolom JSON
 --   items = {"<id POS>": nominal, ...}. Total dihitung otomatis oleh trigger. AutoPayment tidak disimpan per bulan:
@@ -485,3 +485,39 @@ end $$;
 
 drop table if exists public.rpd_lama;
 drop table if exists public.realisasi_lama;
+
+-- 12) JASPRO TRANSPORT (alat sekali pakai: Laporan Nominatif PNBP NR) ---------------------------------------
+-- Hemat kuota: HANYA SATU baris (id = 1). Setiap simpan menimpa kolom yang dikirim; tanpa riwayat, log, atau tabel per bulan.
+-- master = Master Rekening [{id,nama,namaPemilik,noRekening}] | laporan = {fileName, rows:[...]} terakhir (null = belum ada)
+-- settings = periode, tarif, PPh, blok tanda tangan. Hanya admin yang boleh membaca dan menulis (RLS).
+create table if not exists public.jaspro_data (
+  id         int primary key default 1 check (id = 1),
+  master     jsonb not null default '[]'::jsonb,
+  laporan    jsonb,
+  settings   jsonb not null default '{}'::jsonb,
+  updated_by uuid references auth.users(id),
+  updated_at timestamptz not null default now()
+);
+create or replace function public.jaspro_guard() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if jsonb_typeof(new.master) is distinct from 'array' then raise exception 'Master Rekening harus berupa daftar.'; end if;
+  if jsonb_array_length(new.master) > 2000 then raise exception 'Master Rekening maksimal 2000 data.'; end if;
+  if new.laporan is not null then
+    if jsonb_typeof(new.laporan) is distinct from 'object' or jsonb_typeof(new.laporan->'rows') is distinct from 'array' then
+      raise exception 'Laporan Nominatif tidak valid.'; end if;
+    if jsonb_array_length(new.laporan->'rows') > 5000 then raise exception 'Laporan Nominatif maksimal 5000 baris.'; end if;
+  end if;
+  if jsonb_typeof(new.settings) is distinct from 'object' then raise exception 'Pengaturan Jaspro tidak valid.'; end if;
+  new.updated_by := auth.uid(); new.updated_at := now();
+  return new;
+end $$;
+drop trigger if exists jaspro_guard on public.jaspro_data;
+create trigger jaspro_guard before insert or update on public.jaspro_data for each row execute function public.jaspro_guard();
+
+alter table public.jaspro_data enable row level security;
+drop policy if exists jaspro_admin on public.jaspro_data;
+create policy jaspro_admin on public.jaspro_data for all to authenticated using (public.is_admin()) with check (public.is_admin());
+revoke all on public.jaspro_data from anon;
+grant select, insert, update on public.jaspro_data to authenticated;
+insert into public.jaspro_data (id) values (1) on conflict (id) do nothing;

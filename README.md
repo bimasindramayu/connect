@@ -81,6 +81,7 @@ Struktur Drive: `DRIVE_ROOT_FOLDER_ID / <tahun> / <nama KUA> / Realisasi / <MM B
 | RPD | tulis/baca semua KUA (filter Semua Kecamatan) | tulis/baca KUA sendiri, hanya bulan yang dibuka |
 | Realisasi | baca semua; ubah **status** saja | buat/perbaiki (lihat aturan 9) KUA sendiri |
 | AutoPayment, Config | tulis | tidak ada akses (operator hanya membaca konfigurasi KUA-nya) |
+| Jaspro Transport | baca/tulis (RLS `jaspro_admin`) | tidak ada akses |
 | Reset password | operator mana pun (Edge `reset-password`) | ubah password sendiri |
 
 ## 7. Frontend (`index.html`)
@@ -118,6 +119,7 @@ Scope Google `drive.file`: hanya folder/file buatan aplikasi, jadi root harus di
 | Kunci config baru | seed `config` di `bop.sql`, `pageConfig`, dan tempat yang membacanya (`m.cfg.<kunci>`, Edge Function bila relevan) |
 | Aksi server baru | `bop/index.ts` (daftar aksi + metode di `Deno.serve`), lalu panggil lewat `api()` |
 | Kolom baru di `items`/tabel | `bop.sql` (DDL idempotent), `buildReport`, halaman terkait |
+| Mengubah alat Jaspro Transport | `bop.sql` bagian 12 **dan** blok `Jaspro Transport` di `index.html` (`JX` = logika hitung/ekspor asli, `J*`/`jp*` = tampilan + simpan) |
 | Nama function/secret berubah | `PANDUAN-INSTALASI.md`, `bop.mjs` (teks cetak), pesan error di `api()` |
 
 ## 11. Cara memverifikasi (pengujian tidak disertakan sebagai file; cara menyusunnya)
@@ -138,3 +140,9 @@ Scope Google `drive.file`: hanya folder/file buatan aplikasi, jadi root harus di
 **KUA** Kantor Urusan Agama (satu per kecamatan) · **BOP** Biaya Operasional Perkantoran · **RPD** Rencana Penarikan Dana (per bulan) ·
 **LPJ** Laporan Pertanggungjawaban (dokumen bukti) · **POS/akun** kode belanja (521111, 522111, ...) · **Rincian** turunan POS (mis. ATK Kantor) ·
 **SAKTI** sistem keuangan pemerintah (pembayaran otomatis) · **AutoPayment** pembayaran rutin via SAKTI · **WIB** UTC+7.
+
+## 14. Modul Jaspro Transport (menu sidebar, khusus admin)
+Alat "Laporan Nominatif PNBP NR" (Jasa Profesi dan Transport Penghulu), berjalan di browser. Tiga langkah: Input Laporan (.xlsx) -> Master Rekening -> Proses dan Unduh (Excel sheet JASPRO/TRANSPO, CSV Jaspro, CSV Transport).
+- **Data**: tabel `jaspro_data` hanya punya **satu baris** (`id = 1`) berisi `master`, `laporan`, `settings` (jsonb). Setiap simpan menimpa data lama (upsert), tanpa riwayat/log/cron. Hanya admin (RLS). Trigger `jaspro_guard` membatasi bentuk dan ukuran (master <= 2000, laporan <= 5000 baris).
+- **Kode**: `JX` (di dalam `index.html`) disalin apa adanya dari `jaspro.html` (pencocokan nama, klasifikasi golongan/PPh, pembuat workbook ExcelJS, CSV). `J`, `jp*`, `pageJaspro` = tampilan (gaya Sneat) dan penyimpanan. ExcelJS dimuat malas dari CDN (`CDN.exceljs`) saat dibutuhkan.
+- Hasil "Cocokkan dan Pratinjau" (`J.rows`) dan suntingan manual di tabel tinjauan hanya di memori; yang tersimpan hanya master, laporan terakhir, dan pengaturan (debounce 0,8 detik).

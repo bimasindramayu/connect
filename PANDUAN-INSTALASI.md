@@ -67,7 +67,7 @@ Dashboard Supabase, menu **Authentication**:
 ## 5. Database: jalankan `bop.sql` (sekali)
 Dashboard Supabase, **SQL Editor**, **New query**. Buka `bop.sql`, salin **seluruh isinya**, tempel, klik **Run**. Pastikan hasilnya *Success*.
 
-`bop.sql` membuat semuanya: tabel `profiles`, `kua` (31), `pos` (11), `config`, `anggaran`, `rpd`, `realisasi`, `autopayment_pos`, fungsi, trigger validasi, dan RLS.
+`bop.sql` membuat semuanya: tabel `profiles`, `kua` (31), `pos` (11), `config`, `anggaran`, `rpd`, `realisasi`, `autopayment_pos`, `jaspro_data`, fungsi, trigger validasi, dan RLS.
 Aman dijalankan berulang kali (idempotent), dan jika database masih memakai struktur lama, datanya dikonversi otomatis.
 
 **Cek hasil** (jalankan di SQL Editor):
@@ -75,7 +75,7 @@ Aman dijalankan berulang kali (idempotent), dan jika database masih memakai stru
 select (select count(*) from kua) as kua, (select count(*) from pos) as pos, (select count(*) from config) as config;
 -- harapan: 31 | 11 | 6
 select table_name from information_schema.tables where table_schema = 'public' order by 1;
--- harapan: anggaran, autopayment_pos, config, kua, pos, profiles, realisasi, rpd
+-- harapan: anggaran, autopayment_pos, config, jaspro_data, kua, pos, profiles, realisasi, rpd
 ```
 
 ## 6. Buat akun (1 admin + 31 operator)
@@ -169,6 +169,7 @@ const CFG = {
 6. Operator **Realisasi** (boleh dikirim mulai tanggal 10 bulan berjalan; gunakan filter bulan bila perlu): isi nominal, unggah LPJ (PDF/JPG/PNG), kirim.
 7. Admin: **Verifikasi**, filter kecamatan/tahun/bulan/status, Detail, lihat dokumen (zoom/putar), ubah status.
 8. Coba **Laporan** (Excel dan PDF), lalu **Pengaturan**: Daftar akun, *Reset password* operator.
+9. Admin: menu **Jaspro Transport**: unggah laporan nominatif (.xlsx), isi Master Rekening, *Cocokkan dan Pratinjau*, lalu unduh Excel/CSV. Hanya satu set data yang disimpan; unggahan baru menimpa yang lama.
 
 ## 12. Pemeliharaan dan kuota gratis
 - **Update tampilan:** ubah `index.html`, unggah ulang ke GitHub.
