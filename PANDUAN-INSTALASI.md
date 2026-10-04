@@ -11,7 +11,7 @@ Panduan ini membawa Anda dari nol sampai aplikasi berjalan di GitHub Pages. **Ik
 
 | Bagian | Teknologi | Fungsi |
 |---|---|---|
-| Tampilan | `index.html` (satu file) di GitHub Pages | Login, menu BOP (Anggaran, RPD, Realisasi, Verifikasi, AutoPayment, Config, Laporan), Pengaturan |
+| Tampilan | `index.html` (satu file) di GitHub Pages | Login, menu BOP (Anggaran, RPD, Realisasi, Verifikasi, Pengaturan SAKTI, Realisasi SAKTI, Config, Laporan), Pengaturan |
 | Database dan login | Supabase (PostgreSQL, Auth, RLS) | Data, hak akses admin/operator, semua aturan divalidasi di sisi server |
 | Captcha login | Cloudflare Turnstile | Mencegah login otomatis |
 | Dokumen LPJ dan reset password | Edge Function `bop` (satu fungsi) | Unggah/hapus/pratinjau LPJ ke satu folder pusat Google Drive; admin mereset password operator |
@@ -33,6 +33,7 @@ GitHub, Supabase, Cloudflare, dan akun Google (pemilik folder LPJ di Drive).
 bop-kua/
 ├── index.html                    <- diunggah ke GitHub Pages
 ├── bop.sql                       <- SATU file SQL: seluruh skema database
+├── migration-sakti.sql           <- hanya untuk database yang sudah berjalan (modul SAKTI, bagian 14b)
 ├── bop.mjs                       <- SATU skrip: buat akun + siapkan Google Drive
 ├── supabase/functions/bop/index.ts   <- SATU Edge Function (LPJ + reset password)
 ├── skills/readme.md              <- penjelasan proyek untuk AI/developer
@@ -67,7 +68,7 @@ Dashboard Supabase, menu **Authentication**:
 ## 5. Database: jalankan `bop.sql` (sekali)
 Dashboard Supabase, **SQL Editor**, **New query**. Buka `bop.sql`, salin **seluruh isinya**, tempel, klik **Run**. Pastikan hasilnya *Success*.
 
-`bop.sql` membuat semuanya: tabel `profiles`, `kua` (31), `pos` (11), `config`, `anggaran`, `rpd`, `realisasi`, `autopayment_pos`, `jaspro_data`, `bast_pegawai`, `bast_ba`, `bast_setting`, fungsi, trigger validasi, dan RLS.
+`bop.sql` membuat semuanya: tabel `profiles`, `kua` (31), `pos` (11), `config`, `anggaran`, `rpd`, `realisasi`, `metode_pembayaran`, `realisasi_sakti`, `autopayment_pos` (arsip), `jaspro_data`, `bast_pegawai`, `bast_ba`, `bast_setting`, fungsi, trigger validasi, dan RLS.
 Aman dijalankan berulang kali (idempotent), dan jika database masih memakai struktur lama, datanya dikonversi otomatis.
 
 **Cek hasil** (jalankan di SQL Editor):
@@ -75,7 +76,7 @@ Aman dijalankan berulang kali (idempotent), dan jika database masih memakai stru
 select (select count(*) from kua) as kua, (select count(*) from pos) as pos, (select count(*) from config) as config;
 -- harapan: 31 | 11 | 6
 select table_name from information_schema.tables where table_schema = 'public' order by 1;
--- harapan: anggaran, autopayment_pos, bast_ba, bast_pegawai, bast_setting, config, jaspro_data, kua, pos, profiles, realisasi, rpd
+-- harapan: anggaran, autopayment_pos, bast_ba, bast_pegawai, bast_setting, config, jaspro_data, kua, metode_pembayaran, pos, profiles, realisasi, realisasi_sakti, rpd
 ```
 
 ## 6. Buat akun (1 admin + 31 operator)
@@ -138,7 +139,16 @@ npx supabase link --project-ref <ref>
 npx supabase functions deploy bop --no-verify-jwt
 ```
 - `init` cukup sekali. Jika ditanya pengaturan VS Code/IntelliJ, jawab `N`. Jika `link` meminta password database, isi password dari langkah 2 (atau kosongkan).
-- `--no-verify-jwt` aman karena fungsi memeriksa sendiri token login dan peran pengguna.
+- `--no-verify-jwt` **wajib**. Tanpa opsi ini platform Supabase menolak permintaan awal CORS (preflight `OPTIONS` tidak membawa token), dan browser menampilkan error
+  *blocked by CORS policy ... does not have HTTP ok status* pada menu Realisasi/dokumen. Aman karena fungsi memeriksa sendiri token login dan peran pengguna.
+- Agar tidak terlupa saat deploy berikutnya, tambahkan di `supabase/config.toml` (dibuat oleh `supabase init`):
+  ```toml
+  [functions.bop]
+  verify_jwt = false
+  ```
+  Bila fungsi dideploy lewat dashboard Supabase, matikan opsi *Verify JWT* pada pengaturan fungsi `bop`.
+- Uji dari terminal (ganti `<ref>`): `curl -i -X OPTIONS "https://<ref>.supabase.co/functions/v1/bop?action=list" -H "Origin: https://<username>.github.io" -H "Access-Control-Request-Method: GET" -H "Access-Control-Request-Headers: authorization,apikey"`.
+  Hasil sehat: `200` dengan header `access-control-allow-origin`. `401` = Verify JWT masih menyala; `404` = fungsi belum di-deploy.
 - Jika muncul pesan butuh Docker, tambahkan `--use-api` pada perintah deploy.
 - `SUPABASE_URL` dan `SUPABASE_SERVICE_ROLE_KEY` disediakan otomatis oleh Supabase; hanya 4 secret Google yang perlu Anda isi.
 - Reset password operator tetap berfungsi walau langkah Google Drive belum dilakukan; hanya fitur LPJ yang butuh secret Google.
@@ -164,7 +174,7 @@ const CFG = {
 1. Buka alamat GitHub Pages, login sebagai **admin** (selesaikan captcha).
 2. **BOP, Anggaran**: isi anggaran tahun berjalan untuk beberapa KUA, klik *Simpan Anggaran* (satu tombol untuk semua).
 3. **BOP, Config**: periksa batas file, saklar RPD/Realisasi, dan **Bulan yang dibuka untuk edit RPD** (pilih lewat kotak pilihan, bisa mengetik untuk mencari).
-4. **BOP, AutoPayment**: isi nominal tetap Listrik/Telepon-Internet/Air bila ada.
+4. **BOP, Pengaturan SAKTI**: pilih metode MANUAL atau SAKTI per KUA untuk Listrik/Telepon-Internet/Air (yang belum diatur = MANUAL), lalu **BOP, Realisasi SAKTI**: pilih bulan dan input status, nominal, serta tanggal pembayaran tiap KUA.
 5. Logout, login sebagai **operator**: **BOP, RPD**, Detail bulan, isi, simpan.
 6. Operator **Realisasi** (boleh dikirim mulai tanggal 10 bulan berjalan; gunakan filter bulan bila perlu): isi nominal, unggah LPJ (PDF/JPG/PNG), kirim.
 7. Admin: **Verifikasi**, filter kecamatan/tahun/bulan/status, Detail, lihat dokumen (zoom/putar), ubah status.
@@ -195,6 +205,11 @@ const CFG = {
 | "isi file tidak sesuai ekstensinya" | File bukan PDF/JPG/PNG asli | Unggah file yang benar |
 | "new row violates row-level security policy" pada RPD | Bulan ditutup di Config / data KUA lain | Admin membuka bulan di BOP, Config |
 | SQL error saat menjalankan `bop.sql` | Salinan tidak lengkap | Salin ulang seluruh isi file, jalankan lagi |
+| Browser: *blocked by CORS policy ... Response to preflight request doesn't pass access control check: It does not have HTTP ok status* (menu Realisasi, dokumen LPJ) | Fungsi `bop` belum di-deploy, atau di-deploy dengan *Verify JWT* menyala sehingga platform menolak preflight sebelum kode berjalan | Deploy ulang `npx supabase functions deploy bop --no-verify-jwt` (lihat langkah 8 untuk uji `curl`) |
+| "Realisasi SAKTI hanya dapat diinput oleh Admin" / "POS ... bermetode SAKTI pada ..." | Operator mengisi POS yang diatur SAKTI | Wajar: minta admin menginput di BOP, Realisasi SAKTI |
+| "... bermetode MANUAL pada ... Realisasi SAKTI hanya untuk POS bermetode SAKTI" | Admin menginput SAKTI untuk POS yang masih MANUAL | Atur dulu di BOP, Pengaturan SAKTI |
+| "... sudah punya Realisasi manual (atau SAKTI) pada ..., jadi belum bisa ..." | Mengganti metode untuk bulan yang sudah ada datanya | Pilih "Berlaku mulai" sesudah bulan tersebut |
+| `Cannot set properties of null` di konsol browser | Pindah menu saat data masih dimuat (versi lama) | Pakai `index.html` terbaru (hasil await dari halaman lama kini diabaikan) |
 
 ## 14. Sudah memakai versi lama?
 Jika database Anda sudah dibuat dengan migration terpisah (01 sampai 08) dan fungsi `lpj` / `reset-password`:
@@ -203,14 +218,22 @@ Jika database Anda sudah dibuat dengan migration terpisah (01 sampai 08) dan fun
 3. Ganti `index.html` di GitHub dengan versi terbaru (sekarang memanggil fungsi `bop`).
 4. Opsional, hapus fungsi lama: `npx supabase functions delete lpj` dan `npx supabase functions delete reset-password`.
 
+## 14b. Menambahkan modul SAKTI ke database yang sudah berjalan
+1. **Cadangkan** dulu: BOP, Laporan (Excel) atau ekspor tabel penting dari Table Editor.
+2. SQL Editor: jalankan `migration-sakti.sql` sekali (atau `bop.sql` terbaru; hasilnya sama). Aman diulang. Hasil migrasi muncul sebagai pesan `NOTICE`
+   (jumlah versi metode, baris Realisasi SAKTI, dan bulan yang bentrok) serta tersimpan di tabel `config` dengan kunci `sakti_migrasi_autopayment`.
+3. Migrasi sekali dari AutoPayment lama: tiap versi AutoPayment menjadi metode SAKTI sejak bulan berlaku, dan tiap bulan yang sudah berjalan menjadi satu baris Realisasi SAKTI
+   berstatus *Sudah dibayar* dengan nominal yang sama (tanpa tanggal pembayaran), sehingga total bulan-bulan lalu **tidak berubah**. Tabel `autopayment_pos` dibiarkan sebagai arsip.
+4. Ganti `index.html` di GitHub (menu AutoPayment diganti Pengaturan SAKTI dan Realisasi SAKTI). Edge Function tidak berubah.
+5. Mulai bulan berikutnya SAKTI **tidak terisi otomatis**: admin menginput nominal sebenarnya di BOP, Realisasi SAKTI. Selama belum diinput, POS SAKTI berstatus Belum dibayar (Rp 0).
+
 ## 15. Ringkasan aturan aplikasi
 Aturan lengkap beserta tempat penegakannya ada di `skills/readme.md` (bagian 5). Intinya:
 - **Admin** melihat semua KUA; **operator** hanya KUA-nya (dijaga RLS dan trigger, bukan hanya tampilan).
 - **RPD dan Realisasi** = 1 record per KUA per bulan, rincian POS berupa JSON. Kode akun POS selalu tampil.
 - Total RPD setahun <= Anggaran. Realisasi: mulai tanggal 10, LPJ wajib, total sebulan <= RPD bulan itu, tiap POS setahun <= RPD POS itu.
 - Operator hanya bisa membuat atau memperbaiki Realisasi yang **Ditolak**; setelah dikirim, nominal dan LPJ terkunci. Admin mengubah **status** kapan saja (bukan nominal/LPJ).
-- **AutoPayment**: Listrik, Telepon/Internet, Air; nominal tetap per bulan, berlaku mulai bulan diatur, ikut dihitung di validasi dan laporan.
-
+- **Pembayaran SAKTI**: Listrik, Telepon/Internet, Air dapat diatur MANUAL atau SAKTI per KUA (berlaku mulai bulan yang dipilih; belum diatur = MANUAL). POS SAKTI tidak diisi operator; admin menginput Realisasi SAKTI (status, nominal, tanggal, keterangan) dan jumlahnya ikut batas RPD, validasi, dan laporan. Metode dan Realisasi SAKTI tidak bisa dihapus; koreksi lewat ubah status ke Belum dibayar.
 ## 16. Memindahkan BAST NR dari Apps Script
 1. SQL Editor: jalankan `bop.sql` terbaru (menambah tabel `bast_*`, aman diulang).
 2. Deploy ulang fungsi (ada aksi arsip baru): `npx supabase functions deploy bop --no-verify-jwt`.
