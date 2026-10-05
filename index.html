@@ -42,6 +42,24 @@ dialog::backdrop{background:rgba(67,89,113,.5)}
 dialog.wide{width:min(1100px,calc(100% - 1rem));height:calc(100% - 1rem);max-width:none;max-height:none;overflow:hidden}
 @media(max-width:575px){dialog.wide{width:100%;height:100%;border-radius:0}}
 @media(max-width:991px){#side{transform:translateX(-100%)}#side.open{transform:none}#main{margin-left:0}#topbar{margin:.75rem}}
+.bg-label-success{background:rgba(113,221,55,.16)!important;color:#71dd37!important}
+.bg-label-warning{background:rgba(255,171,0,.16)!important;color:#ffab00!important}
+.bg-label-danger{background:rgba(255,62,29,.16)!important;color:#ff3e1d!important}
+.bg-label-info{background:rgba(3,195,236,.16)!important;color:#03c3ec!important}
+.bg-label-secondary{background:rgba(133,146,163,.16)!important;color:#8592a3!important}
+.jp .scroll{max-height:480px;overflow:auto}
+.jp .table thead th{position:sticky;top:0;z-index:1;background:#fff;font-size:.75rem;text-transform:uppercase;letter-spacing:.5px;color:#566a7f;white-space:nowrap}
+.jp tr.issue td{background:rgba(255,171,0,.08)}
+.jp-steps{display:flex;flex-wrap:wrap;gap:.25rem}
+.jp-step{flex:1 1 210px;display:flex;align-items:center;gap:.75rem;border:0;background:none;text-align:left;padding:.5rem .75rem;border-radius:.375rem;color:#566a7f;font-weight:500}
+.jp-step:hover{background:rgba(67,89,113,.06)}.jp-step small{display:block;font-weight:400;color:#a1acb8}
+.jp-step .n{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:600;background:rgba(105,108,255,.16);color:#696cff}
+.jp-step.done .n{background:rgba(113,221,55,.16);color:#71dd37}.jp-step.on{background:rgba(105,108,255,.12)}.jp-step.on .n{background:#696cff;color:#fff}
+.jp-drop{border:2px dashed #d9dee3;border-radius:.5rem;padding:2rem 1rem;text-align:center;cursor:pointer;transition:.15s}
+.jp-drop:hover{border-color:#696cff;background:rgba(105,108,255,.04)}
+#jtoast{position:fixed;right:1rem;bottom:1rem;z-index:1100;display:grid;gap:.5rem}
+.jp-toast{color:#fff;padding:.7rem 1rem;border-radius:.375rem;max-width:380px;box-shadow:0 .25rem 1rem rgba(67,89,113,.35)}
+.jp-toast.success{background:#71dd37}.jp-toast.danger{background:#ff3e1d}.jp-toast.warning{background:#ffab00}
 </style>
 </head>
 <body>
@@ -80,10 +98,19 @@ dialog.wide{width:min(1100px,calc(100% - 1rem));height:calc(100% - 1rem);max-wid
         <a class="nav-link sub" href="#rpd"><i class="bx bx-calendar-edit"></i>RPD</a>
         <a class="nav-link sub op-only" href="#realisasi"><i class="bx bx-receipt"></i>Realisasi</a>
         <a class="nav-link sub admin-only d-none" href="#verifikasi"><i class="bx bx-check-shield"></i>Verifikasi</a>
-        <a class="nav-link sub admin-only d-none" href="#autopayment"><i class="bx bx-transfer"></i>AutoPayment</a>
+        <a class="nav-link sub admin-only d-none" href="#metode"><i class="bx bx-toggle-right"></i>Pengaturan SAKTI</a>
+        <a class="nav-link sub admin-only d-none" href="#sakti"><i class="bx bx-transfer"></i>Realisasi SAKTI</a>
         <a class="nav-link sub admin-only d-none" href="#config"><i class="bx bx-slider"></i>Config</a>
         <a class="nav-link sub" href="#laporan"><i class="bx bx-file"></i>Laporan</a>
       </details>
+      <details class="admin-only d-none">
+        <summary class="nav-link"><i class="bx bx-file-blank"></i>BAST NR<i class="bx bx-chevron-down ms-auto"></i></summary>
+        <a class="nav-link sub" href="#bast"><i class="bx bx-history"></i>Riwayat</a>
+        <a class="nav-link sub" href="#bast-buat"><i class="bx bx-edit-alt"></i>Buat BA</a>
+        <a class="nav-link sub" href="#bast-pegawai"><i class="bx bx-group"></i>Pegawai</a>
+        <a class="nav-link sub" href="#bast-setting"><i class="bx bx-slider-alt"></i>Pengaturan BAST</a>
+      </details>
+      <a class="nav-link admin-only d-none" href="#jaspro"><i class="bx bx-id-card"></i>Jaspro Transport</a>
       <a class="nav-link" href="#pengaturan"><i class="bx bx-cog"></i>Pengaturan</a>
     </nav>
   </aside>
@@ -123,6 +150,8 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const note = (t, type = 'danger') => `<div class="alert alert-${type} py-2">${esc(t)}</div>`;
 let me = null, token = null, wid = null;
+let EP = 0;   // nomor halaman aktif: naik tiap pindah menu. Hasil await dari halaman lama diabaikan (cek live) agar tidak menulis ke layar yang sudah diganti
+const live = ep => ep === EP;
 
 window.tsReady = () => {
   wid = turnstile.render('#ts', { sitekey: CFG.turnstile, callback: t => token = t, 'expired-callback': () => token = null });
@@ -177,7 +206,7 @@ $('f').onsubmit = async e => {
 const show = v => { $('auth').classList.toggle('d-none', v !== 'auth'); $('app').classList.toggle('d-none', v !== 'app'); };
 
 async function boot(session) {
-  if (!session) { me = null; $('f').reset(); mask($('f')); resetCaptcha(); show('auth'); return loadRemember(); }
+  if (!session) { me = null; jpReset(); bnReset(); $('f').reset(); mask($('f')); resetCaptcha(); show('auth'); return loadRemember(); }
   if (me && me.id === session.user.id) return;
   const { data, error } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
   if (error || !data) {
@@ -199,15 +228,17 @@ sb.auth.onAuthStateChange((ev, s) => { if (ev !== 'TOKEN_REFRESHED') setTimeout(
 $('out').onclick = () => sb.auth.signOut();
 $('burger').onclick = () => $('side').classList.toggle('open');
 
-const pages = { bop: pageBop, rpd: pageRpd, laporan: pageLaporan, realisasi: pageRealisasi, anggaran: pageAnggaran, verifikasi: pageVerifikasi, autopayment: pageAutopay, config: pageConfig, pengaturan: pagePengaturan };
+const pages = { bop: pageBop, rpd: pageRpd, laporan: pageLaporan, realisasi: pageRealisasi, anggaran: pageAnggaran, verifikasi: pageVerifikasi, metode: pageMetode, sakti: pageSakti, config: pageConfig, pengaturan: pagePengaturan, jaspro: pageJaspro, bast: pageBast, 'bast-buat': pageBastBuat, 'bast-pegawai': pageBastPegawai, 'bast-setting': pageBastSetting };
 function route() {
   if (!me) return;
   let k = location.hash.slice(1) in pages ? location.hash.slice(1) : 'bop';
-  if (['anggaran', 'verifikasi', 'autopayment', 'config'].includes(k) && me.role !== 'admin') k = 'bop'; // dijaga juga oleh RLS
+  if (['anggaran', 'verifikasi', 'metode', 'sakti', 'config', 'jaspro', 'bast', 'bast-buat', 'bast-pegawai', 'bast-setting'].includes(k) && me.role !== 'admin') k = 'bop'; // dijaga juga oleh RLS
   if (k === 'realisasi' && me.role === 'admin') k = 'bop';
   document.querySelectorAll('#side .nav-link').forEach(a => a.classList.toggle('active', a.hash === '#' + k));
   $('side').classList.remove('open');
-  if (k !== 'pengaturan') $('side').querySelector('details').open = true;
+  const grp = $('side').querySelector('a.active')?.closest('details') || (k === 'bop' ? $('side').querySelector('details') : null);
+  if (grp) grp.open = true;
+  EP++;
   pages[k]();
 }
 addEventListener('hashchange', route);
@@ -240,6 +271,7 @@ const fmtIn = el => {   // format 1.500.000 saat mengetik, kursor tetap di tempa
 const yearSel = (id, y) => `<select id="${id}" class="form-select" style="width:auto">${[y - 1, y, y + 1].map(v => `<option${v === y ? ' selected' : ''}>${v}</option>`).join('')}</select>`;
 
 async function pageAnggaran() {
+  const ep = EP;
   $('view').innerHTML = `<div class="card"><div class="card-body">
     <div class="d-flex flex-wrap align-items-center gap-2 mb-3"><h4 class="mb-0 me-auto">Anggaran Tahunan</h4>${yearSel('ay', new Date().getFullYear())}</div>
     <div id="amsg"></div><div class="table-responsive" id="atab">Memuat…</div></div></div>`;
@@ -247,7 +279,8 @@ async function pageAnggaran() {
     const t = +$('ay').value;
     let m, a;
     try { [m, a] = await Promise.all([master(), sb.from('anggaran').select('kua_id,nominal_total').eq('tahun', t)]); if (a.error) throw a.error; }
-    catch (e) { return $('atab').innerHTML = note(e.message); }
+    catch (e) { return live(ep) && ($('atab').innerHTML = note(e.message)); }
+    if (!live(ep)) return;
     const set = Object.fromEntries(a.data.map(r => [r.kua_id, r.nominal_total]));
     const n = m.kua.filter(k => set[k.id] != null).length;
     $('atab').innerHTML = `<p class="mb-2"><b>${n}</b> dari ${m.kua.length} KUA sudah diset untuk ${t}.</p>
@@ -265,6 +298,7 @@ async function pageAnggaran() {
       if (!rows.length) return $('amsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
       $('asave').disabled = true;
       const { error } = await sb.from('anggaran').upsert(rows, { onConflict: 'kua_id,tahun' });   // satu transaksi: gagal satu = batal semua
+      if (!live(ep)) return;
       $('amsg').innerHTML = error ? note(error.message) : note(`Anggaran ${t} tersimpan untuk ${rows.length} KUA.`, 'success');
       if (error) $('asave').disabled = false; else load();
     };
@@ -278,20 +312,24 @@ const sumT = a => a.reduce((s, x) => s + x.total, 0);
 const isum = o => Object.values(o || {}).reduce((s, v) => s + v, 0);
 const posLabel = p => `${p.kode_pos} · ${p.nama_rincian || p.nama_pos}`;   // kode akun + nama POS/rincian
 const mfirst = (t, b) => `${t}-${String(b).padStart(2, '0')}-01`;
-const autoOf = (cfg, t, b) => {   // AutoPayment virtual: nominal tetap selama versi konfigurasi berlaku, sampai bulan berjalan
-  const d = mfirst(t, b), n = new Date(), o = {};
-  if (d > mfirst(n.getFullYear(), n.getMonth() + 1)) return o;
-  cfg.forEach(c => { if (c.nominal > 0 && c.mulai <= d && (!c.sampai || d <= c.sampai)) o[c.pos_id] = c.nominal; });
-  return o;
+/* ====== Pembayaran SAKTI: metode per KUA + POS (berversi per bulan berlaku) dan Realisasi SAKTI yang diinput admin ====== */
+const SAKTI_POS = ['522111', '522112', '522113'];   // Listrik, Telepon/Internet, Air: hanya POS ini yang dapat bermetode SAKTI
+const SB = { SUDAH_DIBAYAR: ['bg-success', 'Sudah dibayar'], BELUM_DIBAYAR: ['bg-warning', 'Belum dibayar'] };
+const metodeOf = (vers, kid, pid, t, b) => {   // versi terbaru dengan mulai <= bulan itu; belum diatur = MANUAL (sama dengan fungsi SQL metode_pos)
+  const d = mfirst(t, b); let best = null;
+  vers.forEach(v => { if (v.kua_id === kid && v.pos_id === pid && v.mulai <= d && (!best || v.mulai > best.mulai)) best = v; });
+  return best ? best.metode : 'MANUAL';
 };
-const autoYear = (cfg, t, pid) => { let s = 0; for (let b = 1; b <= 12; b++) s += autoOf(cfg, t, b)[pid] || 0; return s; };
+const saktiOf = (rs, b) => { const o = {}; rs.forEach(x => { if (x.bulan === b && x.nominal > 0) o[x.pos_id] = x.nominal; }); return o; };   // {pos_id: nominal} Realisasi SAKTI satu bulan
+const saktiYear = (rs, pid) => rs.reduce((s, x) => s + (x.pos_id === pid ? x.nominal : 0), 0);
+const tglId = s => { const [y, m, d] = s.split('-'); return `${+d} ${BLN3[+m - 1]} ${y}`; };
 
 /* ====== Edge Function "bop": reset password, unggah/hapus/daftar/baca dokumen LPJ (folder pusat Google Drive) ====== */
 async function api(q, opt = {}) {
   const { data: { session } } = await sb.auth.getSession();
   let r;
   try { r = await fetch(`${CFG.url}/functions/v1/bop?${new URLSearchParams(q)}`, { ...opt, headers: { Authorization: 'Bearer ' + session.access_token, apikey: CFG.key, ...opt.headers } }); }
-  catch { throw new Error('Tidak dapat menghubungi server. Periksa koneksi internet dan pastikan Edge Function bop sudah di-deploy.'); }
+  catch { throw new Error('Tidak dapat menghubungi server. Periksa koneksi internet, dan pastikan Edge Function bop sudah di-deploy dengan opsi --no-verify-jwt.'); }
   if (!r.ok) {
     const j = await r.json().catch(() => null);
     throw new Error(j?.error || `Server tidak merespons (kode ${r.status}). Pastikan Edge Function bop sudah di-deploy.`);
@@ -444,9 +482,10 @@ async function openViewer(files, idx, ctx) {
 
 /* ====== RPD: daftar dulu (admin: filter semua kecamatan), Detail membuka rincian per POS. 1 record = 1 bulan ====== */
 async function pageRpd() {
-  const admin = me.role === 'admin', y = new Date().getFullYear();
+  const ep = EP, admin = me.role === 'admin', y = new Date().getFullYear();
   let m;
-  try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
+  try { m = await master(); } catch (e) { return live(ep) && ($('view').innerHTML = note('Gagal memuat data master: ' + e.message)); }
+  if (!live(ep)) return;
   if (!admin && !me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
   $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">RPD</h4>
     <div class="d-flex flex-wrap gap-2 mb-3">${admin ? `<select id="rk" class="form-select" style="width:auto" aria-label="Kecamatan"><option value="0">Semua Kecamatan</option>${m.kua.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>` : ''}${yearSel('ry', y)}</div>
@@ -501,7 +540,7 @@ async function pageRpd() {
       const items = {};
       $('rbody').querySelectorAll('[data-p]').forEach(i => { const v = num(i.value); if (v > 0) items[i.dataset.p] = v; });
       $('rsave').disabled = true;
-      const { error } = await sb.from('rpd').upsert({ kua_id: kid, tahun: t, bulan: b, items }, { onConflict: 'kua_id,tahun,bulan' });   // 1 bulan = 1 record
+      const { error } = await sb.from('rpd').upsert({ kua_id: kid, tahun: t, bulan: b, items }, { onConflict: 'kua_id,tahun,bulan' }); if (!live(ep)) return;   // 1 bulan = 1 record
       $('xmsg').innerHTML = error ? note(error.message) : note(`RPD ${BULAN[b - 1]} ${t} tersimpan.`, 'success');
       if (!error) rows = rows.filter(x => x.bulan !== b).concat({ kua_id: kid, bulan: b, items, total: isum(items) });
       calc();
@@ -513,6 +552,7 @@ async function pageRpd() {
     $('rbody').textContent = 'Memuat…';
     const qa = sb.from('anggaran').select('kua_id,nominal_total').eq('tahun', t), qr = sb.from('rpd').select('kua_id,bulan,items,total').eq('tahun', t);
     const [a, r] = await Promise.all([kid ? qa.eq('kua_id', kid) : qa, kid ? qr.eq('kua_id', kid) : qr]);
+    if (!live(ep)) return;
     if (a.error || r.error) return $('rbody').innerHTML = note((a.error || r.error).message);
     ang = a.data; rows = r.data; cap = kid ? (ang[0] ? ang[0].nominal_total : null) : null;
     kid ? list() : listAll();
@@ -523,26 +563,27 @@ async function pageRpd() {
 
 /* ====== Realisasi (operator): daftar bulan dulu. Hanya yang belum diisi / ditolak yang bisa diedit ====== */
 async function pageRealisasi() {
-  const now = new Date();
+  const ep = EP, now = new Date();
   let m;
-  try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
+  try { m = await master(); } catch (e) { return live(ep) && ($('view').innerHTML = note('Gagal memuat data master: ' + e.message)); }
+  if (!live(ep)) return;
   if (!me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
   $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">Realisasi</h4>
     <div class="d-flex flex-wrap gap-2 mb-3">${yearSel('lt', now.getFullYear())}<select id="lm" class="form-select" style="width:auto" aria-label="Bulan"><option value="0">Semua bulan</option>${BULAN.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('')}</select></div><div id="lmsg"></div><div id="lbody">Memuat…</div></div></div>`;
-  let rpd = [], rl = [], cfg = null, t;
+  let rpd = [], rl = [], vers = null, rs = [], t;   // vers = metode pembayaran KUA ini; rs = Realisasi SAKTI tahun terpilih
   const rec = b => rl.find(x => x.bulan === b), rpdOf = b => rpd.find(x => x.bulan === b);
   const list = () => {
     let ta = 0; const ms = +$('lm').value;   // filter bulan (0 = semua)
     $('lbody').oninput = null;
     $('lbody').innerHTML = `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Bulan</th><th class="text-end">RPD (Rp)</th><th class="text-end">Realisasi (Rp)</th><th>Status</th><th></th></tr></thead><tbody>${BULAN.map((n, i) => {
         if (ms && ms !== i + 1) return '';
-        const b = i + 1, r = rec(b), st = r ? ST[r.status] : ['bg-secondary', 'Belum diisi'], au = isum(autoOf(cfg, t, b)); ta += au;
+        const b = i + 1, r = rec(b), st = r ? ST[r.status] : ['bg-secondary', 'Belum diisi'], au = isum(saktiOf(rs, b)); ta += au;
         return `<tr><td>${n}</td><td class="text-end">${rp(rpdOf(b)?.total)}</td><td class="text-end">${rp((r?.total || 0) + au)}</td><td><span class="badge ${st[0]}">${st[1]}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${b}">Detail</button></td></tr>`; }).join('')}</tbody>
       <tfoot><tr class="fw-semibold"><td>Total ${ms ? BULAN[ms - 1] + ' ' : ''}${t}</td><td class="text-end">${rp(sumT(rpd.filter(x => !ms || x.bulan === ms)))}</td><td class="text-end">${rp(sumT(rl.filter(x => !ms || x.bulan === ms)) + ta)}</td><td colspan="2"></td></tr></tfoot></table></div>`;
     $('lbody').onclick = e => { const b = e.target.closest('[data-b]'); if (b) detail(+b.dataset.b); };
   };
   const detail = b => {
-    const r = rec(b), au = autoOf(cfg, t, b), cur = r ? r.items : {}, ri = rpdOf(b)?.items || {}, lpj = r?.file_lpj_url || '';
+    const r = rec(b), au = saktiOf(rs, b), mt = Object.fromEntries(m.pos.map(p => [p.id, metodeOf(vers, me.kua_id, p.id, t, b)])), cur = r ? r.items : {}, ri = rpdOf(b)?.items || {}, lpj = r?.file_lpj_url || '';
     const open = m.cfg.realisasi_enabled === true, okDate = now >= new Date(t, b - 1, 10), edit = open && (!r || r.status === 'rejected');
     let nDocs = lpj ? null : 0, upl = '';   // jumlah dokumen LPJ di Drive; upl = folder yang baru diunggah pada sesi ini
     $('lbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="lback"><i class="bx bx-arrow-back"></i> Kembali</button>
@@ -554,10 +595,10 @@ async function pageRealisasi() {
       ${edit && !okDate ? note(`Realisasi ${BULAN[b - 1]} ${t} baru dapat disubmit mulai 10 ${BULAN[b - 1]} ${t}.`, 'info') : ''}
       <div id="lerr"></div>
       <div class="table-responsive"><table class="table align-middle"><thead><tr><th>POS</th><th class="text-end">RPD bulan ini (Rp)</th><th style="width:190px">Realisasi (Rp)</th><th class="text-end">Sisa anggaran POS</th></tr></thead><tbody>${m.pos.map(p => {
-        const a = au[p.id], ro = !edit || a;
+        const S = mt[p.id] === 'SAKTI', sr = S ? rs.find(x => x.pos_id === p.id && x.bulan === b) : null, a = sr?.nominal || 0, ro = !edit || S, bs = SB[sr?.status_bayar || 'BELUM_DIBAYAR'];
         return `<tr><td>${esc(posLabel(p))}${p.nama_rincian ? `<div class="small">${esc(p.nama_pos)}</div>` : ''}</td>
           <td class="text-end">${rp(ri[p.id])}</td>
-          <td><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${a ? rp(a) : cur[p.id] ? rp(cur[p.id]) : ''}"${ro ? ' disabled' : ''}>${a ? '<div class="small mt-1"><span class="badge bg-success">Dibayar otomatis</span></div>' : ''}</td>
+          <td><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${S ? (a ? rp(a) : '') : cur[p.id] ? rp(cur[p.id]) : ''}"${ro ? ' disabled' : ''}>${S ? `<div class="small mt-1"><span class="badge bg-label-primary">SAKTI</span> <span class="badge ${bs[0]}">${bs[1]}</span>${sr?.tanggal_bayar ? ' ' + esc(tglId(sr.tanggal_bayar)) : ''}</div><div class="small">Realisasi dikelola oleh Admin.</div>` : ''}</td>
           <td class="text-end"><b id="sisa${p.id}"></b></td></tr>`; }).join('')}</tbody>
         <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end" id="trpd"></td><td class="text-end" id="treal"></td><td></td></tr></tfoot></table></div>
       <div class="mb-3"><div class="fw-semibold mb-1">Dokumen LPJ</div><div id="ldocs"><span class="small">Belum ada dokumen.</span></div></div>
@@ -570,10 +611,10 @@ async function pageRealisasi() {
       const inp = [...$('lbody').querySelectorAll('[data-p]')], errs = [], aTot = isum(au), rpdBln = rpdOf(b)?.total || 0;
       let man = 0;
       inp.forEach(i => {
-        const pid = +i.dataset.p, p = m.pos.find(x => x.id === pid), v = au[pid] ? 0 : num(i.value); man += v;
-        const cap = rpd.reduce((s, x) => s + (x.items[pid] || 0), 0), used = rl.filter(x => x.bulan !== b).reduce((s, x) => s + (x.items[pid] || 0), 0) + autoYear(cfg, t, pid), sisa = cap - used - v;
+        const pid = +i.dataset.p, p = m.pos.find(x => x.id === pid), v = mt[pid] === 'SAKTI' ? 0 : num(i.value); man += v;
+        const cap = rpd.reduce((s, x) => s + (x.items[pid] || 0), 0), used = rl.filter(x => x.bulan !== b).reduce((s, x) => s + (x.items[pid] || 0), 0) + saktiYear(rs, pid), sisa = cap - used - v;
         $('sisa' + pid).textContent = 'Rp ' + rp(sisa); $('sisa' + pid).className = sisa < 0 ? 'text-danger' : '';
-        if (sisa < 0) errs.push(`${posLabel(p)}: melebihi RPD setahun. Batas Rp ${rp(cap)}; terpakai di bulan lain dan AutoPayment Rp ${rp(used)}; dimasukkan Rp ${rp(v)}; kelebihan Rp ${rp(-sisa)}.`);
+        if (sisa < 0) errs.push(`${posLabel(p)}: melebihi RPD setahun. Batas Rp ${rp(cap)}; terpakai di bulan lain dan SAKTI Rp ${rp(used)}; dimasukkan Rp ${rp(v)}; kelebihan Rp ${rp(-sisa)}.`);
       });
       if (man + aTot > rpdBln) errs.push(`Total Realisasi ${BULAN[b - 1]} Rp ${rp(man + aTot)} melebihi RPD bulan ini Rp ${rp(rpdBln)}; kelebihan Rp ${rp(man + aTot - rpdBln)}.`);
       $('trpd').textContent = rp(rpdBln); $('treal').textContent = rp(man + aTot);
@@ -601,9 +642,11 @@ async function pageRealisasi() {
         $('lmsg').innerHTML = note('Mengunggah dokumen LPJ…', 'info');
         const fd = new FormData(); fd.append('tahun', t); fd.append('bulan', b); files.forEach(f => fd.append('files', f));
         try { const j = await (await api({ action: 'upload' }, { method: 'POST', body: fd })).json(); url = upl = j.folderUrl; nDocs = j.total; $('lfile').value = ''; }
-        catch (e) { $('lmsg').innerHTML = note(e.message); return calc(); }
+        catch (e) { if (!live(ep)) return; $('lmsg').innerHTML = note(e.message); return calc(); }
+        if (!live(ep)) return;
       }
       const { error } = await sb.from('realisasi').upsert({ kua_id: me.kua_id, tahun: t, bulan: b, items, file_lpj_url: url }, { onConflict: 'kua_id,tahun,bulan' });   // 1 bulan = 1 record
+      if (!live(ep)) return;
       if (error) { $('lmsg').innerHTML = note(error.message); return calc(); }
       $('lmsg').innerHTML = note('Realisasi terkirim dan menunggu verifikasi admin. Selama menunggu, nominal dan dokumen tidak dapat diubah.', 'success');
       await load(b);
@@ -612,14 +655,16 @@ async function pageRealisasi() {
   };
   const load = async b => {
     t = +$('lt').value;
-    const [p, r, c] = await Promise.all([
+    const [p, r, c, sk] = await Promise.all([
       sb.from('rpd').select('bulan,items,total').eq('kua_id', me.kua_id).eq('tahun', t),
       sb.from('realisasi').select('bulan,items,total,status,catatan_admin,file_lpj_url').eq('kua_id', me.kua_id).eq('tahun', t),
-      cfg ? { data: cfg } : sb.from('autopayment_pos').select('pos_id,nominal,mulai,sampai').eq('kua_id', me.kua_id)   // konfigurasi AutoPayment cukup dimuat sekali
+      vers ? { data: vers } : sb.from('metode_pembayaran').select('kua_id,pos_id,metode,mulai').eq('kua_id', me.kua_id),   // metode pembayaran cukup dimuat sekali
+      sb.from('realisasi_sakti').select('pos_id,bulan,nominal,status_bayar,tanggal_bayar').eq('kua_id', me.kua_id).eq('tahun', t)
     ]);
-    const err = p.error || r.error || c.error;
+    if (!live(ep)) return;
+    const err = p.error || r.error || c.error || sk.error;
     if (err) return $('lbody').innerHTML = note(err.message);
-    rpd = p.data; rl = r.data; cfg = c.data; b ? detail(b) : list();
+    rpd = p.data; rl = r.data; vers = c.data; rs = sk.data; b ? detail(b) : list();
   };
   $('lm').onchange = () => list();
   $('lt').onchange = () => { $('lmsg').innerHTML = ''; $('lbody').textContent = 'Memuat…'; load(); };
@@ -628,8 +673,10 @@ async function pageRealisasi() {
 
 /* ====== Verifikasi (admin): filter kecamatan/tahun/status, tabel dulu, Detail = POS + dokumen + ubah status ====== */
 async function pageVerifikasi() {
+  const ep = EP;
   let m;
-  try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
+  try { m = await master(); } catch (e) { return live(ep) && ($('view').innerHTML = note('Gagal memuat data master: ' + e.message)); }
+  if (!live(ep)) return;
   $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">Verifikasi Realisasi</h4>
     <div class="d-flex flex-wrap gap-2 mb-3">
       <select id="vk" class="form-select" style="width:auto" aria-label="Kecamatan"><option value="0">Semua Kecamatan</option>${m.kua.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>
@@ -648,13 +695,17 @@ async function pageVerifikasi() {
   const detail = async i => {
     const f = G[i];
     $('vbody').onclick = null; $('vbody').textContent = 'Memuat…';
-    const rr = await sb.from('rpd').select('items').eq('kua_id', f.kua_id).eq('tahun', f.tahun).eq('bulan', f.bulan).maybeSingle();
-    const ri = rr.data?.items || {};
+    const [rr, rk] = await Promise.all([
+      sb.from('rpd').select('items').eq('kua_id', f.kua_id).eq('tahun', f.tahun).eq('bulan', f.bulan).maybeSingle(),
+      sb.from('realisasi_sakti').select('nominal').eq('kua_id', f.kua_id).eq('tahun', f.tahun).eq('bulan', f.bulan).gt('nominal', 0)]);
+    if (!live(ep)) return;
+    const ri = rr.data?.items || {}, sakti = (rk.data || []).reduce((a, x) => a + x.nominal, 0);
     $('vbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="vback"><i class="bx bx-arrow-back"></i> Kembali</button>
       <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">${esc(kn(f.kua_id))} · ${BULAN[f.bulan - 1]} ${f.tahun}</h5><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span></div>
       ${f.status === 'rejected' && f.catatan_admin ? note('Alasan penolakan: ' + f.catatan_admin, 'danger') : ''}
       <div class="table-responsive"><table class="table align-middle"><thead><tr><th>POS</th><th class="text-end">RPD bulan ini (Rp)</th><th class="text-end">Realisasi (Rp)</th></tr></thead><tbody>${m.pos.filter(p => f.items[p.id] || ri[p.id]).map(p => `<tr><td>${esc(posLabel(p))}</td><td class="text-end">${rp(ri[p.id])}</td><td class="text-end">${rp(f.items[p.id])}</td></tr>`).join('')}</tbody>
         <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end">${rp(isum(ri))}</td><td class="text-end">${rp(f.total)}</td></tr></tfoot></table></div>
+      <p class="small mb-3">Realisasi SAKTI bulan ini (diinput Admin): <b>Rp ${rp(sakti)}</b> · Total Realisasi (Manual + SAKTI): <b>Rp ${rp(f.total + sakti)}</b> · RPD bulan ini: <b>Rp ${rp(isum(ri))}</b></p>
       <div class="fw-semibold mb-1">Dokumen LPJ</div><div id="vdocs" class="mb-3"></div>
       <div class="border rounded p-3"><div class="fw-semibold mb-2">Ubah status</div>
         <select id="vst" class="form-select mb-2" style="max-width:260px">${Object.entries(ST).map(([k, v]) => `<option value="${k}"${k === f.status ? ' selected' : ''}>${v[1]}</option>`).join('')}</select>
@@ -672,6 +723,7 @@ async function pageVerifikasi() {
       $('vsave').disabled = true;
       const { error } = await sb.from('realisasi').update(st === 'rejected' ? { status: st, catatan_admin: why } : { status: st })
         .eq('kua_id', f.kua_id).eq('tahun', f.tahun).eq('bulan', f.bulan);
+      if (!live(ep)) return;
       if (error) { $('vperr').innerHTML = note(error.message); $('vsave').disabled = false; return; }
       $('vmsg').innerHTML = note(`Status ${kn(f.kua_id)} ${BULAN[f.bulan - 1]} ${f.tahun} diubah menjadi ${ST[st][1]}.`, 'success');
       await load();
@@ -684,6 +736,7 @@ async function pageVerifikasi() {
     if (+$('vb').value) q = q.eq('bulan', +$('vb').value);
     if ($('vs').value) q = q.eq('status', $('vs').value);
     const r = await q.order('bulan').order('kua_id');
+    if (!live(ep)) return;
     if (r.error) return $('vbody').innerHTML = note(r.error.message);
     G = r.data; list();
   };
@@ -691,34 +744,130 @@ async function pageVerifikasi() {
   load();
 }
 
-async function pageAutopay() {
+/* ====== Pengaturan SAKTI (admin): metode pembayaran per KUA + POS. Berlaku mulai bulan yang dipilih; bulan sebelumnya tidak berubah ====== */
+async function pageMetode() {
+  const ep = EP, now = new Date();
   let m;
-  try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
-  const P = m.pos.filter(p => ['522111', '522112', '522113'].includes(p.kode_pos));   // Listrik, Telepon/Internet, Air
+  try { m = await master(); } catch (e) { return live(ep) && ($('view').innerHTML = note('Gagal memuat data master: ' + e.message)); }
+  if (!live(ep)) return;
+  const P = m.pos.filter(p => SAKTI_POS.includes(p.kode_pos)), nm = p => p.nama_pos.replace('Belanja Langganan ', '');   // Listrik, Telepon/Internet, Air
   $('view').innerHTML = `<div class="card"><div class="card-body">
-    <h4 class="mb-1">AutoPayment</h4>
-    <p class="mb-3">Pembayaran otomatis lewat SAKTI. Isi nominal per bulan sekali saja: berlaku tetap setiap bulan, mulai bulan ini, sampai Anda mengubahnya. Bulan sebelumnya tidak berubah. Kosongkan kolom untuk menonaktifkan. Nominal dihitung langsung dari pengaturan ini, jadi tidak ada data yang dibuat tiap bulan.</p>
-    <div id="apmsg"></div><div id="apbody">Memuat…</div></div></div>`;
-  const r = await sb.from('autopayment_pos').select('kua_id,pos_id,nominal').is('sampai', null).gt('nominal', 0);
-  if (r.error) return $('apbody').innerHTML = note(r.error.message);
-  const cur = {}; r.data.forEach(x => cur[x.kua_id + '|' + x.pos_id] = x.nominal);
-  $('apbody').innerHTML = `<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Kecamatan</th>${P.map(p => `<th>${esc(p.kode_pos)} · ${esc(p.nama_pos.replace('Belanja Langganan ', ''))} (Rp)</th>`).join('')}</tr></thead>
-    <tbody>${m.kua.map(k => `<tr><td>${esc(k.nama_kua)}</td>${P.map(p => `<td><input class="form-control form-control-sm text-end" style="min-width:130px" inputmode="numeric" placeholder="Kosong" data-k="${k.id}" data-p="${p.id}" value="${cur[k.id + '|' + p.id] ? rp(cur[k.id + '|' + p.id]) : ''}"></td>`).join('')}</tr>`).join('')}</tbody></table></div>
-    <button class="btn btn-primary" id="apsave">Simpan AutoPayment</button>`;
-  $('apbody').oninput = e => { if (e.target.dataset.p) fmtIn(e.target); };
-  $('apsave').onclick = async () => {
-    const items = [];
-    $('apbody').querySelectorAll('[data-p]').forEach(i => {
-      const k = +i.dataset.k, p = +i.dataset.p, v = num(i.value);
-      if (v !== (cur[k + '|' + p] || 0)) items.push({ kua_id: k, pos_id: p, nominal: v });   // v = 0 berarti nonaktifkan
-    });
-    if (!items.length) return $('apmsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
-    $('apsave').disabled = true;
-    const { error } = await sb.rpc('set_autopayment', { p_items: items });   // satu permintaan, atomik
-    $('apmsg').innerHTML = error ? note(error.message) : note(`AutoPayment tersimpan (${items.length} perubahan), berlaku mulai bulan ini.`, 'success');
-    $('apsave').disabled = false;
-    if (!error) items.forEach(x => { if (x.nominal) cur[x.kua_id + '|' + x.pos_id] = x.nominal; else delete cur[x.kua_id + '|' + x.pos_id]; });
+    <h4 class="mb-1">Pengaturan Pembayaran SAKTI</h4>
+    <p class="mb-3">Pilih metode pembayaran tiap KUA untuk Listrik, Telepon/Internet, dan Air. <b>MANUAL</b>: operator KUA mengisi Realisasi seperti biasa. <b>SAKTI</b>: Realisasi diinput Admin di menu Realisasi SAKTI dan tidak dapat diisi operator. Perubahan berlaku mulai bulan yang dipilih di bawah; bulan sebelumnya tidak berubah. POS yang belum diatur otomatis MANUAL.</p>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3"><span class="fw-semibold">Berlaku mulai</span>
+      <select id="mb" class="form-select" style="width:auto" aria-label="Bulan">${BULAN.map((n, i) => `<option value="${i + 1}"${i === now.getMonth() ? ' selected' : ''}>${n}</option>`).join('')}</select>${yearSel('my', now.getFullYear())}</div>
+    <div id="mmsg"></div><div id="mbody">Memuat…</div></div></div>`;
+  let vers = [];
+  const draw = () => {
+    const t = +$('my').value, b = +$('mb').value;
+    const cnt = P.map(p => m.kua.filter(k => metodeOf(vers, k.id, p.id, t, b) === 'SAKTI').length);
+    $('mbody').innerHTML = `<p class="mb-2">KUA bermetode SAKTI pada ${BULAN[b - 1]} ${t}: ${P.map((p, i) => `${esc(nm(p))} <b>${cnt[i]}</b>`).join(' · ')} (dari ${m.kua.length} KUA).</p>
+      <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>KUA</th>${P.map(p => `<th>${esc(p.kode_pos)} · ${esc(nm(p))}</th>`).join('')}</tr></thead>
+      <tbody>${m.kua.map(k => `<tr><td>${esc(k.nama_kua)}</td>${P.map(p => { const v = metodeOf(vers, k.id, p.id, t, b);
+        return `<td><select class="form-select form-select-sm" style="min-width:120px" data-k="${k.id}" data-p="${p.id}" data-o="${v}" aria-label="Metode ${esc(k.nama_kua)} ${esc(nm(p))}"><option${v === 'MANUAL' ? ' selected' : ''}>MANUAL</option><option${v === 'SAKTI' ? ' selected' : ''}>SAKTI</option></select></td>`; }).join('')}</tr>`).join('')}</tbody></table></div>
+      <button class="btn btn-primary" id="msave">Simpan pengaturan</button>`;
+    $('mbody').onchange = e => { if (e.target.dataset.o) e.target.closest('td').classList.toggle('table-warning', e.target.value !== e.target.dataset.o); };
+    $('msave').onclick = async () => {
+      const mulai = mfirst(t, b), rows = [];
+      $('mbody').querySelectorAll('select[data-k]').forEach(s => { if (s.value !== s.dataset.o) rows.push({ kua_id: +s.dataset.k, pos_id: +s.dataset.p, metode: s.value, mulai }); });
+      if (!rows.length) return $('mmsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
+      $('msave').disabled = true;
+      const { error } = await sb.from('metode_pembayaran').upsert(rows, { onConflict: 'kua_id,pos_id,mulai' });   // satu transaksi: gagal satu = batal semua
+      if (!live(ep)) return;
+      $('msave').disabled = false;
+      $('mmsg').innerHTML = error ? note(error.message) : note(`Metode pembayaran tersimpan untuk ${rows.length} KUA/POS, berlaku mulai ${BULAN[b - 1]} ${t}. Realisasi bulan sebelumnya tidak berubah.`, 'success');
+      if (!error) load();
+    };
   };
+  const load = async () => {
+    $('mbody').textContent = 'Memuat…';
+    const r = await sb.from('metode_pembayaran').select('kua_id,pos_id,metode,mulai');
+    if (!live(ep)) return;
+    if (r.error) return $('mbody').innerHTML = note(r.error.message);
+    vers = r.data; draw();
+  };
+  ['my', 'mb'].forEach(id => $(id).onchange = () => { $('mmsg').innerHTML = ''; draw(); });   // hanya tampilan; data sudah dimuat
+  load();
+}
+
+/* ====== Realisasi SAKTI (admin): input realisasi pembayaran SAKTI per KUA + POS + bulan. Operator hanya membaca (RLS + trigger menjaga) ====== */
+async function pageSakti() {
+  const ep = EP, now = new Date();
+  let m;
+  try { m = await master(); } catch (e) { return live(ep) && ($('view').innerHTML = note('Gagal memuat data master: ' + e.message)); }
+  if (!live(ep)) return;
+  const P = m.pos.filter(p => SAKTI_POS.includes(p.kode_pos));
+  const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);   // tanggal lokal yyyy-mm-dd
+  const sel = (id, label, opts) => `<select id="${id}" class="form-select" style="width:auto" aria-label="${label}">${opts.map(([v, x]) => `<option value="${v}">${esc(x)}</option>`).join('')}</select>`;
+  $('view').innerHTML = `<div class="card"><div class="card-body">
+    <h4 class="mb-1">Realisasi SAKTI</h4>
+    <p class="mb-3">Input realisasi pembayaran SAKTI (Listrik, Telepon/Internet, Air). Hanya KUA + POS bermetode SAKTI pada bulan terpilih yang tampil; atur metodenya di <a href="#metode">Pengaturan SAKTI</a>. Realisasi ini otomatis dijumlahkan dengan Realisasi manual pada batas RPD dan Laporan. Status Belum dibayar berarti Rp 0.</p>
+    <div class="d-flex flex-wrap gap-2 mb-3">${yearSel('sy', now.getFullYear())}
+      <select id="sm" class="form-select" style="width:auto" aria-label="Bulan">${BULAN.map((n, i) => `<option value="${i + 1}"${i === now.getMonth() ? ' selected' : ''}>${n}</option>`).join('')}</select>
+      ${sel('sk', 'Kecamatan', [[0, 'Semua Kecamatan'], ...m.kua.map(k => [k.id, k.nama_kua])])}
+      ${sel('sp', 'POS', [[0, 'Semua POS'], ...P.map(p => [p.id, posLabel(p)])])}
+      ${sel('ss', 'Status pembayaran', [['', 'Semua status'], ['SUDAH_DIBAYAR', 'Sudah dibayar'], ['BELUM_DIBAYAR', 'Belum dibayar']])}</div>
+    <div id="smsg"></div><div id="sbody">Memuat…</div></div></div>`;
+  let vers = [], rs = [], rd = {}, rows = [], t, b;
+  const draw = () => {
+    t = +$('sy').value; b = +$('sm').value;
+    const fk = +$('sk').value, fp = +$('sp').value, fs = $('ss').value, all = [];
+    m.kua.forEach(k => P.forEach(p => {
+      if (metodeOf(vers, k.id, p.id, t, b) !== 'SAKTI') return;
+      const r = rs.find(x => x.kua_id === k.id && x.pos_id === p.id);
+      all.push({ k, p, r, st: r?.status_bayar || 'BELUM_DIBAYAR' });
+    }));
+    rows = all.filter(x => (!fk || x.k.id === fk) && (!fp || x.p.id === fp) && (!fs || x.st === fs));
+    const paid = all.filter(x => x.st === 'SUDAH_DIBAYAR').length, tot = rs.reduce((s, x) => s + x.nominal, 0);
+    if (!all.length) return $('sbody').innerHTML = `<p class="mb-0">Belum ada KUA/POS bermetode SAKTI pada ${BULAN[b - 1]} ${t}. Atur dulu di menu <a href="#metode">Pengaturan SAKTI</a>.</p>`;
+    $('sbody').innerHTML = `<p class="mb-2">${BULAN[b - 1]} ${t}: <b>${paid}</b> dari ${all.length} KUA/POS SAKTI sudah dibayar · Total Realisasi SAKTI <b>Rp ${rp(tot)}</b></p>
+      ${rows.length ? `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>KUA</th><th>POS</th><th class="text-end">RPD bulan ini (Rp)</th><th>Status</th><th>Nominal (Rp)</th><th>Tanggal bayar</th><th>Keterangan</th></tr></thead>
+      <tbody>${rows.map((x, i) => { const on = x.st === 'SUDAH_DIBAYAR'; return `<tr data-i="${i}"><td>${esc(x.k.nama_kua)}</td><td>${esc(posLabel(x.p))}</td><td class="text-end">${rp(rd[x.k.id]?.[x.p.id])}</td>
+        <td><select class="form-select form-select-sm" style="min-width:140px" data-f="st" aria-label="Status pembayaran"><option value="BELUM_DIBAYAR"${on ? '' : ' selected'}>Belum dibayar</option><option value="SUDAH_DIBAYAR"${on ? ' selected' : ''}>Sudah dibayar</option></select></td>
+        <td><input class="form-control form-control-sm text-end" style="min-width:130px" inputmode="numeric" placeholder="0" data-f="nom" aria-label="Nominal" value="${x.r?.nominal ? rp(x.r.nominal) : ''}"${on ? '' : ' disabled'}></td>
+        <td><input type="date" class="form-control form-control-sm" style="min-width:140px" data-f="tgl" aria-label="Tanggal pembayaran" max="${today}" value="${x.r?.tanggal_bayar || ''}"${on ? '' : ' disabled'}></td>
+        <td><input class="form-control form-control-sm" style="min-width:170px" data-f="cat" maxlength="500" placeholder="Autopayment SAKTI" aria-label="Keterangan" value="${esc(x.r?.catatan || '')}"></td></tr>`; }).join('')}</tbody></table></div>
+      <button class="btn btn-primary" id="ssave">Simpan Realisasi SAKTI</button>` : '<p class="mb-0">Tidak ada baris untuk filter ini.</p>'}`;
+    $('sbody').onchange = e => {   // Belum dibayar = Rp 0 tanpa tanggal; Sudah dibayar membuka nominal dan tanggal
+      if (e.target.dataset.f !== 'st') return;
+      const tr = e.target.closest('tr'), on = e.target.value === 'SUDAH_DIBAYAR', nom = tr.querySelector('[data-f=nom]'), tg = tr.querySelector('[data-f=tgl]');
+      nom.disabled = tg.disabled = !on;
+      if (!on) { nom.value = ''; tg.value = ''; } else if (!tg.value) tg.value = today;
+    };
+    $('sbody').oninput = e => { if (e.target.dataset.f === 'nom') fmtIn(e.target); };
+    if ($('ssave')) $('ssave').onclick = async () => {   // hanya baris yang berubah, satu transaksi
+      const out = [];
+      for (const tr of $('sbody').querySelectorAll('tr[data-i]')) {
+        const x = rows[+tr.dataset.i], st = tr.querySelector('[data-f=st]').value, on = st === 'SUDAH_DIBAYAR',
+          nom = on ? num(tr.querySelector('[data-f=nom]').value) : 0, tg = on ? tr.querySelector('[data-f=tgl]').value : '', cat = tr.querySelector('[data-f=cat]').value.trim();
+        if (st === x.st && nom === (x.r?.nominal || 0) && tg === (x.r?.tanggal_bayar || '') && cat === (x.r?.catatan || '')) continue;
+        if (on && !tg) return $('smsg').innerHTML = note(`${x.k.nama_kua} · ${posLabel(x.p)}: tanggal pembayaran wajib diisi untuk status Sudah dibayar.`, 'warning');
+        out.push({ kua_id: x.k.id, pos_id: x.p.id, tahun: t, bulan: b, nominal: nom, status_bayar: st, tanggal_bayar: tg || null, catatan: cat || null });
+      }
+      if (!out.length) return $('smsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
+      $('ssave').disabled = true;
+      const { error } = await sb.from('realisasi_sakti').upsert(out, { onConflict: 'kua_id,pos_id,tahun,bulan' });
+      if (!live(ep)) return;
+      $('ssave').disabled = false;
+      $('smsg').innerHTML = error ? note(error.message) : note(`Realisasi SAKTI ${BULAN[b - 1]} ${t} tersimpan (${out.length} perubahan).`, 'success');
+      if (!error) load();
+    };
+  };
+  const load = async () => {
+    const y = +$('sy').value, mo = +$('sm').value;
+    $('sbody').textContent = 'Memuat…';
+    const [v, r, d] = await Promise.all([
+      sb.from('metode_pembayaran').select('kua_id,pos_id,metode,mulai'),
+      sb.from('realisasi_sakti').select('kua_id,pos_id,nominal,status_bayar,tanggal_bayar,catatan').eq('tahun', y).eq('bulan', mo),
+      sb.from('rpd').select('kua_id,items').eq('tahun', y).eq('bulan', mo)]);
+    if (!live(ep)) return;
+    const err = v.error || r.error || d.error;
+    if (err) return $('sbody').innerHTML = note(err.message);
+    vers = v.data; rs = r.data; rd = Object.fromEntries(d.data.map(x => [x.kua_id, x.items])); draw();
+  };
+  ['sy', 'sm'].forEach(id => $(id).onchange = () => { $('smsg').innerHTML = ''; load(); });
+  ['sk', 'sp', 'ss'].forEach(id => $(id).onchange = () => { $('smsg').innerHTML = ''; draw(); });
+  load();
 }
 
 /* ====== Multi-select dengan chip (tanpa library): pilih banyak, cari dengan mengetik, hapus lewat tombol x.
@@ -764,8 +913,10 @@ function multiSelect(host, options, selected, label) {
 }
 
 async function pageConfig() {
+  const ep = EP;
   $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">Config</h4><div id="cmsg"></div><div id="cbody">Memuat…</div></div></div>`;
   const c = await sb.from('config').select('key,value');
+  if (!live(ep)) return;
   if (c.error) return $('cbody').innerHTML = note(c.error.message);
   const cfg = M.cfg = Object.fromEntries(c.data.map(r => [r.key, r.value]));
   const sw = (id, label, on) => `<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="${id}"${on ? ' checked' : ''}><label class="form-check-label" for="${id}">${label}</label></div>`;
@@ -789,8 +940,9 @@ async function pageConfig() {
     $('csave').disabled = true;
     const at = new Date().toISOString();
     const { error } = await sb.from('config').upsert(Object.entries(v).map(([key, value]) => ({ key, value, updated_by: me.id, updated_at: at })), { onConflict: 'key' });
-    $('csave').disabled = false;
     if (!error) Object.assign(M.cfg, v);
+    if (!live(ep)) return;
+    $('csave').disabled = false;
     $('cmsg').innerHTML = error ? note(error.message) : note('Pengaturan tersimpan.', 'success');
   };
 }
@@ -800,7 +952,8 @@ const BLN3 = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Ok
 const CDN = {
   xlsx: 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
   pdf: 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
-  at: 'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'
+  at: 'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js',
+  exceljs: 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js'
 };
 const libs = {};
 const loadJs = src => libs[src] ||= new Promise((ok, no) => {   // library ekspor hanya dimuat saat tombol unduh ditekan
@@ -820,6 +973,7 @@ const fetchAll = async mk => {   // halaman 1000 baris (batas default Supabase)
 };
 
 async function buildReport(f, m) {
+  if (f.nom === 'sakti') return buildSakti(f, m);
   const tbl = f.nom === 'rpd' ? 'rpd' : 'realisasi', stf = { ok: ['approved', 'paid'], paid: ['paid'] }[f.st];
   const rows = await fetchAll(() => {
     let q = sb.from(tbl).select('kua_id,bulan,items').eq('tahun', f.tahun);
@@ -828,18 +982,20 @@ async function buildReport(f, m) {
     if (tbl === 'realisasi' && stf) q = q.in('status', stf);
     return q.order('kua_id').order('bulan');
   });
-  let cfg = [];
-  if (tbl === 'realisasi') {   // AutoPayment dihitung dari konfigurasi (selalu berstatus dibayar)
-    let q = sb.from('autopayment_pos').select('kua_id,pos_id,nominal,mulai,sampai');
-    if (f.kid) q = q.eq('kua_id', f.kid);
-    const r = await q; if (r.error) throw r.error; cfg = r.data;
+  let rs = [];
+  if (tbl === 'realisasi') {   // Realisasi SAKTI (diinput admin; nominal > 0 = sudah dibayar) dijumlahkan dengan Realisasi manual
+    rs = await fetchAll(() => {
+      let q = sb.from('realisasi_sakti').select('kua_id,pos_id,bulan,nominal').eq('tahun', f.tahun).gt('nominal', 0);
+      if (f.kid) q = q.eq('kua_id', f.kid);
+      if (f.per === 'bulan') q = q.eq('bulan', f.bulan);
+      return q.order('kua_id').order('pos_id').order('bulan');
+    });
   }
   const all = !f.kid, det = f.bentuk === 'detail', lead = all ? 3 : 2;
   const cols = f.per === 'bulan' ? [f.bulan] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
   const agg = {}, add = (k, pid, b, n) => { (agg[k + '|' + pid] ||= Array(12).fill(0))[b - 1] += n; };
   rows.forEach(r => Object.entries(r.items).forEach(([pid, n]) => add(r.kua_id, pid, r.bulan, n)));
-  (all ? m.kua : m.kua.filter(k => k.id === f.kid)).forEach(k => cols.forEach(b =>
-    Object.entries(autoOf(cfg.filter(c => c.kua_id === k.id), f.tahun, b)).forEach(([pid, n]) => add(k.id, pid, b, n))));
+  rs.forEach(r => add(r.kua_id, r.pos_id, r.bulan, r.nominal));
   const head = [...(all ? ['KUA'] : []), 'Kode POS', 'POS / Rincian', ...(det ? cols.map(c => BLN3[c - 1]) : []), det ? 'Total' : 'Nominal'];
   const body = [];
   (all ? m.kua : m.kua.filter(k => k.id === f.kid)).forEach(k => m.pos.forEach(p => {
@@ -856,6 +1012,42 @@ async function buildReport(f, m) {
       f.nom === 'realisasi' ? { ok: 'Disetujui + Dibayar', paid: 'Dibayar saja', all: 'Semua status' }[f.st] : null,
       'Dicetak ' + new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })].filter(Boolean).join(' · '),
     name: `laporan-${f.nom}-${f.bentuk}-${f.tahun}${f.per === 'bulan' ? '-' + String(f.bulan).padStart(2, '0') : ''}-${all ? 'semua-kua' : kn.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+  };
+}
+
+async function buildSakti(f, m) {   // Rekap RPD vs Realisasi per KUA x POS: SAKTI, Manual, Total, Sisa; filter POS, metode, dan status pembayaran
+  const stf = { ok: ['approved', 'paid'], paid: ['paid'] }[f.st], per = q => f.per === 'bulan' ? q.eq('bulan', f.bulan) : q, kua = q => f.kid ? q.eq('kua_id', f.kid) : q;
+  const [rpd, rel, rs, vers] = await Promise.all([
+    fetchAll(() => per(kua(sb.from('rpd').select('kua_id,bulan,items').eq('tahun', f.tahun))).order('kua_id').order('bulan')),
+    fetchAll(() => { let q = per(kua(sb.from('realisasi').select('kua_id,bulan,items').eq('tahun', f.tahun))); if (stf) q = q.in('status', stf); return q.order('kua_id').order('bulan'); }),
+    fetchAll(() => per(kua(sb.from('realisasi_sakti').select('kua_id,pos_id,bulan,nominal,status_bayar').eq('tahun', f.tahun))).order('kua_id').order('pos_id').order('bulan')),
+    fetchAll(() => kua(sb.from('metode_pembayaran').select('kua_id,pos_id,metode,mulai')).order('kua_id').order('pos_id').order('mulai'))]);
+  const R = {}, M2 = {}, S = {}, all = !f.kid, lead = all ? 3 : 2, cols = f.per === 'bulan' ? [f.bulan] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  rpd.forEach(r => R[r.kua_id + '|' + r.bulan] = r.items);
+  rel.forEach(r => M2[r.kua_id + '|' + r.bulan] = r.items);
+  rs.forEach(r => S[r.kua_id + '|' + r.pos_id + '|' + r.bulan] = r);
+  const KS = all ? m.kua : m.kua.filter(k => k.id === f.kid), PS = f.pos ? m.pos.filter(p => p.id === f.pos) : m.pos, body = [];
+  KS.forEach(k => PS.forEach(p => {
+    let a = 0, mn = 0, sk = 0;
+    cols.forEach(b => {   // filter metode dan status berlaku per sel (KUA + POS + bulan) sesuai metode yang berlaku pada bulan itu
+      const mt = SAKTI_POS.includes(p.kode_pos) ? metodeOf(vers, k.id, p.id, f.tahun, b) : 'MANUAL', sr = S[k.id + '|' + p.id + '|' + b];
+      if (f.metode && f.metode !== mt) return;
+      if (f.sb && f.sb !== (mt === 'SAKTI' ? (sr?.status_bayar || 'BELUM_DIBAYAR') : null)) return;
+      a += R[k.id + '|' + b]?.[p.id] || 0; mn += M2[k.id + '|' + b]?.[p.id] || 0; sk += sr?.nominal || 0;
+    });
+    if (a || mn || sk) body.push([...(all ? [k.nama_kua] : []), p.kode_pos, p.nama_rincian || p.nama_pos, a, sk, mn, sk + mn, a - sk - mn]);
+  }));
+  const head = [...(all ? ['KUA'] : []), 'Kode POS', 'POS / Rincian', 'RPD', 'Realisasi SAKTI', 'Realisasi Manual', 'Total Realisasi', 'Sisa'];
+  const total = head.map((h, i) => i < lead ? (i === lead - 1 ? 'TOTAL' : '') : body.reduce((s, r) => s + r[i], 0));
+  const kn = all ? 'Seluruh KUA' : m.kua.find(k => k.id === f.kid)?.nama_kua || '', mm = String(f.bulan).padStart(2, '0');
+  return {
+    head, body, total, lead, det: false,
+    title: `Laporan Rekap Manual vs SAKTI ${f.tahun}`,
+    sub: [kn, f.per === 'bulan' ? `${BULAN[f.bulan - 1]} ${f.tahun}` : `Tahun ${f.tahun}`, f.pos ? posLabel(m.pos.find(p => p.id === f.pos)) : null,
+      f.metode ? 'Metode ' + f.metode : null, f.sb ? SB[f.sb][1] : null,
+      { ok: 'Manual: Disetujui + Dibayar', paid: 'Manual: Dibayar saja', all: 'Manual: Semua status' }[f.st],
+      'Dicetak ' + new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })].filter(Boolean).join(' · '),
+    name: `laporan-sakti-${f.tahun}${f.per === 'bulan' ? '-' + mm : ''}-${all ? 'semua-kua' : kn.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   };
 }
 
@@ -884,43 +1076,52 @@ async function toPdf(r) {
 }
 
 async function pageLaporan() {
-  const admin = me.role === 'admin', y = new Date().getFullYear();
+  const ep = EP, admin = me.role === 'admin', y = new Date().getFullYear();
   let m;
-  try { m = await master(); } catch (e) { return $('view').innerHTML = note('Gagal memuat data master: ' + e.message); }
+  try { m = await master(); } catch (e) { return live(ep) && ($('view').innerHTML = note('Gagal memuat data master: ' + e.message)); }
+  if (!live(ep)) return;
   if (!admin && !me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
   const opt = (arr, cur) => arr.map(([v, t]) => `<option value="${v}"${v == cur ? ' selected' : ''}>${esc(t)}</option>`).join('');
   const col = (id, label, arr, cur, extra = '') => `<div class="col-sm-6 col-lg-4"><label class="form-label" for="${id}">${label}</label><select id="${id}" class="form-select">${opt(arr, cur)}</select>${extra}</div>`;
   $('view').innerHTML = `<div class="card"><div class="card-body">
     <h4 class="mb-3">Laporan</h4><div id="gmsg"></div>
     <div class="row g-3" id="gform">
-      ${col('gn', 'Jenis nominal', [['realisasi', 'Realisasi'], ['rpd', 'RPD']], 'realisasi')}
+      ${col('gn', 'Jenis nominal', [['realisasi', 'Realisasi'], ['rpd', 'RPD'], ['sakti', 'Rekap Manual vs SAKTI']], 'realisasi')}
       ${col('gf', 'Bentuk laporan', [['rekap', 'Rekap (total per POS)'], ['detail', 'Detail per bulan (matriks)']], 'rekap')}
       ${col('gt', 'Tahun', [y - 1, y, y + 1].map(v => [v, v]), y)}
       ${col('gp', 'Periode', [['tahun', 'Satu tahun'], ['bulan', 'Satu bulan']], 'tahun',
         `<select id="gb" class="form-select mt-2 d-none" aria-label="Bulan">${opt(BULAN.map((b, i) => [i + 1, b]), new Date().getMonth() + 1)}</select>`)}
       ${admin ? col('gc', 'Cakupan', [['', 'Seluruh KUA'], ...m.kua.map(k => [k.id, k.nama_kua])], '')
               : `<div class="col-sm-6 col-lg-4"><label class="form-label" for="gc">Cakupan</label><input id="gc" class="form-control" value="${esc(me.kua || '')}" disabled></div>`}
-      ${col('gs', 'Status Realisasi', [['ok', 'Disetujui + Dibayar'], ['paid', 'Dibayar saja'], ['all', 'Semua status']], 'ok')}
+      ${col('gs', 'Status Realisasi (manual)', [['ok', 'Disetujui + Dibayar'], ['paid', 'Dibayar saja'], ['all', 'Semua status']], 'ok')}
+      ${col('gm', 'Metode pembayaran', [['', 'Semua metode'], ['MANUAL', 'MANUAL'], ['SAKTI', 'SAKTI']], '')}
+      ${col('gq', 'POS', [[0, 'Semua POS'], ...m.pos.map(p => [p.id, posLabel(p)])], 0)}
+      ${col('gy', 'Status pembayaran SAKTI', [['', 'Semua status'], ['SUDAH_DIBAYAR', 'Sudah dibayar'], ['BELUM_DIBAYAR', 'Belum dibayar']], '')}
     </div>
     <div class="mt-4 d-flex flex-wrap gap-2">
       <button class="btn btn-primary" data-x="xlsx"><i class="bx bx-spreadsheet"></i> Unduh Excel</button>
       <button class="btn btn-outline-primary" data-x="pdf"><i class="bx bxs-file-pdf"></i> Unduh PDF</button></div></div></div>`;
   const sync = () => {
+    const n = $('gn').value, sk = n === 'sakti';
     $('gb').classList.toggle('d-none', $('gp').value !== 'bulan');
-    $('gs').closest('.col-sm-6').classList.toggle('d-none', $('gn').value !== 'realisasi');
+    $('gs').closest('.col-sm-6').classList.toggle('d-none', n === 'rpd');
+    $('gf').closest('.col-sm-6').classList.toggle('d-none', sk);   // rekap Manual vs SAKTI hanya satu bentuk
+    ['gm', 'gq', 'gy'].forEach(id => $(id).closest('.col-sm-6').classList.toggle('d-none', !sk));
+    if ($('gm').value === 'MANUAL') $('gy').value = '';   // status pembayaran hanya berlaku untuk POS bermetode SAKTI
+    $('gy').disabled = $('gm').value === 'MANUAL';
   };
   $('gform').onchange = sync; sync();
   $('view').onclick = async e => {
     const b = e.target.closest('[data-x]'); if (!b) return;
     const f = { nom: $('gn').value, bentuk: $('gf').value, tahun: +$('gt').value, per: $('gp').value, bulan: +$('gb').value, st: $('gs').value,
-      kid: admin ? +$('gc').value || 0 : me.kua_id };
+      metode: $('gm').value, pos: +$('gq').value || 0, sb: $('gy').value, kid: admin ? +$('gc').value || 0 : me.kua_id };
     const btns = $('view').querySelectorAll('[data-x]');
     btns.forEach(x => x.disabled = true); $('gmsg').innerHTML = note('Menyiapkan laporan…', 'info');
     try {
       const r = await buildReport(f, m);
       await (b.dataset.x === 'xlsx' ? toXlsx : toPdf)(r);
-      $('gmsg').innerHTML = note(`Laporan berisi ${r.body.length} baris dan sudah diunduh.`, 'success');
-    } catch (err) { $('gmsg').innerHTML = note(err.message); }
+      if (live(ep)) $('gmsg').innerHTML = note(`Laporan berisi ${r.body.length} baris dan sudah diunduh.`, 'success');
+    } catch (err) { if (live(ep)) $('gmsg').innerHTML = note(err.message); }
     btns.forEach(x => x.disabled = false);
   };
 }
@@ -931,13 +1132,33 @@ function pageBop() {
     ['rpd', 'RPD', 'bx-calendar-edit', 'Rencana penarikan dana bulanan', ''],
     ['realisasi', 'Realisasi', 'bx-receipt', 'Isi realisasi dan unggah LPJ', 'o'],
     ['verifikasi', 'Verifikasi', 'bx-check-shield', 'Setujui atau tolak realisasi', 'a'],
-    ['autopayment', 'AutoPayment', 'bx-transfer', 'Pembayaran otomatis yang tetap', 'a'],
+    ['metode', 'Pengaturan SAKTI', 'bx-toggle-right', 'Metode pembayaran MANUAL atau SAKTI', 'a'],
+    ['sakti', 'Realisasi SAKTI', 'bx-transfer', 'Input realisasi pembayaran SAKTI', 'a'],
     ['config', 'Config', 'bx-slider', 'Pengaturan sistem', 'a'],
     ['laporan', 'Laporan', 'bx-file', 'Unduh Excel dan PDF', '']];
   $('view').innerHTML = `<h4 class="mb-1">BOP</h4><p class="mb-3">Halo, <b>${esc(me.nama)}</b>. Pilih modul:</p>
-    <div class="row g-3">${items.filter(i => !i[4] || (i[4] === 'a') === (me.role === 'admin')).map(i => `<div class="col-sm-6 col-lg-4">
+    ${me.role === 'admin' ? '<div class="row g-3 mb-3" id="bstat"></div>' : ''}<div class="row g-3">${items.filter(i => !i[4] || (i[4] === 'a') === (me.role === 'admin')).map(i => `<div class="col-sm-6 col-lg-4">
       <a class="card h-100 text-decoration-none" href="#${i[0]}"><div class="card-body d-flex gap-3 align-items-center">
         <div class="avatar"><i class="bx ${i[2]} fs-4"></i></div><div><h5 class="mb-0">${i[1]}</h5><small>${i[3]}</small></div></div></a></div>`).join('')}</div>`;
+  if (me.role === 'admin') bopStat(EP);
+}
+
+async function bopStat(ep) {   // statistik ringkas SAKTI untuk admin (opsional: diam bila gagal)
+  try {
+    const now = new Date(), y = now.getFullYear(), b = now.getMonth() + 1;
+    const [m, v, s] = await Promise.all([master(), sb.from('metode_pembayaran').select('kua_id,pos_id,metode,mulai'),
+      fetchAll(() => sb.from('realisasi_sakti').select('kua_id,pos_id,bulan,nominal,status_bayar').eq('tahun', y).order('id'))]);
+    if (!live(ep) || !$('bstat') || v.error) return;
+    const P = m.pos.filter(p => SAKTI_POS.includes(p.kode_pos)), cards = [];
+    let belum = 0;
+    P.forEach(p => {
+      const ks = m.kua.filter(k => metodeOf(v.data, k.id, p.id, y, b) === 'SAKTI');
+      belum += ks.filter(k => !s.some(x => x.kua_id === k.id && x.pos_id === p.id && x.bulan === b && x.status_bayar === 'SUDAH_DIBAYAR')).length;
+      cards.push([`KUA SAKTI · ${p.nama_pos.replace('Belanja Langganan ', '')}`, `${ks.length} dari ${m.kua.length}`]);
+    });
+    cards.push([`Total Realisasi SAKTI ${y}`, 'Rp ' + rp(s.reduce((a, x) => a + x.nominal, 0)), `Belum dibayar ${BULAN[b - 1]}: ${belum}`]);
+    $('bstat').innerHTML = cards.map(c => `<div class="col-6 col-lg-3"><div class="card h-100"><div class="card-body"><small>${esc(c[0])}</small><h4 class="mb-0">${esc(c[1])}</h4>${c[2] ? `<small>${esc(c[2])}</small>` : ''}</div></div></div>`).join('');
+  } catch { /* statistik hanya pelengkap */ }
 }
 
 function openReset(r) {
@@ -965,13 +1186,14 @@ function openReset(r) {
     $('rgo').disabled = true; $('rmsg').innerHTML = '';
     try {
       await api({ action: 'reset-password' }, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: r.id, password: $('rp1').value }) });
-      d.close(); return $('amsg').innerHTML = note(`Password ${r.nama} berhasil direset.`, 'success');
+      d.close(); const am = document.getElementById('amsg'); if (am) am.innerHTML = note(`Password ${r.nama} berhasil direset.`, 'success'); return;
     } catch (er) { $('rgo').disabled = false; $('rmsg').innerHTML = note(er.message); }
   };
   d.showModal();
 }
 
 async function pagePengaturan() {
+  const ep = EP;
   $('view').innerHTML = `<div class="row g-4">
     <div class="col-lg-6"><div class="card"><div class="card-body">
       <h5 class="mb-3">Profil</h5>
@@ -994,6 +1216,7 @@ async function pagePengaturan() {
     if (!pairOk('np')) return $('pmsg').innerHTML = note(PW_ERR, 'warning');
     $('pgo').disabled = true;
     const { error } = await sb.auth.updateUser({ password: $('np1').value });
+    if (!live(ep)) return;
     $('pgo').disabled = false;
     $('pmsg').innerHTML = error ? note(errId(error)) : note('Password berhasil diubah.', 'success');
     if (!error) { $('pf').reset(); mask($('pf')); pairOk('np'); }
@@ -1006,6 +1229,2236 @@ async function pagePengaturan() {
     }</tbody></table>`;
     if (el) el.onclick = e => { const b = e.target.closest('[data-reset]'); if (b) openReset((data || []).find(r => r.id === b.dataset.reset)); };
   }
+}
+
+/* ---- Logika Jaspro (disalin apa adanya dari jaspro.html: pencocokan nama, golongan, workbook ExcelJS, CSV) ---- */
+const JX = (() => {
+            /*
+ * PNBP NR Tool - Core business logic (pure functions, no DOM/Node dependency)
+ * Works identically in Node (for automated testing) and in the browser.
+ */
+
+            // ---------- Name normalization & matching ----------
+
+            function normalizeCoreName(raw) {
+                if (!raw)
+                    return '';
+                let s = String(raw).trim();
+                const idx = s.indexOf(',');
+                if (idx !== -1)
+                    s = s.slice(0, idx);
+                s = s.toUpperCase().replace(/\./g, ' ').replace(/\s+/g, ' ').trim();
+                return s;
+            }
+
+            var HONORIFIC_TOKENS = ['H', 'HJ', 'DR', 'DRS', 'DRA', 'IR', 'PROF', 'K', 'KH', 'TH', 'HAJI', 'HAJJAH', 'R', 'RA', 'RD'];
+            var HONORIFIC_SET = (function(arr) {
+                var s = {};
+                for (var i = 0; i < arr.length; i++)
+                    s[arr[i]] = true;
+                return s;
+            }
+            )(HONORIFIC_TOKENS);
+
+            function stripHonorifics(normName) {
+                var tokens = normName.split(' ').filter(function(t) {
+                    return t && !HONORIFIC_SET[t];
+                });
+                return tokens.join(' ');
+            }
+
+            function levenshtein(a, b) {
+                var m = a.length
+                  , n = b.length;
+                if (m === 0)
+                    return n;
+                if (n === 0)
+                    return m;
+                var dp = new Array(n + 1);
+                for (var j = 0; j <= n; j++)
+                    dp[j] = j;
+                for (var i = 1; i <= m; i++) {
+                    var prev = dp[0];
+                    dp[0] = i;
+                    for (j = 1; j <= n; j++) {
+                        var tmp = dp[j];
+                        dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+                        prev = tmp;
+                    }
+                }
+                return dp[n];
+            }
+
+            function similarity(a, b) {
+                if (!a && !b)
+                    return 1;
+                if (!a || !b)
+                    return 0;
+                var dist = levenshtein(a, b);
+                var maxLen = Math.max(a.length, b.length);
+                return maxLen === 0 ? 1 : 1 - dist / maxLen;
+            }
+
+            // Build an index: normalized core name -> [master entries]
+            function buildMasterIndex(masterList) {
+                var exactMap = {};
+                masterList.forEach(function(entry) {
+                    var norm = normalizeCoreName(entry.nama);
+                    if (!exactMap[norm])
+                        exactMap[norm] = [];
+                    exactMap[norm].push(entry);
+                });
+                return exactMap;
+            }
+
+            // Match a single input name against the master list.
+            // Returns { status, entry, candidates, score }
+            // status: 'OTOMATIS' | 'OTOMATIS_FUZZY' | 'AMBIGU' | 'TIDAK_DITEMUKAN'
+            function matchPenghulu(inputName, masterList, exactMap) {
+                var norm = normalizeCoreName(inputName);
+
+                if (exactMap[norm] && exactMap[norm].length) {
+                    var arr = exactMap[norm];
+                    return {
+                        status: arr.length > 1 ? 'AMBIGU' : 'OTOMATIS',
+                        entry: arr[0],
+                        candidates: arr,
+                        score: 1
+                    };
+                }
+
+                var stripped = stripHonorifics(norm);
+                if (stripped) {
+                    for (var key in exactMap) {
+                        if (!Object.prototype.hasOwnProperty.call(exactMap, key))
+                            continue;
+                        if (stripHonorifics(key) === stripped) {
+                            var arr2 = exactMap[key];
+                            return {
+                                status: arr2.length > 1 ? 'AMBIGU' : 'OTOMATIS',
+                                entry: arr2[0],
+                                candidates: arr2,
+                                score: 0.99
+                            };
+                        }
+                    }
+                }
+
+                var scored = masterList.map(function(entry) {
+                    return {
+                        entry: entry,
+                        score: similarity(norm, normalizeCoreName(entry.nama))
+                    };
+                }).sort(function(a, b) {
+                    return b.score - a.score;
+                });
+
+                var best = scored[0];
+                if (best && best.score >= 0.85) {
+                    return {
+                        status: 'OTOMATIS_FUZZY',
+                        entry: best.entry,
+                        candidates: scored.slice(0, 3).map(function(s) {
+                            return s.entry;
+                        }),
+                        score: best.score
+                    };
+                }
+                return {
+                    status: 'TIDAK_DITEMUKAN',
+                    entry: null,
+                    candidates: scored.slice(0, 3).map(function(s) {
+                        return s.entry;
+                    }),
+                    score: best ? best.score : 0
+                };
+            }
+
+            // ---------- Golongan classification ----------
+            // Returns 'III' | 'IV' | 'PPPK' | 'UNKNOWN'
+            function classifyGolongan(golRaw) {
+                var g = String(golRaw || '').trim().toUpperCase();
+                if (!g)
+                    return 'UNKNOWN';
+                if (/PPPK/.test(g))
+                    return 'PPPK';
+
+                // Strategy 1: leading roman-numeral run - handles "III/a", "IIIa", "IVb", "IIa"
+                var m = g.match(/^([IVX]+)/);
+                if (m) {
+                    if (m[1] === 'IX')
+                        return 'PPPK';
+                    if (m[1] === 'IV')
+                        return 'IV';
+                    if (m[1] === 'III')
+                        return 'III';
+                    if (m[1] === 'II')
+                        return 'II';
+                }
+
+                // Strategy 2: leading arabic digit - handles "3/a", "4A", "2/b"
+                m = g.match(/^(\d+)/);
+                if (m) {
+                    if (m[1] === '9')
+                        return 'PPPK';
+                    if (m[1] === '4')
+                        return 'IV';
+                    if (m[1] === '3')
+                        return 'III';
+                    if (m[1] === '2')
+                        return 'II';
+                }
+
+                // Strategy 3: word-boundary search anywhere - handles "GOL. IV/A", "GOLONGAN III"
+                if (/\bIX\b/.test(g))
+                    return 'PPPK';
+                if (/\bIV\b/.test(g))
+                    return 'IV';
+                if (/\bIII\b/.test(g))
+                    return 'III';
+                if (/\bII\b/.test(g))
+                    return 'II';
+
+                return 'UNKNOWN';
+            }
+
+            function golonganLabel(golClass) {
+                if (golClass === 'II')
+                    return 'PNS Gol. II';
+                if (golClass === 'III')
+                    return 'PNS Gol. III';
+                if (golClass === 'IV')
+                    return 'PNS Gol. IV';
+                if (golClass === 'PPPK')
+                    return 'PPPK Gol. IX';
+                return 'Tidak dikenali';
+            }
+
+            // ---------- Number parsing (defensive, handles Indonesian-formatted text numbers) ----------
+            function parseNumberID(raw) {
+                if (raw == null || raw === '')
+                    return 0;
+                if (typeof raw === 'number')
+                    return isNaN(raw) ? 0 : raw;
+                if (typeof raw === 'object') {
+                    if ('result' in raw)
+                        return parseNumberID(raw.result);
+                    if (raw.text != null)
+                        return parseNumberID(raw.text);
+                    if (raw.richText)
+                        return parseNumberID(raw.richText.map(function(r) {
+                            return r.text;
+                        }).join(''));
+                }
+                var s = String(raw).trim();
+                if (s === '')
+                    return 0;
+                s = s.replace(/[^\d.,-]/g, '');
+                if (s === '')
+                    return 0;
+                if (s.indexOf(',') !== -1 && s.lastIndexOf(',') > s.lastIndexOf('.')) {
+                    s = s.replace(/\./g, '').replace(',', '.');
+                } else {
+                    s = s.replace(/,/g, '');
+                    var parts = s.split('.');
+                    if (parts.length > 1 && parts.slice(1).every(function(p) {
+                        return p.length === 3;
+                    })) {
+                        s = parts.join('');
+                    }
+                }
+                var n = parseFloat(s);
+                return isNaN(n) ? 0 : n;
+            }
+
+            // Extract a plain string from a possibly-rich ExcelJS cell value (handles
+            // hyperlink objects, rich text, formula-result objects, and plain values).
+            function cellText(raw) {
+                if (raw == null)
+                    return '';
+                if (typeof raw === 'object') {
+                    if ('result' in raw)
+                        return cellText(raw.result);
+                    if (raw.text != null)
+                        return cellText(raw.text);
+                    if (raw.richText)
+                        return raw.richText.map(function(r) {
+                            return r.text;
+                        }).join('');
+                    if (raw instanceof Date)
+                        return raw.toISOString();
+                }
+                return String(raw).trim();
+            }
+
+            // ---------- Spreadsheet column letter helper ----------
+            function colLetter(n) {
+                var s = '';
+                while (n > 0) {
+                    var rem = (n - 1) % 26;
+                    s = String.fromCharCode(65 + rem) + s;
+                    n = Math.floor((n - 1) / 26);
+                }
+                return s;
+            }
+
+            // ---------- Header alias resolution ----------
+            function normalizeHeader(s) {
+                return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/\.$/, '');
+            }
+
+            function findHeaderColumn(headerCells, aliases) {
+                // headerCells: [{colNumber, norm}]
+                for (var i = 0; i < aliases.length; i++) {
+                    for (var j = 0; j < headerCells.length; j++) {
+                        if (headerCells[j].norm === aliases[i])
+                            return headerCells[j].colNumber;
+                    }
+                }
+                return null;
+            }
+
+            var LAPORAN_ALIASES = {
+                nama: ['nama penghulu', 'nama', 'nama lengkap', 'nama pegawai'],
+                kua: ['kua', 'nama kua', 'unit kerja', 'satuan kerja'],
+                nip: ['nip'],
+                golongan: ['golongan', 'gol', 'gol/ruang', 'golongan/ruang', 'gol ruang'],
+                jumlahPeristiwa: ['jumlah peristiwa', 'jml peristiwa', 'peristiwa', 'jumlah nikah rujuk', 'jumlah nr'],
+                noRekening: ['no rekening', 'nomor rekening', 'rekening'],
+            };
+
+            var MASTER_ALIASES = {
+                nama: ['nama'],
+                namaPemilik: ['namapemilik', 'nama pemilik', 'nama pemilik rekening'],
+                noRekening: ['nomorrekening', 'nomor rekening', 'no rekening', 'rekening'],
+            };
+
+            var BULAN_LIST = ['JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI', 'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'];
+
+            if (typeof module !== 'undefined' && module.exports) {
+                module.exports = {
+                    normalizeCoreName: normalizeCoreName,
+                    stripHonorifics: stripHonorifics,
+                    levenshtein: levenshtein,
+                    similarity: similarity,
+                    buildMasterIndex: buildMasterIndex,
+                    matchPenghulu: matchPenghulu,
+                    classifyGolongan: classifyGolongan,
+                    golonganLabel: golonganLabel,
+                    parseNumberID: parseNumberID,
+                    cellText: cellText,
+                    colLetter: colLetter,
+                    normalizeHeader: normalizeHeader,
+                    findHeaderColumn: findHeaderColumn,
+                    LAPORAN_ALIASES: LAPORAN_ALIASES,
+                    MASTER_ALIASES: MASTER_ALIASES,
+                    BULAN_LIST: BULAN_LIST,
+                };
+            }
+            /*
+ * PNBP NR Tool - Excel I/O
+ * Parsing of uploaded workbooks and generation of the final output workbook.
+ * Depends on: ExcelJS (global), logic.js (global functions/constants)
+ */
+
+            var CURRENCY_FMT = '_-* #,##0_-;-* #,##0_-;_-* "-"_-;_-@_-';
+            var THIN = {
+                style: 'thin'
+            };
+            var BORDER_ALL = {
+                top: THIN,
+                left: THIN,
+                bottom: THIN,
+                right: THIN
+            };
+            var REPORT_FONT = 'Arial';
+
+            // ---------- Helpers ----------
+
+            async function readWorkbookFromFile(file) {
+                var buf = await file.arrayBuffer();
+                var wb = new ExcelJS.Workbook();
+                await wb.xlsx.load(buf);
+                return wb;
+            }
+
+            function buildHeaderCells(headerRow) {
+                var cells = [];
+                headerRow.eachCell(function(cell, colNumber) {
+                    cells.push({
+                        colNumber: colNumber,
+                        norm: normalizeHeader(cell.value)
+                    });
+                });
+                return cells;
+            }
+
+            // ---------- Parse: Laporan Nominatif (input 1) ----------
+
+            async function parseLaporanFile(file) {
+                var wb;
+                try {
+                    wb = await readWorkbookFromFile(file);
+                } catch (e) {
+                    return {
+                        ok: false,
+                        error: 'File tidak dapat dibaca. Pastikan file berformat .xlsx yang valid (' + (e && e.message ? e.message : e) + ').'
+                    };
+                }
+                var ws = wb.worksheets[0];
+                if (!ws)
+                    return {
+                        ok: false,
+                        error: 'Tidak ada sheet yang ditemukan dalam file.'
+                    };
+
+                var headerRowNum = 1;
+                var headerCells = buildHeaderCells(ws.getRow(headerRowNum));
+                var found = Object.keys(headerCells).length ? headerCells : [];
+
+                var colNama = findHeaderColumn(headerCells, LAPORAN_ALIASES.nama);
+                var colKua = findHeaderColumn(headerCells, LAPORAN_ALIASES.kua);
+                var colNip = findHeaderColumn(headerCells, LAPORAN_ALIASES.nip);
+                var colGol = findHeaderColumn(headerCells, LAPORAN_ALIASES.golongan);
+                var colJumlah = findHeaderColumn(headerCells, LAPORAN_ALIASES.jumlahPeristiwa);
+                var colRek = findHeaderColumn(headerCells, LAPORAN_ALIASES.noRekening);
+                // optional
+
+                var missing = [];
+                if (!colNama)
+                    missing.push('Nama Penghulu');
+                if (!colKua)
+                    missing.push('KUA');
+                if (!colNip)
+                    missing.push('NIP');
+                if (!colGol)
+                    missing.push('Golongan');
+                if (!colJumlah)
+                    missing.push('Jumlah Peristiwa');
+
+                if (missing.length) {
+                    var foundHeaders = headerCells.map(function(h) {
+                        return h.norm;
+                    }).filter(Boolean);
+                    return {
+                        ok: false,
+                        error: 'Kolom wajib tidak ditemukan di baris pertama: ' + missing.join(', ') + '. ' + 'Kolom yang terbaca dari file: ' + (foundHeaders.length ? foundHeaders.join(', ') : '(tidak ada)') + '.',
+                    };
+                }
+
+                var rows = [];
+                var skipped = 0;
+                ws.eachRow(function(row, rowNum) {
+                    if (rowNum <= headerRowNum)
+                        return;
+                    var namaRaw = row.getCell(colNama).value;
+                    var namaText = cellText(namaRaw);
+                    if (!namaText) {
+                        return;
+                    }
+                    if (/^jumlah$/i.test(namaText) || /^total$/i.test(namaText)) {
+                        skipped++;
+                        return;
+                    }
+
+                    rows.push({
+                        nama: namaText,
+                        kua: cellText(row.getCell(colKua).value),
+                        nip: cellText(row.getCell(colNip).value),
+                        golongan: cellText(row.getCell(colGol).value),
+                        jumlahPeristiwa: parseNumberID(row.getCell(colJumlah).value),
+                        noRekeningSumber: colRek ? cellText(row.getCell(colRek).value) : '',
+                    });
+                });
+
+                if (!rows.length) {
+                    return {
+                        ok: false,
+                        error: 'Tidak ada baris data yang terbaca. Pastikan data dimulai tepat di bawah baris judul kolom.'
+                    };
+                }
+
+                return {
+                    ok: true,
+                    rows: rows,
+                    sheetName: ws.name,
+                    skipped: skipped
+                };
+            }
+
+            // ---------- Parse: Master Rekening (input 2) ----------
+
+            async function parseMasterFile(file) {
+                var wb;
+                try {
+                    wb = await readWorkbookFromFile(file);
+                } catch (e) {
+                    return {
+                        ok: false,
+                        error: 'File tidak dapat dibaca. Pastikan file berformat .xlsx yang valid (' + (e && e.message ? e.message : e) + ').'
+                    };
+                }
+                var ws = wb.worksheets[0];
+                if (!ws)
+                    return {
+                        ok: false,
+                        error: 'Tidak ada sheet yang ditemukan dalam file.'
+                    };
+
+                var headerCells = buildHeaderCells(ws.getRow(1));
+                var colNama = findHeaderColumn(headerCells, MASTER_ALIASES.nama);
+                var colPemilik = findHeaderColumn(headerCells, MASTER_ALIASES.namaPemilik);
+                var colRek = findHeaderColumn(headerCells, MASTER_ALIASES.noRekening);
+
+                var missing = [];
+                if (!colNama)
+                    missing.push('Nama');
+                if (!colRek)
+                    missing.push('NomorRekening');
+                if (missing.length) {
+                    var foundHeaders = headerCells.map(function(h) {
+                        return h.norm;
+                    }).filter(Boolean);
+                    return {
+                        ok: false,
+                        error: 'Kolom wajib tidak ditemukan di baris pertama: ' + missing.join(', ') + '. ' + 'Kolom yang terbaca dari file: ' + (foundHeaders.length ? foundHeaders.join(', ') : '(tidak ada)') + '.',
+                    };
+                }
+
+                var entries = [];
+                ws.eachRow(function(row, rowNum) {
+                    if (rowNum === 1)
+                        return;
+                    var namaText = cellText(row.getCell(colNama).value);
+                    if (!namaText)
+                        return;
+                    entries.push({
+                        id: 'imp_' + rowNum + '_' + Date.now() + '_' + Math.floor(Math.random() * 1e6),
+                        nama: namaText,
+                        namaPemilik: colPemilik ? (cellText(row.getCell(colPemilik).value) || namaText) : namaText,
+                        noRekening: colRek ? cellText(row.getCell(colRek).value) : '',
+                    });
+                });
+
+                if (!entries.length) {
+                    return {
+                        ok: false,
+                        error: 'Tidak ada baris data yang terbaca dari file Master Rekening.'
+                    };
+                }
+
+                return {
+                    ok: true,
+                    entries: entries
+                };
+            }
+
+            // ---------- Generate: output workbook ----------
+
+            function buildReportSheet(ws, opts) {
+                var title = opts.title
+                  , rows = opts.rows
+                  , kind = opts.kind
+                  , settings = opts.settings
+                  , footer = opts.footer;
+                var isJaspro = kind === 'jaspro';
+
+                // Column A (blank spacer) and the second, always-empty "NO. REKENING" column
+                // have been removed — "NO. REKENING CSV" is now the sheet's only rekening column.
+                var COL = {
+                    no: 1,
+                    nama: 2,
+                    kua: 3,
+                    nip: 4,
+                    gol: 5,
+                    rekcsv: 6,
+                    jumlah: 7,
+                    tarif: 8,
+                    subtotal: 9
+                };
+                if (isJaspro) {
+                    COL.pph = 10;
+                    COL.diterima = 11;
+                } else {
+                    COL.diterima = 10;
+                }
+                var lastColNum = COL.diterima;
+
+                var widths = {
+                    1: 6.9,
+                    2: 40,
+                    3: 24.5,
+                    4: 22.5,
+                    5: 9.5,
+                    6: 19.5,
+                    7: 8.5,
+                    8: 11.7,
+                    9: 15.1,
+                    10: 15.5,
+                    11: 19.3
+                };
+                Object.keys(widths).forEach(function(c) {
+                    ws.getColumn(Number(c)).width = widths[c];
+                });
+
+                ws.mergeCells(2, COL.nama, 2, lastColNum);
+                var t = ws.getCell(2, COL.nama);
+                t.value = title;
+                t.font = {
+                    name: REPORT_FONT,
+                    size: 14,
+                    bold: true
+                };
+                t.alignment = {
+                    horizontal: 'center',
+                    vertical: 'middle',
+                    wrapText: true
+                };
+                ws.getRow(2).height = 24;
+
+                var headers = isJaspro ? ['No', 'NAMA', 'KUA', 'NIP', 'GOL', 'NO. REKENING CSV', 'JUMLAH', 'TARIF', 'JUMLAH', 'PPH', 'JUMLAH DITERIMA'] : ['No', 'NAMA', 'KUA', 'NIP', 'GOL', 'NO. REKENING CSV', 'JUMLAH', 'TARIF', 'JUMLAH', 'JUMLAH DITERIMA'];
+                headers.forEach(function(h, i) {
+                    var cell = ws.getCell(4, COL.no + i);
+                    cell.value = h;
+                    cell.font = {
+                        name: REPORT_FONT,
+                        size: 11,
+                        bold: true
+                    };
+                    cell.alignment = {
+                        horizontal: 'center',
+                        vertical: 'middle',
+                        wrapText: true
+                    };
+                    cell.border = BORDER_ALL;
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: {
+                            argb: 'FFE8ECEF'
+                        }
+                    };
+                });
+                ws.getRow(4).height = 30;
+
+                var firstDataRow = 5;
+                var r = firstDataRow;
+                rows.forEach(function(row, idx) {
+                    var R = ws.getRow(r);
+
+                    var cNo = R.getCell(COL.no);
+                    cNo.value = idx + 1;
+                    cNo.numFmt = '0';
+                    cNo.alignment = {
+                        horizontal: 'center',
+                        vertical: 'center'
+                    };
+                    cNo.border = BORDER_ALL;
+                    cNo.font = {
+                        name: REPORT_FONT,
+                        size: 11
+                    };
+                    var cNama = R.getCell(COL.nama);
+                    cNama.value = row.nama;
+                    cNama.alignment = {
+                        horizontal: 'left',
+                        vertical: 'center',
+                        wrapText: true
+                    };
+                    cNama.border = BORDER_ALL;
+                    cNama.font = {
+                        name: REPORT_FONT,
+                        size: 11
+                    };
+                    var cKua = R.getCell(COL.kua);
+                    cKua.value = row.kua;
+                    cKua.alignment = {
+                        horizontal: 'left',
+                        vertical: 'center'
+                    };
+                    cKua.border = BORDER_ALL;
+                    cKua.font = {
+                        name: REPORT_FONT,
+                        size: 11
+                    };
+                    var cNip = R.getCell(COL.nip);
+                    cNip.value = row.nip;
+                    cNip.numFmt = '@';
+                    cNip.alignment = {
+                        horizontal: 'center',
+                        vertical: 'center'
+                    };
+                    cNip.border = BORDER_ALL;
+                    cNip.font = {
+                        name: REPORT_FONT,
+                        size: 11
+                    };
+                    var cGol = R.getCell(COL.gol);
+                    cGol.value = row.golongan;
+                    cGol.alignment = {
+                        horizontal: 'center',
+                        vertical: 'center'
+                    };
+                    cGol.border = BORDER_ALL;
+                    cGol.font = {
+                        name: REPORT_FONT,
+                        size: 11
+                    };
+                    var cRekCsv = R.getCell(COL.rekcsv);
+                    cRekCsv.value = row.rekening || '';
+                    cRekCsv.numFmt = '@';
+                    cRekCsv.alignment = {
+                        horizontal: 'center',
+                        vertical: 'center'
+                    };
+                    cRekCsv.border = BORDER_ALL;
+                    cRekCsv.font = {
+                        name: REPORT_FONT,
+                        size: 11
+                    };
+
+                    var cJumlah = R.getCell(COL.jumlah);
+                    cJumlah.value = row.jumlahPeristiwa;
+                    cJumlah.numFmt = '0';
+                    cJumlah.alignment = {
+                        horizontal: 'center',
+                        vertical: 'center'
+                    };
+                    cJumlah.border = BORDER_ALL;
+                    cJumlah.font = {
+                        name: REPORT_FONT,
+                        size: 11
+                    };
+
+                    var tarifValue = isJaspro ? settings.tarifJaspro : settings.tarifTransport;
+                    var cTarif = R.getCell(COL.tarif);
+                    cTarif.value = tarifValue;
+                    cTarif.numFmt = CURRENCY_FMT;
+                    cTarif.alignment = {
+                        horizontal: 'center',
+                        vertical: 'center'
+                    };
+                    cTarif.border = BORDER_ALL;
+                    cTarif.font = {
+                        name: REPORT_FONT,
+                        size: 11
+                    };
+
+                    var colJumlahL = colLetter(COL.jumlah)
+                      , colTarifL = colLetter(COL.tarif)
+                      , colSubtotalL = colLetter(COL.subtotal);
+                    var subtotalValue = isJaspro ? row.jasproSubtotal : row.transpoSubtotal;
+                    var cSubtotal = R.getCell(COL.subtotal);
+                    cSubtotal.value = {
+                        formula: colJumlahL + r + '*' + colTarifL + r,
+                        result: subtotalValue
+                    };
+                    cSubtotal.numFmt = CURRENCY_FMT;
+                    cSubtotal.alignment = {
+                        horizontal: 'right',
+                        vertical: 'center'
+                    };
+                    cSubtotal.border = BORDER_ALL;
+                    cSubtotal.font = {
+                        name: REPORT_FONT,
+                        size: 11
+                    };
+
+                    if (isJaspro) {
+                        var colPphL = colLetter(COL.pph);
+                        var ratePctStr = (row.pphRate != null ? (row.pphRate * 100) : 0) + '%';
+                        var cPph = R.getCell(COL.pph);
+                        cPph.value = {
+                            formula: colSubtotalL + r + '*' + ratePctStr,
+                            result: row.jasproPph
+                        };
+                        cPph.numFmt = CURRENCY_FMT;
+                        cPph.alignment = {
+                            horizontal: 'right',
+                            vertical: 'center'
+                        };
+                        cPph.border = BORDER_ALL;
+                        cPph.font = {
+                            name: REPORT_FONT,
+                            size: 11
+                        };
+
+                        var cDiterima = R.getCell(COL.diterima);
+                        cDiterima.value = {
+                            formula: colSubtotalL + r + '-' + colPphL + r,
+                            result: row.jasproDiterima
+                        };
+                        cDiterima.numFmt = CURRENCY_FMT;
+                        cDiterima.alignment = {
+                            horizontal: 'right',
+                            vertical: 'center'
+                        };
+                        cDiterima.border = BORDER_ALL;
+                        cDiterima.font = {
+                            name: REPORT_FONT,
+                            size: 11,
+                            bold: true
+                        };
+                    } else {
+                        var cDiterima2 = R.getCell(COL.diterima);
+                        cDiterima2.value = {
+                            formula: colSubtotalL + r,
+                            result: row.transpoDiterima
+                        };
+                        cDiterima2.numFmt = CURRENCY_FMT;
+                        cDiterima2.alignment = {
+                            horizontal: 'right',
+                            vertical: 'center'
+                        };
+                        cDiterima2.border = BORDER_ALL;
+                        cDiterima2.font = {
+                            name: REPORT_FONT,
+                            size: 11,
+                            bold: true
+                        };
+                    }
+                    r++;
+                });
+
+                var totalRow = r;
+                var lastDataRow = r - 1;
+                ws.mergeCells(totalRow, COL.no, totalRow, COL.rekcsv);
+                var labelCell = ws.getCell(totalRow, COL.no);
+                labelCell.value = 'JUMLAH';
+                labelCell.font = {
+                    name: REPORT_FONT,
+                    size: 11,
+                    bold: true
+                };
+                labelCell.alignment = {
+                    horizontal: 'right',
+                    vertical: 'center'
+                };
+                labelCell.border = {
+                    top: THIN,
+                    bottom: THIN,
+                    left: THIN
+                };
+                ws.getCell(totalRow, COL.rekcsv).border = {
+                    top: THIN,
+                    bottom: THIN,
+                    right: THIN
+                };
+
+                function sumCol(colNum) {
+                    var cl = colLetter(colNum);
+                    var cell = ws.getCell(totalRow, colNum);
+                    var total = 0;
+                    rows.forEach(function(row) {
+                        if (colNum === COL.jumlah)
+                            total += row.jumlahPeristiwa;
+                        else if (colNum === COL.subtotal)
+                            total += isJaspro ? row.jasproSubtotal : row.transpoSubtotal;
+                        else if (isJaspro && colNum === COL.pph)
+                            total += row.jasproPph;
+                        else if (colNum === COL.diterima)
+                            total += isJaspro ? row.jasproDiterima : row.transpoDiterima;
+                    });
+                    cell.value = {
+                        formula: 'SUM(' + cl + firstDataRow + ':' + cl + lastDataRow + ')',
+                        result: total
+                    };
+                    cell.numFmt = colNum === COL.jumlah ? '#,##0' : CURRENCY_FMT;
+                    cell.font = {
+                        name: REPORT_FONT,
+                        size: 11,
+                        bold: true
+                    };
+                    cell.alignment = {
+                        horizontal: 'center',
+                        vertical: 'center'
+                    };
+                    cell.border = BORDER_ALL;
+                    return total;
+                }
+                sumCol(COL.jumlah);
+                ws.getCell(totalRow, COL.tarif).border = BORDER_ALL;
+                sumCol(COL.subtotal);
+                if (isJaspro)
+                    sumCol(COL.pph);
+                sumCol(COL.diterima);
+                ws.getRow(totalRow).height = 18;
+
+                // Footer / signature block — text at 12pt, with extra blank rows left for the
+                // physical signature/stamp between the "jabatan" line and the printed name.
+                var SIGNATURE_FONT_SIZE = 12;
+                var fr = totalRow + 3;
+                function mergeSet(row, colFrom, colTo, value, opts) {
+                    opts = opts || {};
+                    if (colTo > colFrom)
+                        ws.mergeCells(row, colFrom, row, colTo);
+                    var c = ws.getCell(row, colFrom);
+                    c.value = value;
+                    var f = {
+                        name: REPORT_FONT,
+                        size: SIGNATURE_FONT_SIZE,
+                        bold: true
+                    };
+                    if (opts.font)
+                        for (var k in opts.font)
+                            f[k] = opts.font[k];
+                    c.font = f;
+                    c.alignment = {
+                        horizontal: opts.h || 'left',
+                        vertical: opts.v || 'top',
+                        wrapText: false
+                    };
+                    return c;
+                }
+                var leftFrom = COL.nama
+                  , leftTo = COL.kua;
+                var midFrom = COL.gol
+                  , midTo = COL.rekcsv;
+                var rightFrom = isJaspro ? COL.pph : COL.tarif
+                  , rightTo = COL.diterima;
+
+                mergeSet(fr, leftFrom, leftTo, 'Mengetahui,');
+                mergeSet(fr, midFrom, midTo, footer.ppkLabel1 || 'Setuju Dibayar', {
+                    h: 'center'
+                });
+                mergeSet(fr, rightFrom, rightTo, footer.tempatTanggal, {
+                    h: 'right'
+                });
+                mergeSet(fr + 1, leftFrom, leftTo, footer.kpaJabatan);
+                mergeSet(fr + 1, midFrom, midTo, footer.ppkJabatan, {
+                    h: 'center'
+                });
+                mergeSet(fr + 1, rightFrom, rightTo, footer.bendaharaJabatan, {
+                    h: 'right'
+                });
+
+                // 2 extra blank rows of signing space vs. the previous layout (gap of 5 rows
+                // now, was 3): fr+1 is the jabatan line, fr+2..fr+6 are blank for a pen
+                // signature/stamp, fr+7 is where the printed name resumes.
+                var nameRow = fr + 7;
+                mergeSet(nameRow, leftFrom, leftTo, footer.kpaNama, {
+                    font: {
+                        underline: true
+                    }
+                });
+                mergeSet(nameRow, midFrom, midTo, footer.ppkNama, {
+                    h: 'center',
+                    font: {
+                        underline: true
+                    }
+                });
+                mergeSet(nameRow, rightFrom, rightTo, footer.bendaharaNama, {
+                    h: 'right',
+                    font: {
+                        underline: true
+                    }
+                });
+                mergeSet(nameRow + 1, leftFrom, leftTo, 'NIP. ' + footer.kpaNip, {
+                    font: {
+                        bold: false
+                    }
+                });
+                mergeSet(nameRow + 1, midFrom, midTo, 'NIP. ' + footer.ppkNip, {
+                    h: 'center',
+                    font: {
+                        bold: false
+                    }
+                });
+                mergeSet(nameRow + 1, rightFrom, rightTo, 'NIP. ' + footer.bendaharaNip, {
+                    h: 'right',
+                    font: {
+                        bold: false
+                    }
+                });
+
+                ws.views = [{
+                    state: 'frozen',
+                    ySplit: 4
+                }];
+                ws.pageSetup = {
+                    orientation: 'landscape',
+                    fitToPage: true,
+                    fitToWidth: 1,
+                    fitToHeight: 0,
+                    paperSize: 9
+                };
+            }
+
+            async function buildOutputWorkbook(rows, settings, footer) {
+                var wb = new ExcelJS.Workbook();
+                wb.creator = 'Tools Laporan Nominatif PNBP NR';
+                wb.created = new Date();
+
+                var wsJ = wb.addWorksheet('JASPRO');
+                buildReportSheet(wsJ, {
+                    title: 'DAFTAR NOMINATIF PENERIMAAN JASA PROFESI PENGHULU BULAN ' + settings.bulan + ' ' + settings.tahun,
+                    rows: rows,
+                    kind: 'jaspro',
+                    settings: settings,
+                    footer: footer,
+                });
+
+                var wsT = wb.addWorksheet('TRANSPO');
+                buildReportSheet(wsT, {
+                    title: 'DAFTAR NOMINATIF PENERIMAAN TRANSPORT PENGHULU BULAN ' + settings.bulan + ' ' + settings.tahun,
+                    rows: rows,
+                    kind: 'transpo',
+                    settings: settings,
+                    footer: footer,
+                });
+
+                return wb;
+            }
+
+            async function downloadWorkbook(wb, filename) {
+                var buffer = await wb.xlsx.writeBuffer();
+                var blob = new Blob([buffer],{
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(function() {
+                    URL.revokeObjectURL(url);
+                }, 4000);
+            }
+function classifyRow(row, settings) {
+                    var golClass = classifyGolongan(row.golongan);
+                    var pphRateMap = {
+                        II: settings.pphII / 100,
+                        III: settings.pphIII / 100,
+                        IV: settings.pphIV / 100,
+                        PPPK: settings.pphPPPK / 100
+                    };
+                    var pphRate = pphRateMap.hasOwnProperty(golClass) ? pphRateMap[golClass] : null;
+                    var jasproSubtotal = row.jumlahPeristiwa * settings.tarifJaspro;
+                    var jasproPph = pphRate != null ? Math.round(jasproSubtotal * pphRate) : 0;
+                    var jasproDiterima = jasproSubtotal - jasproPph;
+                    var transpoSubtotal = row.jumlahPeristiwa * settings.tarifTransport;
+                    return {
+                        golClass: golClass,
+                        pphRate: pphRate,
+                        jasproSubtotal: jasproSubtotal,
+                        jasproPph: jasproPph,
+                        jasproDiterima: jasproDiterima,
+                        transpoSubtotal: transpoSubtotal,
+                        transpoDiterima: transpoSubtotal,
+                    };
+                }
+function csvFieldSafe(val) {
+                    var s = String(val == null ? '' : val);
+                    s = s.replace(/[\r\n]+/g, ' ');
+                    s = s.replace(/\|/g, '/');
+                    s = s.replace(/"/g, '""');
+                    return s;
+                }
+function buildDisbursementRows(processedRows, masterList, kind) {
+                    var masterByRekening = {};
+                    (masterList || []).forEach(function(m) {
+                        if (m.noRekening)
+                            masterByRekening[m.noRekening] = m;
+                    });
+
+                    var groups = {};
+                    var order = [];
+                    processedRows.forEach(function(row) {
+                        // Group by the resolved account number whenever we have one — that's the
+                        // actual recipient identity. Two rows can carry differently-formatted or
+                        // typo'd source names (e.g. "RIDWAN, S.Sos" vs "RIDWAN. S.Sos") yet still
+                        // point to the same rekening once matched/confirmed, and must be paid as
+                        // a single combined line, not two. Only fall back to name-based grouping
+                        // when a row has no rekening at all to key on.
+                        var key = row.rekening ? ('REK:' + row.rekening) : ('NAMA:' + (normalizeCoreName(row.nama) || row.nama));
+                        if (!groups[key]) {
+                            var masterEntry = row.rekening ? masterByRekening[row.rekening] : null;
+                            groups[key] = {
+                                nama: masterEntry ? masterEntry.nama : row.nama,
+                                namaPemilik: row.namaPemilik || (masterEntry ? masterEntry.namaPemilik : ''),
+                                rekening: row.rekening || '',
+                                total: 0,
+                                hasTransaction: true,
+                            };
+                            order.push(key);
+                        }
+                        var g = groups[key];
+                        if (!g.rekening && row.rekening)
+                            g.rekening = row.rekening;
+                        if (!g.namaPemilik && row.namaPemilik)
+                            g.namaPemilik = row.namaPemilik;
+                        g.total += (kind === 'jaspro' ? row.jasproDiterima : row.transpoDiterima);
+                    });
+
+                    // Every account in Master Rekening is listed even if it had no transaction
+                    // this period, so the CSV is a complete roster — those get '-' for the amount.
+                    var usedRekening = {};
+                    order.forEach(function(k) {
+                        if (groups[k].rekening)
+                            usedRekening[groups[k].rekening] = true;
+                    });
+                    (masterList || []).forEach(function(m) {
+                        if (!m.noRekening || usedRekening[m.noRekening])
+                            return;
+                        var key = 'REK:' + m.noRekening;
+                        groups[key] = {
+                            nama: m.nama,
+                            namaPemilik: m.namaPemilik,
+                            rekening: m.noRekening,
+                            total: 0,
+                            hasTransaction: false
+                        };
+                        order.push(key);
+                    });
+
+                    order.sort(function(a, b) {
+                        return groups[a].nama.localeCompare(groups[b].nama, 'id');
+                    });
+
+                    return order.map(function(key, i) {
+                        var g = groups[key];
+                        return {
+                            no: i + 1,
+                            nama: g.nama,
+                            namaPemilik: g.namaPemilik || g.nama,
+                            rekening: g.rekening,
+                            total: g.hasTransaction ? Math.round(g.total) : null,
+                        };
+                    });
+                }
+function buildCsvContent(rows) {
+                    var headerLine = ['NO', 'NAMA_SUPPLIER', 'NAMA_PEMILIK_REKENING', 'NO_REKENING', 'JUMLAH_UANG'].join('|');
+                    var lines = ['"' + headerLine + '"'];
+                    rows.forEach(function(r) {
+                        var jumlahStr = r.total == null ? '-' : String(r.total);
+                        var fields = [r.no, csvFieldSafe(r.nama), csvFieldSafe(r.namaPemilik), csvFieldSafe(r.rekening), jumlahStr];
+                        lines.push('"' + fields.join('|') + '"');
+                    });
+                    return lines.join('\r\n');
+                }
+return { BULAN_LIST, normalizeCoreName, buildMasterIndex, matchPenghulu, golonganLabel, parseLaporanFile, parseMasterFile,
+  buildOutputWorkbook, downloadWorkbook, classifyRow, buildDisbursementRows, buildCsvContent };
+})();
+
+/* ====== Jaspro Transport: Laporan Nominatif PNBP NR (khusus admin) ======
+   Data hanya SATU baris di tabel jaspro_data (id = 1): setiap simpan menimpa data lama, tanpa riwayat. */
+const J = { on: false, master: [], laporan: null, set: {}, rows: null, stale: false, tab: 'input', q: '', t: null };
+const jpDef = () => ({
+  bulan: JX.BULAN_LIST[new Date().getMonth()], tahun: new Date().getFullYear(), tarifJaspro: 100000, tarifTransport: 50000,
+  pphII: 0, pphIII: 5, pphIV: 15, pphPPPK: 5, tempatTanggal: '',
+  kpaJabatan: 'Kuasa Pengguna Anggaran', kpaNama: '', kpaNip: '', ppkJabatan: 'Pejabat Pembuat Komitmen', ppkNama: '', ppkNip: '',
+  bendaharaJabatan: 'Bendahara Bimas', bendaharaNama: '', bendaharaNip: ''
+});
+const jpReset = () => Object.assign(J, { on: false, master: [], laporan: null, rows: null });
+const jpX = () => loadJs(CDN.exceljs);   // ExcelJS hanya dimuat saat dibutuhkan
+const JST = { OTOMATIS: ['success', 'Cocok otomatis'], OTOMATIS_FUZZY: ['warning', 'Cocok (mirip)'], AMBIGU: ['warning', 'Ambigu'], TIDAK_DITEMUKAN: ['danger', 'Tidak ditemukan'], MANUAL: ['secondary', 'Diisi manual'] };
+
+const jpStat = (t, c) => { const b = $('jstat'); if (b) { b.className = 'badge bg-label-' + c; b.textContent = t; } };
+const jpToast = (m, c = 'success') => {
+  const h = $('jtoast') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'jtoast' }));
+  const e = Object.assign(document.createElement('div'), { className: 'jp-toast ' + c, textContent: m });
+  h.append(e); setTimeout(() => e.remove(), 4500);
+};
+async function jpSave(patch) {   // satu permintaan; hanya kolom yang dikirim yang ditimpa
+  jpStat('Menyimpan…', 'secondary');
+  const { error } = await sb.from('jaspro_data').upsert({ id: 1, ...patch }, { onConflict: 'id' });
+  jpStat(error ? 'Gagal menyimpan' : 'Tersimpan', error ? 'danger' : 'success');
+  if (error) jpToast('Gagal menyimpan ke server: ' + error.message, 'danger');
+  return !error;
+}
+const jpDlg = (h, wire) => { const d = $('dlg'); d.innerHTML = `<div class="p-4">${h}</div>`; wire?.(d); if (!d.open) d.showModal(); };
+const jpAsk = (title, msg, label, ok, danger) => jpDlg(
+  `<h5 class="mb-2">${esc(title)}</h5><p>${esc(msg)}</p><div class="d-flex justify-content-end gap-2"><button class="btn btn-outline-secondary" data-x>Batal</button><button class="btn btn-${danger ? 'danger' : 'primary'}" data-ok>${esc(label)}</button></div>`,
+  d => { d.querySelector('[data-x]').onclick = () => d.close(); d.querySelector('[data-ok]').onclick = () => { d.close(); ok(); }; });
+const jpCard = (ic, c, v, l) => `<div class="col-6 col-lg"><div class="card h-100"><div class="card-body d-flex align-items-center gap-3 py-3"><div class="avatar rounded bg-label-${c}"><i class="bx ${ic} fs-4"></i></div><div class="lh-sm"><div class="fw-semibold fs-5">${v}</div><small>${l}</small></div></div></div></div>`;
+
+async function pageJaspro() {
+  $('view').innerHTML = `<div class="jp" id="jroot">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+      <div><h4 class="mb-1">Jaspro Transport</h4><p class="mb-0">Daftar nominatif Jasa Profesi &amp; Transport Penghulu (PNBP NR) dari data mentah. Hanya satu set data yang disimpan: unggahan baru menimpa yang lama.</p></div>
+      <span id="jstat" class="badge bg-label-secondary">Memuat…</span></div>
+    <div id="jmsg"></div><div id="jsteps"></div><div id="jpanel">Memuat…</div></div>`;
+  if (!J.on) {
+    const { data, error } = await sb.from('jaspro_data').select('master,laporan,settings').eq('id', 1).maybeSingle();
+    if (error) return $('jpanel').innerHTML = note('Gagal memuat data Jaspro: ' + error.message + ' (jalankan bop.sql terbaru di Supabase bila tabel jaspro_data belum ada).');
+    Object.assign(J, { master: data?.master || [], laporan: data?.laporan || null, set: { ...jpDef(), ...(data?.settings || {}) }, rows: null, stale: false, on: true });
+  }
+  jpStat('Tersimpan', 'success');
+  const r = $('jroot');
+  r.onclick = jpClick; r.onchange = jpChange; r.oninput = jpInput;
+  r.ondragover = e => { if (e.target.closest('.jp-drop')) e.preventDefault(); };
+  r.ondrop = e => { if (e.target.closest('.jp-drop')) { e.preventDefault(); jpLaporan(e.dataTransfer.files[0]); } };
+  jpRender();
+}
+
+function jpRender() {
+  const done = { input: J.laporan?.rows?.length, master: J.master.length, proses: J.rows };
+  const S = [['input', 'Input Laporan', 'Unggah nominatif .xlsx'], ['master', 'Master Rekening', 'Nama &amp; nomor rekening'], ['proses', 'Proses &amp; Unduh', 'Cocokkan lalu unduh']];
+  $('jsteps').innerHTML = `<div class="card mb-4"><div class="card-body py-2"><div class="jp-steps">${S.map(([k, t, s], i) =>
+    `<button class="jp-step${J.tab === k ? ' on' : ''}${done[k] ? ' done' : ''}" data-act="tab" data-tab="${k}"><span class="n">${done[k] ? '<i class="bx bx-check"></i>' : i + 1}</span><span>${t}<small>${s}</small></span></button>`).join('')}</div></div></div>`;
+  $('jpanel').innerHTML = { input: pIn, master: pMa, proses: pPr }[J.tab]();
+  if (J.tab === 'proses') { jpProcBtn(); jpReview(); }
+}
+
+/* ---- Langkah 1: Input Laporan Nominatif ---- */
+const pIn = () => {
+  const R = J.laporan?.rows || [], u = new Set(R.map(r => JX.normalizeCoreName(r.nama) || r.nama)).size, tp = R.reduce((s, r) => s + (r.jumlahPeristiwa || 0), 0);
+  return `<div class="card"><div class="card-body">
+    <h5 class="mb-1">Input Laporan Nominatif</h5>
+    <p class="mb-3">Unggah laporan nominatif bulanan (.xlsx), satu baris per penghulu per KUA. Nomor rekening diambil dari Master Rekening. File baru <b>menggantikan</b> laporan yang tersimpan.</p>
+    <div class="jp-drop" data-act="upl"><div class="avatar rounded bg-label-primary mx-auto mb-2"><i class="bx bx-cloud-upload fs-3"></i></div>
+      <div class="fw-semibold">Seret file ke sini, atau klik untuk memilih</div><small>Format .xlsx · Kolom wajib: Nama Penghulu, KUA, NIP, Golongan, Jumlah Peristiwa</small></div>
+    <input type="file" id="jfl" accept=".xlsx" hidden>
+    ${R.length ? `<div class="row g-3 mt-1">${jpCard('bx-list-ul', 'primary', R.length, 'Total baris')}${jpCard('bx-user', 'info', u, 'Penghulu')}${jpCard('bx-calendar-check', 'success', tp, 'Total peristiwa')}</div>
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 my-3"><span>${R.length} baris dari “${esc(J.laporan.fileName)}”</span><button class="btn btn-sm btn-outline-danger" data-act="clr"><i class="bx bx-trash"></i> Hapus laporan</button></div>
+      <div class="scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th><th class="text-end">Peristiwa</th></tr></thead>
+      <tbody>${R.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td><td>${esc(r.golongan)}</td><td class="text-end">${esc(r.jumlahPeristiwa)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+  </div></div>`;
+};
+async function jpLaporan(f) {
+  if (!f) return;
+  if (!/\.xlsx$/i.test(f.name)) return jpToast('Format file harus .xlsx', 'danger');
+  jpStat('Membaca file…', 'secondary');
+  let r; try { await jpX(); r = await JX.parseLaporanFile(f); } catch (e) { r = { ok: false, error: e.message }; }
+  if (r.ok && r.rows.length > 5000) r = { ok: false, error: 'Maksimal 5.000 baris per laporan.' };
+  if (!r.ok) { jpStat('Tersimpan', 'success'); return $('jmsg').innerHTML = note(r.error); }
+  J.laporan = { fileName: f.name, rows: r.rows }; J.rows = null; J.stale = true;
+  const ok = await jpSave({ laporan: J.laporan });   // menimpa laporan sebelumnya
+  jpRender();
+  $('jmsg').innerHTML = ok ? note(`${r.rows.length} baris dimuat dari "${f.name}"${r.skipped ? ` (${r.skipped} baris jumlah dilewati)` : ''}. Laporan sebelumnya sudah diganti.`, 'success') : '';
+}
+
+/* ---- Langkah 2: Master Rekening ---- */
+const jpMRows = () => {
+  const q = JX.normalizeCoreName(J.q), cnt = {};
+  J.master.forEach(m => { const k = JX.normalizeCoreName(m.nama); cnt[k] = (cnt[k] || 0) + 1; });
+  const L = J.master.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).filter(m => !q || JX.normalizeCoreName(m.nama).includes(q));
+  return { n: L.length, html: L.map(m => `<tr><td>${esc(m.nama)}${cnt[JX.normalizeCoreName(m.nama)] > 1 ? ' <span class="badge bg-label-warning" title="Ada lebih dari satu entri dengan nama mirip">duplikat?</span>' : ''}</td><td>${esc(m.namaPemilik || m.nama)}</td><td>${esc(m.noRekening)}</td>
+    <td class="text-end text-nowrap"><button class="btn btn-sm btn-outline-secondary px-2" data-act="medit" data-id="${esc(m.id)}" aria-label="Ubah"><i class="bx bx-edit"></i></button> <button class="btn btn-sm btn-outline-danger px-2" data-act="mdel" data-id="${esc(m.id)}" aria-label="Hapus"><i class="bx bx-trash"></i></button></td></tr>`).join('') };
+};
+const jpMCount = n => `Total: ${J.master.length} penghulu${J.q ? ' · ' + n + ' cocok pencarian' : ''}`;
+const pMa = () => {
+  const r = jpMRows();
+  return `<div class="card"><div class="card-body">
+    <h5 class="mb-1">Master Rekening Penghulu</h5><p class="mb-3">Data induk nama &amp; nomor rekening penghulu. Tersimpan di server dan dipakai mengisi nomor rekening pada laporan.</p>
+    <div class="d-flex flex-wrap gap-2 mb-3"><div class="input-group" style="max-width:320px"><span class="input-group-text"><i class="bx bx-search"></i></span><input id="jq" type="search" class="form-control" placeholder="Cari nama penghulu…" value="${esc(J.q)}"></div>
+      <span class="flex-grow-1"></span><input type="file" id="jfm" accept=".xlsx" hidden>
+      <button class="btn btn-outline-secondary" data-act="mimp"><i class="bx bx-upload"></i> Impor Excel</button>
+      <button class="btn btn-outline-secondary" data-act="mexp"><i class="bx bx-download"></i> Ekspor Excel</button>
+      <button class="btn btn-primary" data-act="madd"><i class="bx bx-plus"></i> Tambah Penghulu</button></div>
+    ${J.master.length ? `<div class="scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>Nama</th><th>Nama Pemilik Rekening</th><th>Nomor Rekening</th><th></th></tr></thead><tbody id="jmt">${r.html}</tbody></table></div><div class="mt-2" id="jmc">${jpMCount(r.n)}</div>`
+      : `<div class="text-center py-5"><div class="avatar rounded bg-label-secondary mx-auto mb-2"><i class="bx bx-id-card fs-3"></i></div><div class="fw-semibold">Belum ada data rekening</div><small>Tambah satu per satu, atau impor dari Excel (kolom: Nama, NamaPemilik, NomorRekening).</small></div>`}
+  </div></div>`;
+};
+function jpMForm(id) {
+  const m = J.master.find(x => x.id === id);
+  jpDlg(`<h5 class="mb-1">${m ? 'Ubah' : 'Tambah'} Penghulu</h5><p class="mb-3">Nama dicocokkan otomatis dengan nama pada laporan nominatif.</p><div id="jfe"></div>
+    <label class="form-label">Nama Penghulu</label><input id="jfn" class="form-control mb-3" placeholder="ABDUL KARIM, S.Ag" value="${esc(m?.nama)}">
+    <label class="form-label">Nama Pemilik Rekening</label><input id="jfo" class="form-control mb-3" placeholder="(samakan dengan Nama jika kosong)" value="${esc(m?.namaPemilik)}">
+    <label class="form-label">Nomor Rekening</label><input id="jfr" class="form-control mb-4" placeholder="7200548398" value="${esc(m?.noRekening)}">
+    <div class="d-flex justify-content-end gap-2"><button class="btn btn-outline-secondary" data-x>Batal</button><button class="btn btn-primary" data-ok>${m ? 'Simpan Perubahan' : 'Tambah'}</button></div>`,
+  d => {
+    d.querySelector('[data-x]').onclick = () => d.close();
+    d.querySelector('[data-ok]').onclick = async () => {
+      const nama = $('jfn').value.trim(), rek = $('jfr').value.trim();
+      if (!nama || !rek) return $('jfe').innerHTML = note('Nama dan nomor rekening wajib diisi.', 'warning');
+      const v = { nama, namaPemilik: $('jfo').value.trim() || nama, noRekening: rek };
+      if (m) Object.assign(m, v); else J.master.push({ id: 'm_' + Date.now() + '_' + Math.floor(Math.random() * 1e6), ...v });
+      J.stale = true; d.close();
+      if (await jpSave({ master: J.master })) jpToast(`Data "${nama}" disimpan.`);
+      jpRender();
+    };
+  });
+}
+async function jpImport(f) {
+  if (!f) return;
+  if (!/\.xlsx$/i.test(f.name)) return jpToast('Format file harus .xlsx', 'danger');
+  let r; try { await jpX(); r = await JX.parseMasterFile(f); } catch (e) { r = { ok: false, error: e.message }; }
+  if (!r.ok) return jpToast(r.error, 'danger');
+  const n = r.entries.length, has = J.master.length, go = async mode => {
+    if (mode === 'replace') J.master = r.entries.map(({ id, nama, namaPemilik, noRekening }) => ({ id, nama, namaPemilik, noRekening }));
+    else {
+      const ix = JX.buildMasterIndex(J.master); let a = 0, u = 0;
+      r.entries.forEach(e => {
+        const m = ix[JX.normalizeCoreName(e.nama)];
+        if (m?.length === 1) { Object.assign(m[0], { nama: e.nama, namaPemilik: e.namaPemilik, noRekening: e.noRekening }); u++; } else { J.master.push(e); a++; }
+      });
+      jpToast(`${a} data ditambahkan, ${u} diperbarui.`);
+    }
+    J.stale = true; await jpSave({ master: J.master }); jpRender();
+  };
+  jpDlg(`<h5 class="mb-2">Impor ${n} data rekening</h5><p>${has ? `Master Rekening saat ini berisi ${has} data. Pilih cara memakai data dari "${esc(f.name)}".` : `Master Rekening masih kosong; ${n} data dari "${esc(f.name)}" akan ditambahkan.`}</p>
+    <div class="d-grid gap-2">${has ? '<button class="btn btn-primary" data-m="merge">Gabungkan (perbarui yang cocok, tambah yang baru)</button><button class="btn btn-outline-danger" data-m="replace">Ganti semua data</button>' : `<button class="btn btn-primary" data-m="merge">Tambahkan ${n} data</button>`}<button class="btn btn-outline-secondary" data-x>Batal</button></div>`,
+  d => {
+    d.querySelector('[data-x]').onclick = () => d.close();
+    d.querySelectorAll('[data-m]').forEach(b => b.onclick = () => b.dataset.m === 'replace'
+      ? jpAsk('Ganti semua data?', `Seluruh ${has} data Master Rekening akan DIHAPUS dan diganti ${n} data dari file ini.`, 'Ganti Semua', () => go('replace'), true)
+      : (d.close(), go('merge')));
+  });
+}
+async function jpMExp() {
+  if (!J.master.length) return jpToast('Belum ada data untuk diekspor.', 'warning');
+  try {
+    await jpX();
+    const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('MASTER');
+    ws.columns = [{ width: 5 }, { width: 32 }, { width: 26 }, { width: 20 }];
+    ws.addRow(['No', 'Nama', 'NamaPemilik', 'NomorRekening']).font = { bold: true };
+    J.master.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).forEach((m, i) => { ws.addRow([i + 1, m.nama, m.namaPemilik, m.noRekening]).getCell(4).numFmt = '@'; });
+    await JX.downloadWorkbook(wb, 'MASTER_REKENING.xlsx'); jpToast('Master Rekening diekspor.');
+  } catch (e) { jpToast(e.message, 'danger'); }
+}
+
+/* ---- Langkah 3: Proses & Unduh ---- */
+const pPr = () => {
+  const f = (k, l, n, c = 'col-sm-6 col-lg-3') => `<div class="${c}"><label class="form-label">${l}</label><input class="form-control" ${n ? 'type="number" min="0" data-n' : 'type="text"'} data-s="${k}" value="${esc(J.set[k])}"></div>`;
+  return `<div class="card mb-4"><div class="card-body">
+    <h5 class="mb-1">Proses &amp; Unduh Laporan</h5><p class="mb-4">Atur periode, tarif, dan tanda tangan, cocokkan data, lalu unduh Excel (sheet JASPRO &amp; TRANSPO) atau CSV pencairan. Pengaturan tersimpan otomatis.</p>
+    <h6 class="text-uppercase small">Periode &amp; tarif per peristiwa</h6>
+    <div class="row g-3 mb-4"><div class="col-sm-6 col-lg-3"><label class="form-label">Bulan</label><select class="form-select" data-s="bulan">${JX.BULAN_LIST.map(b => `<option value="${b}"${b === J.set.bulan ? ' selected' : ''}>${b[0] + b.slice(1).toLowerCase()}</option>`).join('')}</select></div>
+      ${f('tahun', 'Tahun', 1)}${f('tarifJaspro', 'Tarif Jasa Profesi (Rp)', 1)}${f('tarifTransport', 'Tarif Transport (Rp)', 1)}</div>
+    <h6 class="text-uppercase small">Tarif PPh Jasa Profesi (%) <span class="fw-normal text-lowercase">· transport tidak dikenakan PPh</span></h6>
+    <div class="row g-3 mb-4">${f('pphII', 'PNS Golongan II', 1)}${f('pphIII', 'PNS Golongan III', 1)}${f('pphIV', 'PNS Golongan IV', 1)}${f('pphPPPK', 'PPPK Golongan IX', 1)}</div>
+    <h6 class="text-uppercase small">Blok tanda tangan</h6>
+    <div class="row g-3 mb-3">${f('tempatTanggal', 'Tempat &amp; tanggal', 0, 'col-sm-6 col-lg-4')}</div>
+    <div class="row g-3">${[['kpa', 'Kolom Kiri'], ['ppk', 'Kolom Tengah'], ['bendahara', 'Kolom Kanan']].map(([p, t]) => `<div class="col-lg-4"><div class="border rounded p-3"><div class="fw-semibold">${t}</div>${[['Jabatan', 'Jabatan'], ['Nama', 'Nama'], ['Nip', 'NIP']].map(([k, l]) => `<label class="form-label mt-2 mb-1">${l}</label><input class="form-control form-control-sm" data-s="${p + k}" value="${esc(J.set[p + k])}">`).join('')}</div></div>`).join('')}</div>
+    <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-4"><span id="jph" class="small"></span><button class="btn btn-primary" id="jpb" data-act="proc"><i class="bx bx-check-double"></i> Cocokkan &amp; Pratinjau Data</button></div>
+  </div></div><div id="jrev"></div>`;
+};
+function jpProcBtn() {
+  const b = $('jpb'); if (!b) return;
+  const l = J.laporan?.rows?.length, m = J.master.length;
+  b.disabled = !(l && m);
+  $('jph').textContent = !l && !m ? 'Lengkapi Input Laporan dan Master Rekening terlebih dahulu.' : !l ? 'Unggah Laporan Nominatif terlebih dahulu.' : !m ? 'Tambahkan data Master Rekening terlebih dahulu.' : J.stale && J.rows ? 'Data sumber berubah — klik untuk memperbarui pratinjau.' : '';
+}
+function jpProcess() {
+  const ix = JX.buildMasterIndex(J.master);
+  J.rows = J.laporan.rows.map(r => {
+    const m = JX.matchPenghulu(r.nama, J.master, ix);
+    return { ...r, ...JX.classifyRow(r, J.set), rekening: m.entry ? m.entry.noRekening : (r.noRekeningSumber || ''), namaPemilik: m.entry ? m.entry.namaPemilik : '', matchStatus: m.entry ? m.status : 'TIDAK_DITEMUKAN', candidates: m.candidates };
+  });
+  J.stale = false; jpRender(); $('jrev').scrollIntoView({ behavior: 'smooth' });
+}
+function jpReview() {
+  const R = J.rows, h = $('jrev'); if (!h) return;
+  if (!R) return h.innerHTML = '';
+  const sum = k => R.reduce((s, r) => s + r[k], 0), ok = R.filter(r => r.matchStatus === 'OTOMATIS').length, bad = R.filter(r => !['OTOMATIS', 'MANUAL'].includes(r.matchStatus)).length;
+  h.innerHTML = `<div class="row g-3 mb-4">${jpCard('bx-list-ul', 'primary', R.length, 'Total baris')}${jpCard('bx-check-circle', 'success', ok, 'Cocok otomatis')}${jpCard('bx-error', bad ? 'warning' : 'success', bad, 'Perlu ditinjau')}${jpCard('bx-wallet', 'info', 'Rp ' + rp(Math.round(sum('jasproDiterima'))), 'Jaspro diterima')}${jpCard('bx-bus', 'info', 'Rp ' + rp(Math.round(sum('transpoDiterima'))), 'Transport diterima')}</div>
+    <div class="card mb-3"><div class="card-body"><p class="mb-3">Tinjau hasil pencocokan. Kolom <b>Golongan</b>, <b>No. Rekening</b>, dan <b>Nama Pemilik</b> dapat diedit langsung (tidak disimpan ke server).</p>
+    <div class="scroll"><table class="table align-middle mb-0"><thead><tr><th>No</th><th>Nama</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Status</th><th>No. Rekening</th><th>Nama Pemilik</th><th class="text-end">Peristiwa</th><th class="text-end">Jaspro (Rp)</th><th class="text-end">Transport (Rp)</th></tr></thead>
+    <tbody>${R.map((r, i) => {
+      const [c, l] = JST[r.matchStatus] || JST.TIDAK_DITEMUKAN, isBad = !['OTOMATIS', 'MANUAL'].includes(r.matchStatus), cd = r.candidates?.[0], unk = r.golClass === 'UNKNOWN';
+      return `<tr class="${isBad ? 'issue' : ''}"><td>${i + 1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td>
+        <td><input class="form-control form-control-sm" style="width:84px" data-i="${i}" data-f="gol" value="${esc(r.golongan)}"><span class="badge bg-label-${unk ? 'danger' : 'secondary'} mt-1">${unk ? '? tidak dikenali' : esc(JX.golonganLabel(r.golClass))}</span></td>
+        <td><span class="badge bg-label-${c}">${l}</span>${isBad && cd ? `<button class="btn btn-link btn-sm p-0 d-block text-start" data-act="use" data-i="${i}">Pakai: ${esc(cd.nama.slice(0, 22))}${cd.nama.length > 22 ? '…' : ''}</button>` : ''}</td>
+        <td><input class="form-control form-control-sm" style="width:140px" list="jdl-list" data-i="${i}" data-f="rek" value="${esc(r.rekening)}"></td>
+        <td><input class="form-control form-control-sm" style="width:160px" data-i="${i}" data-f="own" value="${esc(r.namaPemilik || '')}" placeholder="(sama dengan nama)"></td>
+        <td class="text-end">${esc(r.jumlahPeristiwa)}</td><td class="text-end">${rp(Math.round(r.jasproDiterima))}</td><td class="text-end">${rp(Math.round(r.transpoDiterima))}</td></tr>`;
+    }).join('')}</tbody></table></div>
+    <datalist id="jdl-list">${J.master.map(m => `<option value="${esc(m.noRekening)}">${esc(m.nama)}</option>`).join('')}</datalist></div></div>
+    <div class="d-flex flex-wrap justify-content-end gap-2"><button class="btn btn-outline-secondary" data-act="dct"><i class="bx bx-download"></i> CSV Transport</button><button class="btn btn-outline-secondary" data-act="dcj"><i class="bx bx-download"></i> CSV Jaspro</button><button class="btn btn-primary" data-act="dxl"><i class="bx bx-download"></i> Unduh Laporan Excel</button></div>`;
+}
+function jpDl(kind) {   // kind: xlsx | jaspro | transpo
+  const rek = J.rows.filter(r => !r.rekening).length, gol = J.rows.filter(r => r.golClass === 'UNKNOWN').length;
+  const go = () => kind === 'xlsx' ? jpExcel() : jpCsv(kind);
+  const msg = [rek && `${rek} baris tanpa nomor rekening`, kind === 'xlsx' && gol && `${gol} baris golongan tidak dikenali (PPh dihitung 0%)`].filter(Boolean).join(' dan ');
+  if (msg) jpAsk('Masih ada data yang perlu ditinjau', msg + '. File tetap bisa dibuat dengan kolom terkait kosong/0. Lanjutkan mengunduh?', 'Lanjutkan Unduh', go); else go();
+}
+async function jpExcel() {
+  const s = J.set, f = { tempatTanggal: s.tempatTanggal || '' };
+  ['kpa', 'ppk', 'bendahara'].forEach(p => ['Jabatan', 'Nama', 'Nip'].forEach(k => f[p + k] = s[p + k]));
+  try {
+    await jpX();
+    const n = `${s.bulan}_LAPORAN_NOMINATIF_PNBP_NR_${s.tahun}.xlsx`;
+    await JX.downloadWorkbook(await JX.buildOutputWorkbook(J.rows, s, f), n); jpToast('Laporan diunduh: ' + n);
+  } catch (e) { jpToast('Gagal membuat file: ' + e.message, 'danger'); }
+}
+function jpCsv(kind) {
+  const s = J.set, n = `${s.bulan}_CSV_${kind === 'jaspro' ? 'JASPRO' : 'TRANSPORT'}_${s.tahun}.csv`;
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([JX.buildCsvContent(JX.buildDisbursementRows(J.rows, J.master, kind))], { type: 'text/csv;charset=utf-8' })), download: n });
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); jpToast('CSV diunduh: ' + n);
+}
+
+/* ---- Event (delegasi pada #jroot) ---- */
+function jpClick(e) {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const a = b.dataset.act, id = b.dataset.id;
+  if (a === 'tab') { J.tab = b.dataset.tab; $('jmsg').innerHTML = ''; jpRender(); }
+  else if (a === 'upl') $('jfl').click();
+  else if (a === 'clr') jpAsk('Hapus laporan tersimpan?', 'Laporan Nominatif yang tersimpan di server akan dihapus.', 'Hapus', async () => { J.laporan = null; J.rows = null; if (await jpSave({ laporan: null })) jpRender(); }, true);
+  else if (a === 'mimp') $('jfm').click();
+  else if (a === 'mexp') jpMExp();
+  else if (a === 'madd') jpMForm();
+  else if (a === 'medit') jpMForm(id);
+  else if (a === 'mdel') {
+    const m = J.master.find(x => x.id === id);
+    if (m) jpAsk('Hapus data penghulu?', `"${m.nama}" akan dihapus dari Master Rekening.`, 'Hapus', async () => { J.master = J.master.filter(x => x.id !== id); J.stale = true; await jpSave({ master: J.master }); jpRender(); }, true);
+  }
+  else if (a === 'proc') jpProcess();
+  else if (a === 'use') { const r = J.rows[b.dataset.i], c = r.candidates[0]; Object.assign(r, { rekening: c.noRekening, namaPemilik: c.namaPemilik, matchStatus: 'MANUAL' }); jpReview(); }
+  else if (a === 'dxl') jpDl('xlsx');
+  else if (a === 'dcj') jpDl('jaspro');
+  else if (a === 'dct') jpDl('transpo');
+}
+function jpChange(e) {
+  const t = e.target, d = t.dataset;
+  if (t.id === 'jfl') { jpLaporan(t.files[0]); t.value = ''; }
+  else if (t.id === 'jfm') { jpImport(t.files[0]); t.value = ''; }
+  else if (d.i != null && J.rows) {
+    const r = J.rows[d.i];
+    if (d.f === 'gol') { r.golongan = t.value; Object.assign(r, JX.classifyRow(r, J.set)); jpReview(); }
+    else if (d.f === 'rek') { r.rekening = t.value.trim(); r.matchStatus = 'MANUAL'; const m = J.master.find(x => x.noRekening === r.rekening); if (m) r.namaPemilik = m.namaPemilik; jpReview(); }
+    else if (d.f === 'own') r.namaPemilik = t.value.trim();
+  }
+}
+function jpInput(e) {
+  const t = e.target;
+  if (t.id === 'jq') { J.q = t.value; const r = jpMRows(); $('jmt').innerHTML = r.html; $('jmc').textContent = jpMCount(r.n); }
+  else if (t.dataset.s) {   // pengaturan: ketikan beruntun digabung jadi satu simpan
+    J.set[t.dataset.s] = 'n' in t.dataset ? (parseFloat(t.value) || 0) : t.value; J.stale = true;
+    clearTimeout(J.t); J.t = setTimeout(() => jpSave({ settings: J.set }), 800); jpProcBtn();
+  }
+}
+
+/* ====== BAST NR: Berita Acara Serah Terima Sarana Administrasi NR (khusus admin) ======
+   Data: tabel bast_pegawai, bast_ba, bast_setting (bop.sql bagian 13). Arsip dokumen: Google Drive lewat Edge Function bop (aksi bast-*).
+   BX = kode lama (script.js + pdf.js) yang disalin apa adanya: format nomor surat, alamat lengkap, dan PDF resmi. */
+const BX = (() => {
+  let _settingsCache = {}, _pegawaiCache = [];
+const HARI_ID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', "Jum'at", 'Sabtu'];
+const BULAN_ID = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+];
+const JABATAN_BIMAS = [
+  'Kepala Seksi Bimas', 'Penyuluh Agama Kristen', 'Penyuluh Agama Katolik',
+  'JFU', 'JFT', 'Badan Penyelenggara Jaminan Produk Halal', 'Pengelola Pengadaan Barang dan Jasa'
+];
+const JABATAN_KUA = [
+  'Kepala KUA', 'Plt. Kepala KUA', 'Penghulu', 'Penyuluh Agama Islam', 'JFU',
+  'Pengadministrasi', 'Pengelola Umum Operasional', 'Penata Layanan Operasional',
+  'Operator Layanan Operasional', 'Operator KUA', 'Tenaga Administrasi', 'Staf KUA', 'Honorer'
+];
+const ALAMAT_BIMAS_DEFAULT = 'Jl. Olah Raga No. 03, Kelurahan Karanganyar, Kecamatan Indramayu, Kabupaten Indramayu';
+const KUA_LIST = [
+  { nama: 'Anjatan', alamat: 'Jl. Raya Cilandak No. 31, Kecamatan Anjatan, Kabupaten Indramayu' },
+  { nama: 'Arahan', alamat: 'Jl. Raya Cidempet, Kecamatan Arahan, Kabupaten Indramayu' },
+  { nama: 'Balongan', alamat: 'Jl. Raya Tegalurung KM. 06, Kecamatan Balongan, Kabupaten Indramayu' },
+  { nama: 'Bangodua', alamat: 'Jl. Raya Curug-Tegalgirang No. 68, Kecamatan Bangodua, Kabupaten Indramayu' },
+  { nama: 'Bongas', alamat: 'Jl. Kertajaya No. 01, Kecamatan Bongas, Kabupaten Indramayu' },
+  { nama: 'Cantigi', alamat: 'Jl. Raya Cantigi Kulon, Desa Cantigi Kulon, Kecamatan Cantigi, Kabupaten Indramayu' },
+  { nama: 'Cikedung', alamat: 'Jl. Raya Cikedung, Kecamatan Cikedung, Kabupaten Indramayu' },
+  { nama: 'Gabuswetan', alamat: 'Jl. PU Saradan No. 371, Kecamatan Gabuswetan, Kabupaten Indramayu' },
+  { nama: 'Gantar', alamat: 'Jl. Raya Gantar KM. 07, Kecamatan Gantar, Kabupaten Indramayu' },
+  { nama: 'Haurgeulis', alamat: 'Jl. Jendral Sudirman No. 35, Kecamatan Haurgeulis, Kabupaten Indramayu' },
+  { nama: 'Indramayu', alamat: 'Jl. Wiralodra No. 09, Kelurahan Lemah Mekar, Kecamatan Indramayu, Kabupaten Indramayu' },
+  { nama: 'Jatibarang', alamat: 'Jl. Raya Jatisawit Blok Karang Malang, Kecamatan Jatibarang, Kabupaten Indramayu' },
+  { nama: 'Juntinyuat', alamat: 'Jl. Raya Juntinyuat No. 6, Kecamatan Juntinyuat, Kabupaten Indramayu' },
+  { nama: 'Kandanghaur', alamat: 'Jl. Raya Ilir Kandanghaur No. 14, Kecamatan Kandanghaur, Kabupaten Indramayu' },
+  { nama: 'Karangampel', alamat: 'Jl. Raya Dampuawang No. 131, Kecamatan Karangampel, Kabupaten Indramayu' },
+  { nama: 'Kedokan Bunder', alamat: 'Jl. Raya Cangkingan KM. 3,5, Kecamatan Kedokan Bunder, Kabupaten Indramayu' },
+  { nama: 'Kertasemaya', alamat: 'Jl. Raya Bondan No. 09, Kecamatan Kertasemaya, Kabupaten Indramayu' },
+  { nama: 'Krangkeng', alamat: 'Jl. Raya Krangkeng No. 06, Kecamatan Krangkeng, Kabupaten Indramayu' },
+  { nama: 'Kroya', alamat: 'Jl. Raya Pejaten, Kecamatan Kroya, Kabupaten Indramayu' },
+  { nama: 'Lelea', alamat: 'Jl. Raya Lelea-Tugu No. 13, Kecamatan Lelea, Kabupaten Indramayu' },
+  { nama: 'Lohbener', alamat: 'Jl. Raya Lohbener No. 10, Kecamatan Lohbener, Kabupaten Indramayu' },
+  { nama: 'Losarang', alamat: 'Jl. Turangga Bahari No. 2, Desa Jangga, Kecamatan Losarang, Kabupaten Indramayu' },
+  { nama: 'Pasekan', alamat: 'Jl. Pattimura No. 2003, Karanganyar, Kecamatan Pasekan, Kabupaten Indramayu' },
+  { nama: 'Patrol', alamat: 'Jl. Raya Patrol KM. 46, Kecamatan Patrol, Kabupaten Indramayu' },
+  { nama: 'Sindang', alamat: 'Jl. Singalodra No. 4, Kecamatan Sindang, Kabupaten Indramayu' },
+  { nama: 'Sliyeg', alamat: 'Jl. Siliwangi No. 133, Kecamatan Sliyeg, Kabupaten Indramayu' },
+  { nama: 'Sukagumiwang', alamat: 'Jl. Raya Sukagumiwang, Kecamatan Sukagumiwang, Kabupaten Indramayu' },
+  { nama: 'Sukra', alamat: 'Jl. Raya Pantura, Bogeg 005/001, Karanglayung, Kecamatan Sukra, Kabupaten Indramayu' },
+  { nama: 'Terisi', alamat: 'Jl. Raya Rajasinga No. 030, Kecamatan Terisi, Kabupaten Indramayu' },
+  { nama: 'Tukdana', alamat: 'Jl. Raya Karangkerta No. 06, RT 03/RW 02, Desa Karangkerta, Kecamatan Tukdana, Kabupaten Indramayu' },
+  { nama: 'Widasari', alamat: 'Jl. Komplek Masjid Jami\' Miftahul Jannah, Desa Kongsijaya No. 1, Kecamatan Widasari, Kabupaten Indramayu' }
+];
+const ROMAN_NUMERALS = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+function getIndonesianDayName(date) { return HARI_ID[date.getDay()]; }
+function getIndonesianMonthName(date) { return BULAN_ID[date.getMonth()]; }
+function pad3(n) { return String(n).padStart(3, '0'); }
+function buildNomorSuratLengkap(nomorUrut, bulanSurat, tahun, settings) {
+  const s = settings || _settingsCache || {};
+  const template = s.NOMOR_FORMAT_TEMPLATE ||
+    'B.{NOMOR}/{KODE_KANTOR}/{BULAN_ROMAWI}/{KODE_KLASIFIKASI}/{BULAN_ANGKA}/{TAHUN}';
+  const bulanNum = parseInt(bulanSurat, 10);
+  return template
+    .replace('{NOMOR}', pad3(parseInt(nomorUrut, 10)))
+    .replace('{KODE_KANTOR}', s.KODE_KANTOR || '')
+    .replace('{BULAN_ROMAWI}', ROMAN_NUMERALS[bulanNum] || '')
+    .replace('{KODE_KLASIFIKASI}', s.KODE_KLASIFIKASI || '')
+    .replace('{BULAN_ANGKA}', String(bulanNum).padStart(2, '0'))
+    .replace('{TAHUN}', String(tahun));
+}
+function resolveKuaNamaUntukPihakKedua_(pihakKeduaNip, pihakKeduaJabatan) {
+  const p = _pegawaiCache.find((x) => x.nip === pihakKeduaNip);
+  if (p && p.kua) return p.kua;
+  const jabatanUpper = String(pihakKeduaJabatan || '').toUpperCase();
+  const found = KUA_LIST.find((k) => jabatanUpper.indexOf(k.nama.toUpperCase()) !== -1);
+  return found ? found.nama : '';
+}
+function getKuaLabelForRecord_(r) {
+  return resolveKuaNamaUntukPihakKedua_(r.pihakKeduaNip, r.pihakKeduaJabatan);
+}
+function getTempatKerjaLabel_(nip, jabatanFallback, kategoriKonteks) {
+  const p = _pegawaiCache.find((x) => x.nip === nip);
+  if (p && p.kategori === 'KUA') return 'KUA Kecamatan ' + (p.kua || '(kecamatan tidak diketahui)');
+  if (p && p.kategori === 'Bimas Islam') return 'Seksi Bimas Islam';
+
+  if (kategoriKonteks === 'Bimas Islam') return 'Seksi Bimas Islam';
+  if (kategoriKonteks === 'KUA') {
+    const kuaNama = resolveKuaNamaUntukPihakKedua_(nip, jabatanFallback);
+    return kuaNama ? ('KUA Kecamatan ' + kuaNama) : 'KUA Kecamatan (tidak diketahui)';
+  }
+  return '-';
+}
+function alamatSudahLengkap_(alamat) {
+  const upper = String(alamat || '').toUpperCase();
+  return upper.indexOf('KECAMATAN') !== -1 && upper.indexOf('KABUPATEN') !== -1;
+}
+function resolveAlamatLengkapPihakKedua_(record) {
+  const raw = String(record.pihakKeduaAlamat || '').trim();
+  const kuaNama = resolveKuaNamaUntukPihakKedua_(record.pihakKeduaNip, record.pihakKeduaJabatan);
+  const kuaData = KUA_LIST.find((k) => k.nama === kuaNama);
+  if (kuaData) return kuaData.alamat;
+  if (raw && alamatSudahLengkap_(raw)) return raw;
+  if (raw && kuaNama) return raw + ', Kecamatan ' + kuaNama + ', Kabupaten Indramayu';
+  return raw || '-';
+}
+function resolveAlamatLengkapPihakSatu_(record) {
+  const raw = String(record.pihakSatuAlamat || '').trim();
+  if (raw && alamatSudahLengkap_(raw)) return raw;
+  const fallback = (_settingsCache && _settingsCache.ALAMAT_BIMAS_LENGKAP) || '';
+  if (fallback) return fallback;
+  return raw || ALAMAT_BIMAS_DEFAULT;
+}
+/* ---- pdf.js (apa adanya) ---- */
+/**
+ * pdf.js
+ * ============================================================================
+ * Menghasilkan PDF Berita Acara Serah Terima Sarana Administrasi NR yang
+ * tampilannya mengikuti contoh dokumen resmi (kop surat, tabel, tanda
+ * tangan). Dipakai dari halaman Riwayat (tombol Download PDF / Lihat).
+ *
+ * Bergantung pada jsPDF + jsPDF-AutoTable (dimuat via CDN di index.html)
+ * dan pada beberapa fungsi/konstanta global dari script.js: ROMAN_NUMERALS,
+ * buildNomorSuratLengkap(), pad3(), _settingsCache. File ini HARUS dimuat
+ * setelah script.js.
+ * ============================================================================
+ */
+
+// ----------------------------------------------------------------------------
+// Loader jsPDF/AutoTable dengan fallback multi-CDN.
+// ----------------------------------------------------------------------------
+// index.html sudah memuat kedua pustaka lewat <script> statis (cdnjs) supaya
+// siap lebih cepat — tapi beberapa jaringan kantor/instansi memblokir domain
+// CDN tertentu, jadi kalau itu gagal (window.jspdf belum ada saat tombol
+// diklik), fungsi ini mencoba memuat ULANG secara dinamis dari cdnjs lalu
+// jsdelivr (penyedia infrastruktur berbeda) sebelum benar-benar menyerah.
+function loadScriptOnce_(url) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = url;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Gagal memuat ' + url));
+    document.head.appendChild(script);
+  });
+}
+
+function hasAutoTable_() {
+  return !!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API && typeof window.jspdf.jsPDF.API.autoTable === 'function');
+}
+
+async function ensureJsPdfLoaded_() {
+  if (hasAutoTable_()) return; // sudah lengkap (dari <script> statis di index.html atau percobaan sebelumnya)
+
+  if (!window.jspdf) {
+    const jsPdfSources = [
+      'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js',
+      'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js'
+    ];
+    for (const src of jsPdfSources) {
+      try { await loadScriptOnce_(src); if (window.jspdf) break; } catch (e) { /* coba sumber berikutnya */ }
+    }
+    if (!window.jspdf) {
+      throw new Error('Gagal memuat pustaka jsPDF dari cdnjs.cloudflare.com maupun cdn.jsdelivr.net. ' +
+        'Kemungkinan jaringan ini memblokir kedua domain tsb — coba jaringan lain, atau minta admin IT membuka akses ke keduanya.');
+    }
+  }
+
+  if (!hasAutoTable_()) {
+    const autoTableSources = [
+      'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js',
+      'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js'
+    ];
+    for (const src of autoTableSources) {
+      try { await loadScriptOnce_(src); if (hasAutoTable_()) break; } catch (e) { /* coba sumber berikutnya */ }
+    }
+    if (!hasAutoTable_()) {
+      throw new Error('Gagal memuat pustaka jsPDF-AutoTable dari cdnjs.cloudflare.com maupun cdn.jsdelivr.net.');
+    }
+  }
+}
+
+// Kop surat butuh logo Kemenag. Dicoba berurutan, paling andal duluan:
+//
+//  1. Konstanta LOGO_BASE64 dari logo-data.js — dihasilkan sekali lewat
+//     assets/logo-converter.html. Ini PALING ANDAL karena logo sudah jadi
+//     bagian dari kode (bukan file yang perlu dimuat saat runtime), jadi
+//     tidak mungkin kena masalah file:// apa pun. Ini cara yang disarankan
+//     — kalau logo tidak muncul, inilah yang seharusnya dijalankan dulu.
+//  2. fetch() ke assets/logo-kemenag.png — TERBUKTI selalu diblokir CORS
+//     oleh Chrome dkk. saat aplikasi dibuka lewat file:// ("Cross origin
+//     requests are only supported for protocol schemes: chrome, ... " —
+//     skema "file" memang tidak masuk daftar yang diizinkan sama sekali).
+//     Jadi langkah ini SENGAJA DILEWATI kalau halaman sedang berjalan dari
+//     file://, supaya tidak memunculkan error CORS di console yang sudah
+//     pasti gagal — hanya dicoba kalau aplikasi suatu saat di-hosting via
+//     http/https, di mana fetch() ini justru bisa berhasil.
+//  3. <img> + canvas — cara paling lama, tapi browser tertentu memperlakukan
+//     tiap URL file:// sebagai origin unik sehingga canvas.toDataURL() bisa
+//     gagal walau gambarnya berhasil TAMPIL sebagai <img>.
+//
+// Kalau ketiganya gagal, mengembalikan null (bukan melempar error) supaya
+// PDF tetap bisa dibuat tanpa logo daripada gagal total.
+async function loadLogoAsDataUrl_(path) {
+  if (typeof LOGO_BASE64 !== 'undefined' && LOGO_BASE64) {
+    const dims = await new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      img.onerror = () => resolve(null);
+      img.src = LOGO_BASE64;
+    });
+    if (dims) return { dataUrl: LOGO_BASE64, width: dims.width, height: dims.height };
+  }
+
+  if (window.location.protocol !== 'file:') {
+    try {
+      const res = await fetch(path);
+      if (res.ok) {
+        const blob = await res.blob();
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('gagal membaca blob logo'));
+          reader.readAsDataURL(blob);
+        });
+        const dims = await new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+          img.onerror = () => resolve(null);
+          img.src = dataUrl;
+        });
+        if (dims) return { dataUrl: dataUrl, width: dims.width, height: dims.height };
+      }
+    } catch (e) {
+      // lanjut ke cara 3
+    }
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        resolve({ dataUrl: canvas.toDataURL('image/png'), width: img.naturalWidth, height: img.naturalHeight });
+      } catch (e) {
+        resolve(null); // kedua cara gagal -> PDF tetap dibuat tanpa logo
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = path;
+  });
+}
+
+function pdfWriteWrapped_(doc, text, x, y, maxWidth, lineHeight) {
+  const lines = doc.splitTextToSize(text, maxWidth);
+  doc.text(lines, x, y);
+  return y + lines.length * lineHeight;
+}
+
+// Menulis baris "Label : Nilai" sejajar kolon, meniru gaya contoh dokumen
+// ("Nama : TIEN JUNIARSIH", "NIP. : 197906..."). Kalau Nilai lebih panjang
+// dari sisa ruang sampai maxRightX, dibungkus ke baris berikutnya — baris
+// lanjutan tetap RATA dengan awal Nilai (bukan rata Label), dan berhenti
+// TEPAT di maxRightX yang sama dipakai teks lain di dokumen ini (lihat
+// pdfWriteWrapped_ untuk paragraf Pembuka/Penutup, dipanggil dengan batas
+// kanan yang sama: pageWidth - marginRight).
+//
+// PERBAIKAN BUG: sebelum ini, fungsi hanya doc.text(nilai, x, y) tanpa
+// maxWidth sama sekali — aman selama Nilai selalu pendek, tapi begitu
+// Alamat mulai mencantumkan Kecamatan+Kabupaten (lihat
+// resolveAlamatLengkapPihak...()), banyak Alamat jadi cukup panjang untuk
+// meluber melewati batas kanan yang dipakai paragraf lain di halaman yang
+// sama, membuat baris Alamat terlihat "nyeberang" / tidak sejajar dengan
+// sisa dokumen. splitTextToSize() dulu sebelum ditulis (persis seperti
+// pdfWriteWrapped_) memastikan baris SELALU berhenti di batas yang sama.
+function pdfWriteFieldLine_(doc, label, value, x, y, labelWidth, maxRightX) {
+  const valueX = x + labelWidth + 3;
+  doc.text(label, x, y);
+  doc.text(':', x + labelWidth, y);
+  const text = String(value === undefined || value === null || value === '' ? '-' : value);
+  const lines = doc.splitTextToSize(text, maxRightX - valueX);
+  doc.text(lines, valueX, y);
+  return y + lines.length * 5;
+}
+
+// Data Pegawai menyimpan Jabatan bersih ("JFU") terpisah dari unit
+// kerjanya (Kategori/KUA) — pemisahan itu perlu untuk combobox & filter
+// dropdown, tapi dokumen resmi perlu mencetak keduanya sekaligus, persis
+// seperti data lama ("JFU Pada Seksi Bimas Islam"). Fungsi ini merakitnya
+// kembali KHUSUS untuk dicetak, tanpa mengubah data Pegawai yang tersimpan.
+//
+// PERBAIKAN BUG: sebagian data Jabatan (entri lama/migrasi atau yang
+// diketik manual) TERNYATA sudah menyertakan nama unit kerjanya sendiri,
+// mis. "Penghulu KUA Patrol" atau "JFU Pada Seksi Bimas Islam". Kalau
+// akhirannya ditempel begitu saja tanpa dicek, hasilnya dobel ("...Pada
+// Seksi Bimas Islam Pada Seksi Bimas Islam"). Jadi sebelum menempelkan
+// akhiran, cek dulu apakah teks jabatan SUDAH menyebut unit kerja terkait
+// — kalau sudah, biarkan apa adanya.
+function formatJabatanUntukCetak_(nip, jabatanMentah) {
+  const cache = (typeof _pegawaiCache !== 'undefined') ? _pegawaiCache : [];
+  const pegawai = cache.find((p) => p.nip === nip);
+  const jabatan = jabatanMentah || '-';
+  if (!pegawai) return jabatan;
+  const jabatanUpper = jabatan.toUpperCase();
+  if (pegawai.kategori === 'Bimas Islam') {
+    if (jabatanUpper.indexOf('BIMAS ISLAM') !== -1) return jabatan;
+    return jabatan + ' Pada Seksi Bimas Islam';
+  }
+  if (pegawai.kategori === 'KUA') {
+    const kua = pegawai.kua || '';
+    // Hanya cek nama kecamatan KUA-nya sendiri (bukan cek kata "KUA" secara
+    // umum) — supaya jabatan bersih yang memang mengandung kata "KUA" apa
+    // adanya (mis. "Operator KUA") tetap ditempeli lokasi seperti biasa.
+    if (kua && jabatanUpper.indexOf(kua.toUpperCase()) !== -1) return jabatan;
+    return jabatan + ' Pada KUA ' + kua;
+  }
+  return jabatan;
+}
+
+/**
+ * record: objek dari Api.getBeritaAcara() (satu baris) — lihat bentuknya di
+ * getBeritaAcara() pada Code.gs.
+ * Mengembalikan instance jsPDF (dipanggil dari script.js untuk .save() atau
+ * diambil sebagai blob untuk diunggah ke Drive).
+ */
+async function generateBeritaAcaraPdf(record) {
+  await ensureJsPdfLoaded_();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+  const pageWidth = 210;
+  const marginLeft = 20, marginRight = 20;
+  const contentWidth = pageWidth - marginLeft - marginRight;
+  const settings = _settingsCache || {};
+  let y = 10;
+
+  const logo = await loadLogoAsDataUrl_('assets/logo-kemenag.png');
+
+// ---------------- KOP SURAT ----------------
+if (logo) {
+  const maxLogoW = 24, maxLogoH = 22;
+  let logoW = maxLogoW;
+  let logoH = logoW * (logo.height / logo.width);
+
+  if (logoH > maxLogoH) {
+    logoH = maxLogoH;
+    logoW = logoH * (logo.width / logo.height);
+  }
+
+  doc.addImage(logo.dataUrl, 'PNG', marginLeft, y - 3, logoW, logoH);
+}
+
+const headerX = pageWidth / 2 + 8;
+
+// Nama instansi
+doc.setFont('times', 'bold');
+doc.setFontSize(13);
+doc.text(
+  'KEMENTERIAN AGAMA REPUBLIK INDONESIA',
+  headerX, y,
+  { align: 'center' }
+);
+
+y += 5;
+doc.setFontSize(13);
+doc.text(
+  'KANTOR KEMENTERIAN AGAMA KABUPATEN INDRAMAYU',
+  headerX, y,
+  { align: 'center' }
+);
+
+// Alamat
+y += 5;
+doc.setFont('times', 'normal');
+doc.setFontSize(11);
+doc.text(
+  'Jalan Olahraga Nomor 3 Indramayu 45213',
+  headerX, y,
+  { align: 'center' }
+);
+
+y += 4.5;
+doc.text(
+  'Telp. (0234) 272033, 272073, Faximile (0234) 272033',
+  headerX, y,
+  { align: 'center' }
+);
+
+// Email
+y += 4.5;
+doc.setFont('times', 'bolditalic');
+doc.setFontSize(11);
+doc.text(
+  'Email : bimasindramayu@gmail.com',
+  headerX, y,
+  { align: 'center' }
+);
+
+y += 3;
+
+  doc.setLineWidth(0.8);
+  doc.line(marginLeft, y, pageWidth - marginRight, y);
+  y += 1.1;
+  doc.setLineWidth(0.2);
+  doc.line(marginLeft, y, pageWidth - marginRight, y);
+  y += 8;
+
+  // ---------------- JUDUL ----------------
+  const nomorLengkap = buildNomorSuratLengkap(record.nomorUrut, record.blnSrt, record.tahun, settings);
+  doc.setFont('times', 'bolditalic');
+  doc.setFontSize(14);
+  doc.text('BERITA ACARA SERAH TERIMA SARANA ADMINISTRASI NR', pageWidth / 2, y, { align: 'center' });
+  y += 5.5;
+  doc.setFontSize(12);
+  doc.text('NOMOR : ' + nomorLengkap, pageWidth / 2, y, { align: 'center' });
+  y += 9;
+
+  // ---------------- PEMBUKA ----------------
+  doc.setFont('times', 'normal');
+  doc.setFontSize(12);
+  const pembuka = 'Pada hari ini ' + record.hari + ' tanggal ' + record.tgl + ' Bulan ' + record.bln +
+    ' tahun ' + record.tahun + ', kami yang bertanda tangan di bawah ini :';
+  y = pdfWriteWrapped_(doc, pembuka, marginLeft, y, contentWidth, 5) + 3;
+
+  // ---------------- PIHAK PERTAMA ----------------
+  const fieldMaxRightX = pageWidth - marginRight; // batas kanan yang sama dipakai pdfWriteWrapped_ di atas & bawah
+  y = pdfWriteFieldLine_(doc, 'Nama', record.pihakSatuNama, marginLeft, y, 22, fieldMaxRightX);
+  y = pdfWriteFieldLine_(doc, 'NIP.', record.pihakSatuNip, marginLeft, y, 22, fieldMaxRightX);
+  y = pdfWriteFieldLine_(doc, 'Jabatan', formatJabatanUntukCetak_(record.pihakSatuNip, record.pihakSatuJabatan), marginLeft, y, 22, fieldMaxRightX);
+  // Alamat dirakit lewat resolveAlamatLengkapPihakSatu_() (script.js), BUKAN
+  // langsung record.pihakSatuAlamat — supaya PASTI menyertakan Kecamatan &
+  // Kabupaten walau data pegawai yang tersimpan (banyak berasal dari migrasi
+  // Master lama) masih versi pendek. Lihat komentar lengkap di script.js.
+  y = pdfWriteFieldLine_(doc, 'Alamat', resolveAlamatLengkapPihakSatu_(record), marginLeft, y, 22, fieldMaxRightX);
+  y += 3;
+  doc.text('SELANJUTNYA DISEBUT PIHAK PERTAMA :', marginLeft, y);
+  y += 7;
+
+  // ---------------- PIHAK KEDUA ----------------
+  y = pdfWriteFieldLine_(doc, 'Nama', record.pihakKeduaNama, marginLeft, y, 22, fieldMaxRightX);
+  y = pdfWriteFieldLine_(doc, 'NIP.', record.pihakKeduaNip, marginLeft, y, 22, fieldMaxRightX);
+  y = pdfWriteFieldLine_(doc, 'Jabatan', formatJabatanUntukCetak_(record.pihakKeduaNip, record.pihakKeduaJabatan), marginLeft, y, 22, fieldMaxRightX);
+  // Sama seperti Pihak Pertama di atas — resolveAlamatLengkapPihakKedua_()
+  // mengutamakan alamat resmi dari KUA_LIST (sudah pasti lengkap dengan
+  // Kecamatan+Kabupaten) berdasarkan KUA pegawainya, bukan teks Alamat lama
+  // yang tersimpan apa adanya.
+  y = pdfWriteFieldLine_(doc, 'Alamat', resolveAlamatLengkapPihakKedua_(record), marginLeft, y, 22, fieldMaxRightX);
+  y += 3;
+  doc.text('SELANJUTNYA DISEBUT PIHAK KEDUA .', marginLeft, y);
+  y += 8;
+
+  doc.text('PIHAK PERTAMA menyerahkan kepada PIHAK KEDUA berupa sarana NR sebanyak :', marginLeft, y);
+  y += 4;
+
+  // ---------------- TABEL ----------------
+  // Struktur baru per arahan langsung: satu baris PER KOMPONEN (NA/N/NB —
+  // komponen DN sudah tidak dipakai lagi), bukan satu baris dengan kolom
+  // terpisah untuk tiap komponen seperti template lama. "Pasang" tidak
+  // pernah tercatat di data manapun untuk komponen apa pun, jadi selalu
+  // "-"; nilai yang diinput selalu masuk ke sub-kolom "Buku". Seri & Nomor
+  // Porporasi hanya dicetak SEKALI, di baris pertama yang muncul (nilainya
+  // memang satu untuk seluruh BA, bukan per komponen) — baris berikutnya
+  // "-". Komponen dengan nilai kosong/nol tidak dibuatkan barisnya sama
+  // sekali (kalau cuma NA yang diisi, tabel hanya 1 baris).
+  const komponenRows = [];
+  if (record.banyakNaBuku) komponenRows.push({ label: 'NA', jumlah: record.banyakNaBuku });
+  if (record.banyakN) komponenRows.push({ label: 'N', jumlah: record.banyakN });
+  if (record.banyakNb) komponenRows.push({ label: 'NB', jumlah: record.banyakNb });
+  if (!komponenRows.length) komponenRows.push({ label: '-', jumlah: '-' });
+
+  const tableBody = komponenRows.map((k, i) => [
+    String(i + 1),
+    k.label,
+    '-',
+    String(k.jumlah),
+    i === 0 ? (record.noSeri || '-') : '-',
+    i === 0 ? (record.porporasi || '-') : '-',
+    '-'
+  ]);
+
+  doc.autoTable({
+    startY: y,
+    margin: { left: marginLeft, right: marginRight },
+    styles: { font: 'times', fontSize: 10, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0] },
+    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', lineColor: [0, 0, 0], lineWidth: 0.1 },
+    theme: 'grid',
+    head: [
+      [
+        { content: 'No', rowSpan: 2 },
+        { content: 'Komponen', rowSpan: 2 },
+        { content: 'Banyaknya', colSpan: 2 },
+        { content: 'Seri', rowSpan: 2 },
+        { content: 'Nomor Porporasi', rowSpan: 2 },
+        { content: 'Ket', rowSpan: 2 }
+      ],
+      [
+        { content: 'Pasang' }, { content: 'Buku' }
+      ]
+    ],
+    body: tableBody
+  });
+  y = doc.lastAutoTable.finalY + 6;
+
+  // ---------------- PENUTUP ----------------
+  doc.setFont('times', 'italic');
+  doc.setFontSize(12);
+  y = pdfWriteWrapped_(doc, 'PIHAK KEDUA telah menerima barang tersebut sesuai dengan jumlah dan kondisi sebagaimana di atas.', marginLeft, y, contentWidth, 5) + 3;
+  y = pdfWriteWrapped_(doc, 'Demikian Berita Acara serah terima ini dibuat rangkap 2 (dua) selanjutnya ditandatangani oleh PIHAK-PIHAK yang berkepentingan untuk dipergunakan sebagaimana mestinya.', marginLeft, y, contentWidth, 5) + 10;
+
+  // Pindah halaman kalau ruang tanda tangan tidak cukup lagi.
+  if (y > 250) { doc.addPage(); y = 20; }
+
+  // ---------------- TANDA TANGAN ----------------
+  doc.setFont('times', 'normal');
+  doc.setFontSize(12);
+  const colRightX = pageWidth / 2 + 10;
+  doc.text('Yang menerima,', marginLeft, y);
+  doc.text('Yang menyerahkan,', colRightX, y);
+  y += 5;
+  doc.text('PIHAK KEDUA', marginLeft, y);
+  doc.text('PIHAK PERTAMA', colRightX, y);
+  y += 22;
+  doc.setFont('times', 'bold');
+  doc.text(String(record.pihakKeduaNama || ''), marginLeft, y);
+  doc.text(String(record.pihakSatuNama || ''), colRightX, y);
+  y += 5;
+  doc.setFont('times', 'normal');
+  doc.text('NIP. ' + record.pihakKeduaNip, marginLeft, y);
+  doc.text('NIP. ' + record.pihakSatuNip, colRightX, y);
+  y += 14;
+
+  // ---------------- MENGETAHUI ----------------
+  doc.text('Mengetahui,', pageWidth / 2, y, { align: 'center' });
+  y += 5;
+  doc.text('Kepala Seksi Bimas Islam,', pageWidth / 2, y, { align: 'center' });
+  y += 22;
+  doc.setFont('times', 'bold');
+  doc.text(String(record.kasiNama || ''), pageWidth / 2, y, { align: 'center' });
+  y += 5;
+  doc.setFont('times', 'normal');
+  doc.text('NIP. ' + record.kasiNip, pageWidth / 2, y, { align: 'center' });
+
+  return doc;
+}
+
+async function downloadBeritaAcaraPdf(record) {
+  const doc = await generateBeritaAcaraPdf(record);
+  const fileName = 'BA_' + pad3(parseInt(record.nomorUrut, 10)) + '_' + record.tahun + '.pdf';
+  doc.save(fileName);
+}
+  return { set: (s, p) => { _settingsCache = s; _pegawaiCache = p; }, BULAN_ID, KUA_LIST, JABATAN_BIMAS, JABATAN_KUA, ALAMAT_BIMAS_DEFAULT, pad3,
+    buildNomorSuratLengkap, getIndonesianDayName, getIndonesianMonthName, getKuaLabelForRecord_, getTempatKerjaLabel_,
+    resolveAlamatLengkapPihakSatu_, resolveAlamatLengkapPihakKedua_, downloadBeritaAcaraPdf };
+})();
+
+const B = { on: false, peg: [], ba: [], set: {}, q: '', thn: '', bln: '', kua: '', sim: '', pg: 1 };
+const BDEF = { KASI_NAMA: '', KASI_NIP: '', NOMOR_AWAL_SURAT: '1', KODE_KANTOR: 'Kk.10.12', KODE_KLASIFIKASI: 'PW.01',
+  NOMOR_FORMAT_TEMPLATE: 'B.{NOMOR}/{KODE_KANTOR}/{BULAN_ROMAWI}/{KODE_KLASIFIKASI}/{BULAN_ANGKA}/{TAHUN}', ALAMAT_BIMAS_LENGKAP: BX.ALAMAT_BIMAS_DEFAULT,
+  LAST_NUMBER: '0', LAST_NUMBER_YEAR: '' };
+const BCOL = 'id,nomor_urut,tahun,bln_srt,hari,tgl,bln,pihak_satu_nip,pihak_satu_nama,pihak_satu_jabatan,pihak_satu_alamat,pihak_kedua_nip,pihak_kedua_nama,pihak_kedua_jabatan,pihak_kedua_alamat,banyak_na_buku,banyak_n,banyak_nb,no_seri,porporasi,kasi_nama,kasi_nip,status_simkah,arsip_id,arsip_link';
+const bnOut = r => {   // baris database (snake_case) -> bentuk lama (camelCase) yang dipakai kode PDF/alamat
+  const o = {}; for (const k in r) o[k.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = r[k] ?? '';
+  return Object.assign(o, { tahun: String(r.tahun), noSurat: BX.pad3(r.nomor_urut) });
+};
+const bnReset = () => Object.assign(B, { on: false, peg: [], ba: [], set: {} });
+const bnHead = (t, s, btn = '') => `<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4"><div><h4 class="mb-1">${t}</h4><p class="mb-0">${s}</p></div>${btn}</div><div id="bmsg"></div>`;
+const bnById = id => B.ba.find(r => r.id == id);
+const bnSim = r => `<span class="badge bg-label-${r.statusSimkah === 'Sudah' ? 'success' : 'warning'}">${esc(r.statusSimkah)}</span>`;
+const bnRange = t => { const m = /(\d+)\s*-\s*(\d+)/.exec(t || ''); return m ? [+m[1], +m[2]] : null; };
+const bnNext = y => B.set.LAST_NUMBER_YEAR === y ? (parseInt(B.set.LAST_NUMBER, 10) || 0) + 1 : (parseInt(B.set.NOMOR_AWAL_SURAT, 10) || 1);
+const bnDlg = (h, wire, w) => {
+  const d = $('dlg'); d.style.width = w ? '100%' : ''; d.style.maxWidth = w || '';
+  d.addEventListener('close', () => { d.style.width = d.style.maxWidth = ''; }, { once: true });
+  jpDlg(h, wire);
+};
+async function bnLoad(force) {   // dimuat sekali per sesi (3 permintaan), selanjutnya dari memori
+  if (B.on && !force) return true;
+  const [p, b, s] = await Promise.all([
+    sb.from('bast_pegawai').select('*').order('nama'),
+    sb.from('bast_ba').select(BCOL).order('tahun', { ascending: false }).order('nomor_urut', { ascending: false }),
+    sb.from('bast_setting').select('key,value')]);
+  const err = p.error || b.error || s.error;
+  if (err) { $('view').insertAdjacentHTML('afterbegin', note('Gagal memuat data BAST NR: ' + err.message + ' (jalankan bop.sql terbaru di Supabase bila tabel bast_* belum ada).')); return false; }
+  Object.assign(B, { peg: p.data, ba: b.data.map(bnOut), set: { ...BDEF, ...Object.fromEntries(s.data.map(x => [x.key, x.value])) }, on: true });
+  BX.set(B.set, B.peg); return true;
+}
+async function bnPdf(r) {
+  jpToast('Menyiapkan PDF…', 'warning');
+  try { await loadJs('logo-data.js').catch(() => 0); BX.set(B.set, B.peg); await BX.downloadBeritaAcaraPdf(r); }
+  catch (e) { jpToast(e.message, 'danger'); }
+}
+
+/* ---- Riwayat (+ ringkasan) ---- */
+async function pageBast() {
+  $('view').innerHTML = `<div class="jp" id="broot">${bnHead('BAST NR', 'Berita Acara Serah Terima Sarana Administrasi NR: riwayat, arsip, dan status SIMKAH.', '<a class="btn btn-primary" href="#bast-buat"><i class="bx bx-plus"></i> Buat Berita Acara</a>')}<div id="bst">Memuat…</div></div>`;
+  if (!await bnLoad()) return;
+  Object.assign(B, { q: '', thn: '', bln: '', kua: '', sim: '', pg: 1 });
+  const r = $('broot'), now = new Date(), mn = BX.BULAN_ID[now.getMonth()].toUpperCase();
+  r.onclick = bnClick; r.oninput = r.onchange = bnFilter;
+  const ini = B.ba.filter(x => x.tahun === String(now.getFullYear()) && String(x.bln).toUpperCase().startsWith(mn)).length;
+  const thn = [...new Set(B.ba.map(x => x.tahun))].sort().reverse();
+  $('bst').innerHTML = `<div class="row g-3 mb-4">${jpCard('bx-file', 'primary', B.ba.length, 'Total Berita Acara')}${jpCard('bx-calendar-check', 'success', ini, 'BA bulan ini')}${jpCard('bx-group', 'info', B.peg.length, 'Pegawai')}${jpCard('bx-hash', 'warning', esc(B.set.LAST_NUMBER), 'Nomor terakhir')}</div>
+    <div class="card"><div class="card-body">
+      <div class="row g-2 mb-3"><div class="col-lg-4"><div class="input-group"><span class="input-group-text"><i class="bx bx-search"></i></span><input id="bq" type="search" class="form-control" placeholder="Cari nomor, nama, KUA, porporasi…"></div></div>
+        <div class="col-6 col-lg-2"><select id="bthn" class="form-select"><option value="">Semua Tahun</option>${thn.map(t => `<option>${esc(t)}</option>`).join('')}</select></div>
+        <div class="col-6 col-lg-2"><select id="bbln" class="form-select"><option value="">Semua Bulan</option>${BX.BULAN_ID.map(b => `<option>${b}</option>`).join('')}</select></div>
+        <div class="col-6 col-lg-2"><select id="bkua" class="form-select"><option value="">Semua KUA</option>${BX.KUA_LIST.map(k => `<option>${esc(k.nama)}</option>`).join('')}</select></div>
+        <div class="col-6 col-lg-2"><select id="bsim" class="form-select"><option value="">Semua SIMKAH</option><option>Sudah</option><option>Belum</option></select></div></div>
+      <div class="scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>Nomor</th><th>Tanggal</th><th>Pihak Kedua</th><th>KUA</th><th>Porporasi</th><th>SIMKAH</th><th>Arsip</th><th></th></tr></thead><tbody id="btb"></tbody></table></div>
+      <div id="bpg" class="d-flex align-items-center justify-content-between mt-3"></div></div></div>`;
+  bnRows();
+}
+function bnRows() {
+  const q = B.q.trim().toLowerCase(), kua = r => BX.getKuaLabelForRecord_(r);
+  const L = B.ba.filter(r => (!B.thn || r.tahun === B.thn) && (!B.bln || String(r.bln).toUpperCase().startsWith(B.bln.toUpperCase())) && (!B.kua || kua(r) === B.kua) && (!B.sim || r.statusSimkah === B.sim)
+    && (!q || [r.noSurat, r.tahun, r.pihakSatuNama, r.pihakKeduaNama, kua(r), r.porporasi, r.hari, r.bln].join(' ').toLowerCase().includes(q)));
+  const n = Math.max(1, Math.ceil(L.length / 15)); B.pg = Math.min(B.pg, n);
+  $('btb').innerHTML = L.slice((B.pg - 1) * 15, B.pg * 15).map(r => `<tr><td class="fw-semibold">${r.noSurat}/${esc(r.tahun)}</td><td>${esc(r.hari)}, ${esc(r.tgl)} ${esc(r.bln)}</td><td>${esc(r.pihakKeduaNama)}</td><td>${esc(kua(r))}</td><td>${esc(r.porporasi)}</td><td>${bnSim(r)}</td><td>${r.arsipId || r.arsipLink ? '<i class="bx bx-paperclip"></i>' : ''}</td>
+    <td class="text-end text-nowrap"><button class="btn btn-sm btn-outline-secondary" data-act="bdet" data-k="${r.id}">Detail</button> <button class="btn btn-sm btn-outline-secondary px-2" data-act="bpdf" data-k="${r.id}" title="Unduh PDF"><i class="bx bx-download"></i></button></td></tr>`).join('')
+    || '<tr><td colspan="8" class="text-center py-4">Tidak ada Berita Acara yang cocok.</td></tr>';
+  $('bpg').innerHTML = `<span>${L.length} data · halaman ${B.pg}/${n}</span><span><button class="btn btn-sm btn-outline-secondary" data-act="bprev"${B.pg <= 1 ? ' disabled' : ''}>‹</button> <button class="btn btn-sm btn-outline-secondary" data-act="bnext"${B.pg >= n ? ' disabled' : ''}>›</button></span>`;
+}
+function bnFilter(e) {
+  const k = { bq: 'q', bthn: 'thn', bbln: 'bln', bkua: 'kua', bsim: 'sim' }[e.target.id];
+  if (k) { B[k] = e.target.value; B.pg = 1; bnRows(); }
+}
+function bnClick(e) {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const a = b.dataset.act, r = bnById(b.dataset.k);
+  if (a === 'bdet') bnDetail(r); else if (a === 'bpdf') bnPdf(r);
+  else if (a === 'bprev') { B.pg--; bnRows(); } else if (a === 'bnext') { B.pg++; bnRows(); }
+}
+function bnDetail(r) {
+  if (!r) return;
+  const nx = r.statusSimkah === 'Sudah' ? 'Belum' : 'Sudah', lama = /^https:\/\/(drive|docs)\.google\.com\//.test(r.arsipLink);
+  const kv = (l, v) => `<div class="col-sm-6"><small class="d-block text-uppercase">${l}</small>${esc(v) || '-'}</div>`;
+  const pihak = (t, p, kat, al) => `<h6 class="mt-4 mb-2">${t}</h6><div class="row g-2">${kv('Nama', r[p + 'Nama'])}${kv('NIP', r[p + 'Nip'])}${kv('Jabatan', r[p + 'Jabatan'])}${kv('Tempat Kerja', BX.getTempatKerjaLabel_(r[p + 'Nip'], r[p + 'Jabatan'], kat))}<div class="col-12"><small class="d-block text-uppercase">Alamat</small>${esc(al)}</div></div>`;
+  bnDlg(`<div class="d-flex justify-content-between align-items-start"><div><h5 class="mb-1">Berita Acara ${r.noSurat}/${esc(r.tahun)}</h5><div>${esc(BX.buildNomorSuratLengkap(r.nomorUrut, r.blnSrt, r.tahun))}</div></div>${bnSim(r)}</div>
+    <div class="row g-2 mt-2">${kv('Hari, Tanggal', `${r.hari}, ${r.tgl} ${r.bln} ${r.tahun}`)}${kv('Mengetahui (Kasi)', r.kasiNama)}</div>
+    ${pihak('Pihak Pertama', 'pihakSatu', 'Bimas Islam', BX.resolveAlamatLengkapPihakSatu_(r))}${pihak('Pihak Kedua', 'pihakKedua', 'KUA', BX.resolveAlamatLengkapPihakKedua_(r))}
+    <h6 class="mt-4 mb-2">Data Sarana</h6><div class="row g-2">${kv('Banyaknya Buku NA', r.banyakNaBuku)}${kv('N', r.banyakN)}${kv('NB', r.banyakNb)}${kv('No. Seri', r.noSeri)}${kv('Nomor Porporasi', r.porporasi)}</div>
+    <h6 class="mt-4 mb-2">Arsip dokumen tertandatangan</h6>
+    <div class="d-flex flex-wrap gap-2 mb-2">${r.arsipId ? '<button class="btn btn-sm btn-outline-primary" data-a="view"><i class="bx bx-show"></i> Lihat arsip</button><button class="btn btn-sm btn-outline-danger" data-a="adel"><i class="bx bx-trash"></i> Hapus arsip</button>'
+      : lama ? `<a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="${esc(r.arsipLink)}"><i class="bx bx-link-external"></i> Buka arsip lama (Drive)</a>` : '<span class="small">Belum ada arsip.</span>'}</div>
+    <input type="file" id="bfa" class="form-control form-control-sm" accept="application/pdf,image/*"><small>PDF/JPG/PNG. Mengunggah file baru menggantikan arsip yang ada.</small>
+    <div class="d-flex flex-wrap justify-content-between gap-2 mt-4"><div class="d-flex gap-2"><button class="btn btn-outline-danger" data-a="del"><i class="bx bx-trash"></i> Hapus BA</button><button class="btn btn-outline-secondary" data-a="sim">Ubah SIMKAH ke ${nx}</button></div>
+      <div class="d-flex gap-2"><button class="btn btn-outline-secondary" data-a="pdf"><i class="bx bx-download"></i> PDF</button><button class="btn btn-primary" data-x>Tutup</button></div></div>`,
+  d => {
+    const on = (a, f) => { const b = d.querySelector(`[data-a=${a}]`); if (b) b.onclick = f; };
+    d.querySelector('[data-x]').onclick = () => d.close();
+    on('pdf', () => bnPdf(r));
+    on('sim', () => jpAsk('Ubah status SIMKAH?', `Status BA ${r.noSurat}/${r.tahun} diubah menjadi "${nx}".`, 'Ubah', async () => {
+      const { error } = await sb.from('bast_ba').update({ status_simkah: nx }).eq('id', r.id);
+      if (error) return jpToast(error.message, 'danger');
+      r.statusSimkah = nx; bnRows(); jpToast('Status SIMKAH diperbarui.');
+    }));
+    on('del', () => jpAsk('Hapus Berita Acara?', `BA ${r.noSurat}/${r.tahun} dihapus permanen. File arsip di Google Drive (bila ada) tidak ikut terhapus.`, 'Hapus', async () => {
+      const { error } = await sb.from('bast_ba').delete().eq('id', r.id);
+      if (error) return jpToast(error.message, 'danger');
+      B.ba = B.ba.filter(x => x.id !== r.id); bnRows(); jpToast('Berita Acara dihapus.');
+    }, true));
+    on('view', async () => {
+      const w = window.open('', '_blank'); if (!w) return jpToast('Izinkan pop-up browser untuk melihat arsip.', 'warning');
+      try { w.location = URL.createObjectURL(await (await api({ action: 'bast-file', id: r.id })).blob()); } catch (e) { w.close(); jpToast(e.message, 'danger'); }
+    });
+    on('adel', () => jpAsk('Hapus arsip?', 'File arsip dipindah ke Sampah Google Drive.', 'Hapus', async () => {
+      try { await api({ action: 'bast-delete', id: r.id }, { method: 'POST' }); r.arsipId = r.arsipLink = ''; bnRows(); jpToast('Arsip dihapus.'); } catch (e) { jpToast(e.message, 'danger'); }
+    }, true));
+    $('bfa').onchange = async e => {
+      const f = e.target.files[0]; if (!f) return;
+      const fd = new FormData(); fd.append('id', r.id); fd.append('file', f);
+      try { const j = await (await api({ action: 'bast-upload' }, { method: 'POST', body: fd })).json(); r.arsipId = j.fileId; r.arsipLink = j.link; d.close(); bnRows(); jpToast('Arsip diunggah.'); }
+      catch (x) { jpToast(x.message, 'danger'); }
+    };
+  }, 'min(760px,95vw)');
+}
+
+/* ---- Buat Berita Acara ---- */
+async function pageBastBuat() {
+  $('view').innerHTML = `<div class="jp" id="broot">${bnHead('Buat Berita Acara', 'Nomor urut diusulkan otomatis dan baru dipakai setelah Berita Acara disimpan.')}<div id="bbf">Memuat…</div></div>`;
+  if (!await bnLoad()) return;
+  const t = new Date(), p2 = n => String(n).padStart(2, '0'), today = `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`;
+  const pg = (kat) => B.peg.filter(p => p.kategori === kat).map(p => `<option value="${esc(p.nip)}">${esc(p.nama)} — ${esc(p.jabatan)}</option>`).join('');
+  const num = (id, l, ex = '') => `<div class="col-sm-6 col-lg-3"><label class="form-label">${l}</label><input type="number" min="0" id="${id}" class="form-control" ${ex}></div>`;
+  $('bbf').innerHTML = `<div class="row g-4">
+    <div class="col-lg-6"><div class="card h-100"><div class="card-body"><h5 class="mb-3">Tanggal &amp; Nomor Surat</h5>
+      <label class="form-label">Tanggal pelaksanaan</label><input type="date" id="bb-tgl" class="form-control" value="${today}"><div id="bb-sum" class="small mt-1 mb-3"></div>
+      <div class="row g-3"><div class="col-sm-6"><label class="form-label">Bulan Surat</label><select id="bb-bs" class="form-select">${BX.BULAN_ID.map((b, i) => `<option value="${i + 1}">${b}</option>`).join('')}</select></div>
+        <div class="col-sm-6"><label class="form-label">Nomor Urut</label><input type="number" min="1" id="bb-no" class="form-control"></div></div>
+      <label class="form-label mt-3">Nomor Surat Lengkap</label><input id="bb-ns" class="form-control" readonly></div></div></div>
+    <div class="col-lg-6"><div class="card h-100"><div class="card-body"><h5 class="mb-3">Para Pihak</h5>
+      <label class="form-label">Pihak Pertama (Seksi Bimas Islam)</label><select id="bb-p1" class="form-select"><option value="">— Pilih —</option>${pg('Bimas Islam')}</select>
+      <label class="form-label mt-3">Pihak Kedua: KUA Kecamatan</label><select id="bb-kua" class="form-select"><option value="">— Pilih KUA —</option>${BX.KUA_LIST.map(k => `<option>${esc(k.nama)}</option>`).join('')}</select>
+      <label class="form-label mt-3">Pihak Kedua: Pegawai</label><select id="bb-p2" class="form-select" disabled><option value="">— Pilih KUA dulu —</option></select><div id="bb-p2i" class="small mt-1"></div></div></div></div>
+    <div class="col-12"><div class="card"><div class="card-body"><h5 class="mb-3">Data Sarana</h5><div class="row g-3">
+      ${num('bb-pa', 'Porporasi awal')}${num('bb-pb', 'Porporasi akhir')}${num('bb-na', 'Banyaknya Buku NA', 'readonly')}
+      <div class="col-sm-6 col-lg-3 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="bb-auto" checked><label class="form-check-label" for="bb-auto">Hitung otomatis dari porporasi</label></div></div>
+      ${num('bb-n', 'Banyaknya N')}${num('bb-nb', 'Banyaknya NB')}
+      <div class="col-sm-6 col-lg-3"><label class="form-label">No. Seri</label><input id="bb-seri" class="form-control" placeholder="PS / JB"></div>
+      <div class="col-sm-6 col-lg-3"><label class="form-label">Status Stok SIMKAH</label><select id="bb-sim" class="form-select"><option>Belum</option><option>Sudah</option></select></div></div>
+      <div id="bb-por" class="mt-3"></div>
+      <div class="mt-3 small">Mengetahui: <b>${esc(B.set.KASI_NAMA) || '(belum diatur di Pengaturan BAST)'}</b> ${esc(B.set.KASI_NIP)}</div>
+      <div class="d-flex justify-content-end mt-4"><button class="btn btn-primary" id="bb-save"><i class="bx bx-save"></i> Simpan Berita Acara</button></div></div></div></div></div>`;
+  const r = $('broot'); r.oninput = r.onchange = bbEvent; $('bb-save').onclick = bbSave; bbDate(true);
+}
+function bbDate(force) {
+  const v = $('bb-tgl').value; if (!v) return;
+  const [y, m, d] = v.split('-').map(Number), dt = new Date(y, m - 1, d);
+  $('bb-sum').innerHTML = `Pada hari ini <b>${BX.getIndonesianDayName(dt)}</b>, tanggal <b>${String(d).padStart(2, '0')}</b> bulan <b>${BX.getIndonesianMonthName(dt)}</b> tahun <b>${y}</b>`;
+  if (!$('bb-bs').dataset.u) $('bb-bs').value = m;
+  if (force || $('bb-no').dataset.y !== String(y)) { $('bb-no').dataset.y = y; $('bb-no').value = bnNext(String(y)); }
+  bbPreview();
+}
+function bbPreview() {
+  const y = $('bb-tgl').value.split('-')[0], bs = +$('bb-bs').value, no = +$('bb-no').value;
+  $('bb-ns').value = y && bs && no ? BX.buildNomorSuratLengkap(no, bs, y, B.set) : '';
+}
+function bbPor() {
+  const a = parseInt($('bb-pa').value, 10), b = parseInt($('bb-pb').value, 10), ok = !isNaN(a) && !isNaN(b);
+  if ($('bb-auto').checked && ok && b >= a) $('bb-na').value = b - a + 1;
+  let m = '';
+  if (ok && b < a) m = note('Nomor porporasi akhir tidak boleh lebih kecil dari awal.', 'warning');
+  else if (ok) {
+    const x = B.ba.find(r => { const g = bnRange(r.porporasi); return g && a <= g[1] && b >= g[0]; });
+    if (x) m = note(`Nomor porporasi sudah digunakan pada BA Nomor ${x.noSurat} (rentang ${x.porporasi}).`, 'warning');
+  }
+  $('bb-por').innerHTML = m;
+}
+function bbEvent(e) {
+  const id = e.target.id;
+  if (id === 'bb-tgl') bbDate();
+  else if (id === 'bb-bs') { e.target.dataset.u = 1; bbPreview(); }
+  else if (id === 'bb-no') bbPreview();
+  else if (id === 'bb-kua') {
+    const L = B.peg.filter(p => p.kategori === 'KUA' && p.kua === e.target.value);
+    $('bb-p2').disabled = !L.length;
+    $('bb-p2').innerHTML = `<option value="">${L.length ? '— Pilih —' : '— Belum ada pegawai —'}</option>` + L.map(p => `<option value="${esc(p.nip)}">${esc(p.nama)} — ${esc(p.jabatan)}</option>`).join('');
+    $('bb-p2i').textContent = e.target.value && !L.length ? 'KUA ini belum punya pegawai terdaftar. Tambahkan di menu Pegawai.' : '';
+  }
+  else if (id === 'bb-auto') { $('bb-na').readOnly = e.target.checked; bbPor(); }
+  else if (id === 'bb-pa' || id === 'bb-pb') bbPor();
+}
+async function bbSave() {
+  const v = id => $(id).value.trim(), n = id => v(id) === '' ? null : parseInt(v(id), 10);
+  const p1 = B.peg.find(p => p.nip === v('bb-p1')), p2 = B.peg.find(p => p.nip === v('bb-p2'));
+  if (!p1 || !p2) return jpToast('Pilih Pihak Pertama dan Pihak Kedua.', 'danger');
+  if (!n('bb-no')) return jpToast('Nomor Urut wajib diisi.', 'danger');
+  const [y, m, d] = v('bb-tgl').split('-').map(Number), a = n('bb-pa'), b = n('bb-pb');
+  if (!y || a == null || b == null) return jpToast('Tanggal dan nomor porporasi awal & akhir wajib diisi.', 'danger');
+  const dt = new Date(y, m - 1, d), btn = $('bb-save');
+  const row = { nomor_urut: n('bb-no'), tahun: y, bln_srt: +v('bb-bs'), hari: BX.getIndonesianDayName(dt), tgl: String(d).padStart(2, '0'), bln: BX.getIndonesianMonthName(dt),
+    pihak_satu_nip: p1.nip, pihak_satu_nama: p1.nama, pihak_satu_jabatan: p1.jabatan, pihak_satu_alamat: p1.alamat,
+    pihak_kedua_nip: p2.nip, pihak_kedua_nama: p2.nama, pihak_kedua_jabatan: p2.jabatan, pihak_kedua_alamat: p2.alamat,
+    banyak_na_buku: n('bb-na'), banyak_n: n('bb-n'), banyak_nb: n('bb-nb'), no_seri: v('bb-seri'), porporasi: `${a}- ${b}`,
+    kasi_nama: B.set.KASI_NAMA, kasi_nip: B.set.KASI_NIP, status_simkah: v('bb-sim') };
+  btn.disabled = true;
+  const { data, error } = await sb.from('bast_ba').insert(row).select(BCOL).single();
+  btn.disabled = false;
+  if (error) return jpToast(error.message, 'danger');
+  B.ba.unshift(bnOut(data));
+  if (String(y) !== B.set.LAST_NUMBER_YEAR || row.nomor_urut > (+B.set.LAST_NUMBER || 0)) Object.assign(B.set, { LAST_NUMBER: String(row.nomor_urut), LAST_NUMBER_YEAR: String(y) });
+  jpToast(`Berita Acara Nomor ${BX.pad3(row.nomor_urut)}/${y} disimpan.`); pageBastBuat();
+}
+
+/* ---- Pegawai ---- */
+async function pageBastPegawai() {
+  $('view').innerHTML = `<div class="jp" id="broot">${bnHead('Pegawai BAST NR', 'Staf Bimas Islam (Pihak Pertama) dan staf KUA (Pihak Kedua).', '<button class="btn btn-primary" data-act="padd"><i class="bx bx-plus"></i> Tambah Pegawai</button>')}
+    <div class="card"><div class="card-body"><div class="row g-2 mb-3"><div class="col-lg-5"><div class="input-group"><span class="input-group-text"><i class="bx bx-search"></i></span><input id="bpq" type="search" class="form-control" placeholder="Cari nama, NIP, jabatan, KUA…"></div></div>
+      <div class="col-lg-3"><select id="bpk" class="form-select"><option value="">Semua Kategori</option><option>Bimas Islam</option><option>KUA</option></select></div></div>
+      <div class="scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>Nama</th><th>NIP</th><th>Kategori</th><th>Jabatan</th><th>Unit Kerja</th><th></th></tr></thead><tbody id="bpt"></tbody></table></div><div id="bpc" class="mt-2"></div></div></div></div>`;
+  if (!await bnLoad()) return;
+  const r = $('broot'); r.oninput = r.onchange = bpRows;
+  r.onclick = e => { const b = e.target.closest('[data-act]'); if (!b) return; const a = b.dataset.act; if (a === 'padd') bnPegForm(); else if (a === 'pedit') bnPegForm(b.dataset.k); else if (a === 'pdel') bnPegDel(b.dataset.k); };
+  bpRows();
+}
+function bpRows() {
+  const q = $('bpq').value.toLowerCase(), k = $('bpk').value;
+  const L = B.peg.filter(p => (!k || p.kategori === k) && (!q || [p.nama, p.nip, p.jabatan, p.kua].join(' ').toLowerCase().includes(q)));
+  $('bpt').innerHTML = L.map(p => `<tr><td>${esc(p.nama)}</td><td>${esc(p.nip)}</td><td><span class="badge bg-label-${p.kategori === 'KUA' ? 'info' : 'primary'}">${esc(p.kategori)}</span></td><td>${esc(p.jabatan)}</td><td>${p.kategori === 'KUA' ? 'KUA ' + esc(p.kua) : 'Seksi Bimas Islam'}</td>
+    <td class="text-end text-nowrap"><button class="btn btn-sm btn-outline-secondary px-2" data-act="pedit" data-k="${esc(p.nip)}" aria-label="Ubah"><i class="bx bx-edit"></i></button> <button class="btn btn-sm btn-outline-danger px-2" data-act="pdel" data-k="${esc(p.nip)}" aria-label="Hapus"><i class="bx bx-trash"></i></button></td></tr>`).join('')
+    || '<tr><td colspan="6" class="text-center py-4">Belum ada pegawai.</td></tr>';
+  $('bpc').textContent = `Total: ${B.peg.length} pegawai${L.length !== B.peg.length ? ' · ' + L.length + ' cocok' : ''}`;
+}
+function bnPegForm(nip) {
+  const p = B.peg.find(x => x.nip === nip) || { kategori: 'Bimas Islam', nip: '', nama: '', jabatan: '', kua: '', alamat: BX.ALAMAT_BIMAS_DEFAULT };
+  const f = (id, l, v, ex = '') => `<div class="mb-3"><label class="form-label">${l}</label><input id="${id}" class="form-control" value="${esc(v)}" ${ex}></div>`;
+  bnDlg(`<h5 class="mb-3">${nip ? 'Ubah' : 'Tambah'} Pegawai</h5><div id="bfe"></div>
+    <label class="form-label">Kategori</label><select id="pf-kat" class="form-select mb-3"><option${p.kategori === 'Bimas Islam' ? ' selected' : ''}>Bimas Islam</option><option${p.kategori === 'KUA' ? ' selected' : ''}>KUA</option></select>
+    ${f('pf-nip', 'NIP (minimal 18 digit)', p.nip)}${f('pf-nama', 'Nama', p.nama)}${f('pf-jab', 'Jabatan', p.jabatan, 'list="pf-jl"')}<datalist id="pf-jl"></datalist>
+    <div id="pf-kw" class="mb-3"><label class="form-label">KUA Kecamatan</label><select id="pf-kua" class="form-select"><option value="">— Pilih KUA —</option>${BX.KUA_LIST.map(k => `<option${k.nama === p.kua ? ' selected' : ''}>${esc(k.nama)}</option>`).join('')}</select></div>
+    <div class="mb-3"><label class="form-label">Alamat</label><textarea id="pf-al" class="form-control" rows="2">${esc(p.alamat)}</textarea></div>
+    <div class="d-flex justify-content-end gap-2"><button class="btn btn-outline-secondary" data-x>Batal</button><button class="btn btn-primary" data-ok>Simpan</button></div>`,
+  d => {
+    const kat = () => $('pf-kat').value, sync = () => {
+      $('pf-jl').innerHTML = (kat() === 'KUA' ? BX.JABATAN_KUA : BX.JABATAN_BIMAS).map(j => `<option value="${esc(j)}">`).join('');
+      $('pf-kw').classList.toggle('d-none', kat() !== 'KUA');
+    };
+    sync();
+    $('pf-kat').onchange = () => { sync(); if (kat() === 'Bimas Islam' && !$('pf-al').value.trim()) $('pf-al').value = BX.ALAMAT_BIMAS_DEFAULT; };
+    $('pf-kua').onchange = () => { const k = BX.KUA_LIST.find(x => x.nama === $('pf-kua').value); if (k) $('pf-al').value = k.alamat; };
+    d.querySelector('[data-x]').onclick = () => d.close();
+    d.querySelector('[data-ok]').onclick = async () => {
+      const v = { nip: $('pf-nip').value.trim(), nama: $('pf-nama').value.trim(), kategori: kat(), jabatan: $('pf-jab').value.trim(), kua: kat() === 'KUA' ? $('pf-kua').value : '', alamat: $('pf-al').value.trim() };
+      const err = v.nip.replace(/\D/g, '').length < 18 ? 'NIP minimal 18 digit.' : !v.nama || !v.jabatan || !v.alamat ? 'Nama, Jabatan, dan Alamat wajib diisi.' : v.kategori === 'KUA' && !v.kua ? 'KUA Kecamatan wajib dipilih untuk kategori KUA.' : '';
+      if (err) return $('bfe').innerHTML = note(err, 'warning');
+      const { error } = await (nip ? sb.from('bast_pegawai').update(v).eq('nip', nip) : sb.from('bast_pegawai').insert(v));
+      if (error) return $('bfe').innerHTML = note(error.code === '23505' ? `NIP ${v.nip} sudah terdaftar.` : error.message);
+      B.peg = (nip ? B.peg.map(x => x.nip === nip ? v : x) : [...B.peg, v]).sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+      BX.set(B.set, B.peg); d.close(); bpRows(); jpToast('Pegawai disimpan.');
+    };
+  }, 'min(560px,95vw)');
+}
+function bnPegDel(nip) {
+  const p = B.peg.find(x => x.nip === nip); if (!p) return;
+  jpAsk('Hapus pegawai?', `${p.nama} (${p.nip}) dihapus dari daftar. Berita Acara lama tetap menyimpan datanya.`, 'Hapus', async () => {
+    const { error } = await sb.from('bast_pegawai').delete().eq('nip', nip);
+    if (error) return jpToast(error.message, 'danger');
+    B.peg = B.peg.filter(x => x.nip !== nip); BX.set(B.set, B.peg); bpRows(); jpToast('Pegawai dihapus.');
+  }, true);
+}
+
+/* ---- Pengaturan BAST ---- */
+async function pageBastSetting() {
+  $('view').innerHTML = `<div class="jp" id="broot">${bnHead('Pengaturan BAST NR', 'Format nomor surat, pejabat yang mengetahui, dan alamat kantor untuk PDF.')}<div id="bsf">Memuat…</div></div>`;
+  if (!await bnLoad()) return;
+  const F = [['KASI_NAMA', 'Nama Kepala Seksi (Mengetahui)'], ['KASI_NIP', 'NIP Kepala Seksi'], ['NOMOR_AWAL_SURAT', 'Nomor awal surat (tiap tahun)'], ['KODE_KANTOR', 'Kode kantor'], ['KODE_KLASIFIKASI', 'Kode klasifikasi'],
+    ['NOMOR_FORMAT_TEMPLATE', 'Format nomor surat'], ['ALAMAT_BIMAS_LENGKAP', 'Alamat lengkap kantor Bimas Islam']];
+  $('bsf').innerHTML = `<div class="card"><div class="card-body"><div class="row g-3">${F.map(([k, l]) => `<div class="${k.length > 16 ? 'col-12' : 'col-md-6'}"><label class="form-label">${l}</label><input class="form-control" data-k="${k}" value="${esc(B.set[k])}"></div>`).join('')}</div>
+    <p class="small mt-3 mb-1">Placeholder format: {NOMOR} {KODE_KANTOR} {BULAN_ROMAWI} {KODE_KLASIFIKASI} {BULAN_ANGKA} {TAHUN}</p>
+    <p class="small">Nomor terakhir terpakai: <b>${esc(B.set.LAST_NUMBER)}</b> (tahun ${esc(B.set.LAST_NUMBER_YEAR) || '-'}). Nomor berikutnya mengikuti otomatis dan kembali ke nomor awal tiap tahun baru.</p>
+    <div class="d-flex justify-content-end"><button class="btn btn-primary" id="bs-save"><i class="bx bx-save"></i> Simpan Pengaturan</button></div></div></div>`;
+  $('bs-save').onclick = async () => {
+    const rows = [...document.querySelectorAll('#bsf [data-k]')].map(i => ({ key: i.dataset.k, value: i.value.trim() }));
+    const { error } = await sb.from('bast_setting').upsert(rows, { onConflict: 'key' });
+    if (error) return jpToast(error.message, 'danger');
+    rows.forEach(x => { B.set[x.key] = x.value; }); BX.set(B.set, B.peg); jpToast('Pengaturan disimpan.');
+  };
 }
 </script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=tsReady&render=explicit" async defer></script>

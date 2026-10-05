@@ -4,6 +4,8 @@
 //                                        Butuh sekali:  npm install @supabase/supabase-js
 //   node --env-file=.env bop.mjs drive   Siapkan akses Google Drive untuk Edge Function "bop":
 //                                        ambil refresh token dan buat folder pusat LPJ.
+//   node --env-file=.env bop.mjs bast    Pindahkan data BAST NR lama (Apps Script/Spreadsheet) ke Supabase.
+//                                        Butuh sekali:  npm install @supabase/supabase-js
 //
 // Isi file .env (buat di folder yang sama; JANGAN diunggah ke GitHub):
 //   SUPABASE_URL=https://xxxx.supabase.co
@@ -14,6 +16,7 @@
 //   GOOGLE_CLIENT_ID=...                 OAuth client "Desktop app"                 [drive]
 //   GOOGLE_CLIENT_SECRET=...                                                        [drive]
 //   DRIVE_FOLDER_ID=...                  opsional: pakai folder buatan sendiri      [drive]
+//   BAST_WEB_APP_URL=https://script.google.com/macros/s/.../exec   URL Web App BAST NR lama   [bast]
 //
 // Persiapan Google (untuk "drive"): aktifkan Google Drive API; OAuth consent screen dengan scope .../auth/drive.file
 // lalu "Publish app" (jika tetap Testing, token kedaluwarsa 7 hari); buat OAuth client ID jenis "Desktop app".
@@ -25,8 +28,9 @@ import { writeFileSync } from 'node:fs';
 const cmd = process.argv[2];
 if (cmd === 'akun') await akun();
 else if (cmd === 'drive') await drive();
+else if (cmd === 'bast') await bast();
 else {
-  console.log('Pemakaian:\n  node --env-file=.env bop.mjs akun    (buat akun admin + 31 operator)\n  node --env-file=.env bop.mjs drive   (siapkan Google Drive untuk LPJ)');
+  console.log('Pemakaian:\n  node --env-file=.env bop.mjs akun    (buat akun admin + 31 operator)\n  node --env-file=.env bop.mjs drive   (siapkan Google Drive untuk LPJ)\n  node --env-file=.env bop.mjs bast    (pindahkan data BAST NR lama ke Supabase)');
   process.exit(1);
 }
 
@@ -111,4 +115,66 @@ async function drive() {
   console.log('\nSekarang jalankan (satu baris):\n');
   console.log(`npx supabase secrets set GOOGLE_CLIENT_ID=${id} GOOGLE_CLIENT_SECRET=${secret} GOOGLE_REFRESH_TOKEN=${tok.refresh_token} DRIVE_ROOT_FOLDER_ID=${folderId}`);
   console.log('\nLalu: npx supabase functions deploy bop --no-verify-jwt');
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Memindahkan data BAST NR dari Web App Apps Script lama (aksi GET: getPegawai, getBeritaAcara, getSetting) ke Supabase.
+// Aman diulang: data yang sudah ada dilewati (perubahan di sistem baru tidak ditimpa). Arsip lama hanya dicatat sebagai tautan.
+async function bast() {
+  const { SUPABASE_URL, SERVICE_ROLE_KEY, BAST_WEB_APP_URL: url } = process.env;
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !url) throw new Error('Isi SUPABASE_URL, SERVICE_ROLE_KEY, dan BAST_WEB_APP_URL (berakhiran /exec) di .env');
+  const { createClient } = await import('@supabase/supabase-js');
+  const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const get = async (a) => {
+    const j = await (await fetch(`${url}?action=${a}`)).json().catch(() => null);
+    if (!j?.success) throw new Error(`${a} gagal: ${j?.message ?? 'respons bukan JSON (cek URL Web App dan akses "Anyone")'}`);
+    return j.data;
+  };
+  const txt = (v) => String(v ?? '').trim(), int = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; };
+  const [peg, ba, set] = [await get('getPegawai'), await get('getBeritaAcara'), await get('getSetting')];
+  const warn = [];
+
+  const pegRows = peg.map((p) => ({ nip: txt(p.nip), nama: txt(p.nama), kategori: txt(p.kategori), jabatan: txt(p.jabatan), kua: txt(p.kua), alamat: txt(p.alamat) }))
+    .filter((p) => { const ok = p.nip && p.nama && p.jabatan && p.alamat && ['Bimas Islam', 'KUA'].includes(p.kategori); if (!ok) warn.push(`Pegawai dilewati (data tidak lengkap): ${p.nip || '(NIP kosong)'} ${p.nama}`); return ok; });
+
+  const seen = new Set(), baRows = [];
+  for (const r of ba) {
+    const row = {
+      nomor_urut: int(r.nomorUrut), tahun: int(r.tahun), bln_srt: int(r.blnSrt), hari: txt(r.hari), tgl: txt(r.tgl), bln: txt(r.bln),
+      pihak_satu_nip: txt(r.pihakSatuNip), pihak_satu_nama: txt(r.pihakSatuNama), pihak_satu_jabatan: txt(r.pihakSatuJabatan), pihak_satu_alamat: txt(r.pihakSatuAlamat),
+      pihak_kedua_nip: txt(r.pihakKeduaNip), pihak_kedua_nama: txt(r.pihakKeduaNama), pihak_kedua_jabatan: txt(r.pihakKeduaJabatan), pihak_kedua_alamat: txt(r.pihakKeduaAlamat),
+      banyak_na_buku: int(r.banyakNaBuku), banyak_n: int(r.banyakN), banyak_nb: int(r.banyakNb), no_seri: txt(r.noSeri), porporasi: txt(r.porporasi),
+      kasi_nama: txt(r.kasiNama), kasi_nip: txt(r.kasiNip), status_simkah: r.statusSimkah === 'Sudah' ? 'Sudah' : 'Belum', arsip_link: txt(r.linkArsip) || null,
+    };
+    const k = `${row.nomor_urut}/${row.tahun}`;
+    if (!(row.nomor_urut > 0) || !(row.tahun >= 2000 && row.tahun <= 2100)) { warn.push(`BA dilewati (nomor/tahun tidak terbaca): ${JSON.stringify([r.nomorUrut, r.tahun])}`); continue; }
+    if (seen.has(k)) { warn.push(`BA ganda ${k}: hanya yang pertama dipindahkan`); continue; }
+    seen.add(k); baRows.push(row);
+  }
+
+  const put = async (table, rows, onConflict) => {
+    for (let i = 0; i < rows.length; i += 200) {
+      const { error } = await sb.from(table).upsert(rows.slice(i, i + 200), { onConflict, ignoreDuplicates: true });
+      if (error) throw new Error(`${table}: ${error.message}`);
+    }
+  };
+  await put('bast_pegawai', pegRows, 'nip');
+  await put('bast_ba', baRows, 'nomor_urut,tahun');
+  await put('bast_setting', Object.entries(set).filter(([k]) => ['KASI_NAMA', 'KASI_NIP', 'NOMOR_AWAL_SURAT', 'KODE_KANTOR', 'KODE_KLASIFIKASI', 'NOMOR_FORMAT_TEMPLATE', 'ALAMAT_BIMAS_LENGKAP'].includes(k)).map(([key, value]) => ({ key, value: txt(value) })), 'key');
+
+  // Nomor terakhir dihitung dari data BA (tahun terbaru, nomor terbesar) dan hanya dimajukan.
+  const { data: cur } = await sb.from('bast_setting').select('key,value').in('key', ['LAST_NUMBER', 'LAST_NUMBER_YEAR']);
+  const c = Object.fromEntries((cur ?? []).map((x) => [x.key, x.value]));
+  const { data: top } = await sb.from('bast_ba').select('tahun,nomor_urut').order('tahun', { ascending: false }).order('nomor_urut', { ascending: false }).limit(1);
+  if (top?.[0]) {
+    const y = String(top[0].tahun), n = top[0].nomor_urut, cy = c.LAST_NUMBER_YEAR || '', cn = parseInt(c.LAST_NUMBER, 10) || 0;
+    if (y > cy || (y === cy && n > cn)) await sb.from('bast_setting').upsert([{ key: 'LAST_NUMBER', value: String(n) }, { key: 'LAST_NUMBER_YEAR', value: y }]);
+  }
+
+  console.log(`Dibaca dari sistem lama: ${peg.length} pegawai, ${ba.length} Berita Acara, ${Object.keys(set).length} pengaturan.`);
+  console.log(`Diproses ke Supabase  : ${pegRows.length} pegawai, ${baRows.length} Berita Acara (yang sudah ada dilewati).`);
+  warn.forEach((w) => console.log('PERINGATAN: ' + w));
+  console.log('\nArsip lama dicatat sebagai tautan Drive (dibuka dari Detail BA). Arsip baru diunggah lewat aplikasi.');
+  console.log('PENTING: setelah data dipastikan lengkap, nonaktifkan deployment Apps Script lama (Deploy > Manage deployments > Archive).');
+  console.log('URL Web App-nya terbuka untuk siapa pun yang tahu alamatnya, termasuk yang tertulis di config.js lama.');
 }
