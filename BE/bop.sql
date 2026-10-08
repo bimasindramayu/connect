@@ -1,21 +1,38 @@
 -- =====================================================================================
--- BOP KUA Kabupaten Indramayu: SKEMA DATABASE LENGKAP (satu file)
+-- Jalin (Bimas Islam Kabupaten Indramayu): SKEMA DATABASE LENGKAP (satu file)
 --
 -- Cara pakai: Supabase > SQL Editor > New query > tempel seluruh isi file ini > Run.
 -- Aman dijalankan berulang (idempotent). Cocok untuk:
 --   (a) pemasangan baru (database kosong);
---   (b) database versi lama: RPD/Realisasi per-POS dikonversi otomatis menjadi 1 record per bulan (JSON),
---       lalu tabel lama (rpd_lama, realisasi_lama) dihapus setelah dipastikan datanya sudah pindah.
+--   (b) database versi lama: struktur lama dikonversi otomatis, tabel lama dihapus setelah dipastikan datanya pindah:
+--       RPD/Realisasi per-POS -> 1 record per bulan (JSON); Anggaran per KUA -> 1 baris per tahun;
+--       Pengaturan SAKTI berversi per bulan -> ceklis global; Realisasi SAKTI tanpa status/tanggal/keterangan.
 --
 -- Isi: 0 Persiapan | 1 Profil dan hak akses | 2 KUA | 3 Fungsi bantu | 4 POS | 5 Config | 6 Anggaran |
---      7 AutoPayment (arsip) | 8 RPD | 9 Realisasi | 9b Pembayaran SAKTI | 10 Salin data lama | 11 Pembersihan | 12 Jaspro Transport | 13 BAST NR
+--      7 (kosong) | 8 RPD | 9 Realisasi | 9b Pembayaran SAKTI | 9c Impor data lama | 10 Salin data lama |
+--      11 Pembersihan | 12 Jaspro Transport | 13 BAST NR
 --
--- Model data: RPD dan Realisasi = 1 record per KUA per bulan; rincian POS disimpan di kolom JSON
---   items = {"<id POS>": nominal, ...}. Total dihitung otomatis oleh trigger. Pembayaran SAKTI (Listrik, Telepon/Internet, Air)
---   memakai tabel metode_pembayaran (metode per KUA + POS) dan realisasi_sakti (diinput admin per bulan); keduanya dijumlahkan
---   dengan Realisasi manual pada validasi dan laporan. Tabel autopayment_pos (nominal tetap) kini arsip: sudah dimigrasikan sekali.
+-- Model data: Anggaran = 1 baris per TAHUN (items = {"<id KUA>": nominal}). RPD dan Realisasi = 1 record per KUA per bulan;
+--   rincian POS disimpan di kolom JSON items = {"<id POS>": nominal, ...}. Total dihitung otomatis oleh trigger.
+--   Pembayaran SAKTI hanya Listrik dan Telepon/Internet: ceklis global per KUA + POS (metode_pembayaran) dan nominal bulanan
+--   yang diinput admin (realisasi_sakti); dijumlahkan dengan Realisasi manual pada validasi dan laporan.
+--   Semua input nominal dibatasi 10 digit (Rp 9.999.999.999), ditegakkan di database (nominal_max) dan di index.html.
 -- Keamanan: RLS membatasi operator ke KUA-nya; trigger SECURITY DEFINER menegakkan semua aturan di sisi server.
 -- =====================================================================================
+
+-- 0a) PERIKSA AWAL, sebelum ada yang diubah: Air (522113) tidak lagi dibayar lewat SAKTI. Dibatalkan bila Realisasi SAKTI Air
+-- masih bernominal, supaya tidak ada uang yang hilang diam-diam dan database tidak berhenti di tengah pembaruan.
+do $$
+declare n bigint;
+begin
+  if to_regclass('public.realisasi_sakti') is not null and to_regclass('public.pos') is not null then
+    select count(*) into n from public.realisasi_sakti s join public.pos p on p.id = s.pos_id
+     where p.kode_pos = '522113' and s.nominal > 0;
+    if n > 0 then
+      raise exception 'Dibatalkan sebelum mengubah apa pun: ada % baris Realisasi SAKTI untuk Air (522113) bernominal > 0, padahal SAKTI hanya Listrik dan Telepon/Internet. Pindahkan nilainya ke Realisasi manual lebih dulu, lalu jalankan: delete from public.realisasi_sakti where pos_id = (select id from public.pos where kode_pos = ''522113'');', n;
+    end if;
+  end if;
+end $$;
 
 -- 0) PERSIAPAN: bila masih struktur lama (RPD/Realisasi per-POS), pindahkan dulu menjadi *_lama
 do $$ begin
@@ -27,6 +44,11 @@ do $$ begin
     drop trigger if exists realisasi_a_lock on public.realisasi;
     drop trigger if exists realisasi_guard on public.realisasi;
     alter table public.realisasi rename to realisasi_lama;
+  end if;
+  -- Anggaran lama = 1 baris per KUA per tahun (kolom kua_id). Struktur baru = 1 baris per tahun; datanya disalin di bagian 10.
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'anggaran' and column_name = 'kua_id') then
+    drop trigger if exists anggaran_guard on public.anggaran;
+    alter table public.anggaran rename to anggaran_lama;
   end if;
 end $$;
 
@@ -90,6 +112,17 @@ alter table public.kua enable row level security;
 drop policy if exists kua_read on public.kua;
 create policy kua_read on public.kua for select to authenticated using (true);
 
+-- Daftar akun beserta username (bagian email sebelum @). Hanya admin; auth.users tidak terbuka ke klien.
+create or replace function public.akun_daftar() returns table (id uuid, username text, nama text, kua text, role text)
+language sql security definer stable set search_path = public as $$
+  select p.id, split_part(u.email, '@', 1), p.nama, p.kua, p.role
+    from public.profiles p join auth.users u on u.id = p.id
+   where public.is_admin()
+   order by p.role, p.nama;
+$$;
+revoke execute on function public.akun_daftar() from public, anon;
+grant execute on function public.akun_daftar() to authenticated;
+
 -- 3) FUNGSI BANTU ------------------------------------------------------------------------
 create or replace function public.rp(n bigint) returns text
 language sql stable as $$ select 'Rp ' || replace(to_char(n, 'FM999,999,999,999,999'), ',', '.'); $$;
@@ -100,6 +133,9 @@ $$;
 
 create or replace function public.items_total(p jsonb) returns bigint
 language sql immutable as $$ select coalesce(sum(value::bigint), 0)::bigint from jsonb_each_text(p); $$;
+
+-- Batas input nominal: maksimal 10 digit (Rp 9.999.999.999). Harus sama dengan MAXD di index.html.
+create or replace function public.nominal_max() returns bigint language sql immutable as $$ select 9999999999::bigint; $$;
 
 -- 4) POS: satu baris = satu unit input (rincian, atau kode POS itu sendiri bila tanpa rincian) -------------
 create table if not exists public.pos (
@@ -128,7 +164,7 @@ language sql stable set search_path = public as $$
   select kode_pos || ' ' || coalesce(nama_rincian, nama_pos) from pos where id = p_id;
 $$;
 
--- Rapikan dan validasi rincian: kunci = id POS yang ada, nilai = bilangan bulat >= 0; nilai 0 dibuang
+-- Rapikan dan validasi rincian: kunci = id POS yang ada, nilai = bilangan bulat 0..9.999.999.999 (10 digit); nilai 0 dibuang
 create or replace function public.norm_items(p jsonb) returns jsonb
 language plpgsql stable set search_path = public as $$
 declare k text; v jsonb; r jsonb := '{}'::jsonb;
@@ -137,6 +173,8 @@ begin
   for k, v in select key, value from jsonb_each(p) loop
     if jsonb_typeof(v) <> 'number' or (v #>> '{}') !~ '^[0-9]+$' then
       raise exception 'Nominal POS % harus bilangan bulat dan tidak negatif.', k; end if;
+    if length(v #>> '{}') > 10 then
+      raise exception 'Nominal POS % maksimal 10 digit (Rp 9.999.999.999).', k; end if;
     if not exists (select 1 from pos where id::text = k) then raise exception 'POS % tidak dikenal.', k; end if;
     if (v #>> '{}')::bigint > 0 then r := r || jsonb_build_object(k, (v #>> '{}')::bigint); end if;
   end loop;
@@ -153,7 +191,7 @@ create table if not exists public.config (
   updated_by uuid references auth.users(id), updated_at timestamptz not null default now()
 );
 insert into public.config (key, value) values
- ('wajib_lpj','true'),('rpd_enabled','true'),('realisasi_enabled','true'),
+ ('rpd_enabled','true'),('realisasi_enabled','true'),
  ('max_file_size_mb','5'),('max_file_count','3'),('bulan_edit_rpd','[1,2,3,4,5,6,7,8,9,10,11,12]')
 on conflict (key) do nothing;
 
@@ -170,27 +208,44 @@ create policy cfg_read on public.config for select to authenticated using (true)
 drop policy if exists cfg_admin on public.config;
 create policy cfg_admin on public.config for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
--- 6) ANGGARAN TAHUNAN ------------------------------------------------------------------------
+-- 6) ANGGARAN TAHUNAN: 1 baris = 1 TAHUN ----------------------------------------------------------
+-- items = {"<id KUA>": nominal} untuk semua KUA; total dihitung trigger. Operator tidak membaca tabel ini langsung
+-- (satu baris memuat semua KUA): operator memakai anggaran_tahun(), admin menulis lewat set_anggaran().
 create table if not exists public.anggaran (
-  id bigint generated by default as identity primary key,
-  kua_id int not null references public.kua(id),
   tahun int not null check (tahun between 2020 and 2100),
-  nominal_total bigint not null check (nominal_total >= 0),
+  items jsonb not null default '{}'::jsonb check (jsonb_typeof(items) = 'object'),
+  total bigint not null default 0 check (total >= 0),
   updated_by uuid references auth.users(id), updated_at timestamptz not null default now(),
-  unique (kua_id, tahun)
+  constraint anggaran_tahun_pk primary key (tahun)
 );
 
--- Anggaran tidak boleh diturunkan di bawah total RPD yang sudah diisi (pesan menyebut nama KUA)
+-- Rapikan (kunci = id KUA yang ada, nilai bilangan bulat 0..9.999.999.999, nol dibuang) dan jaga:
+-- anggaran sebuah KUA tidak boleh diturunkan di bawah total RPD yang sudah diisi (pesan menyebut nama KUA).
 create or replace function public.anggaran_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare used bigint;
+declare k text; v jsonb; r jsonb := '{}'::jsonb; n bigint; kid int; used bigint; nm text;
 begin
-  perform pg_advisory_xact_lock(new.kua_id, new.tahun);
-  select coalesce(sum(total), 0) into used from rpd where kua_id = new.kua_id and tahun = new.tahun;
-  if new.nominal_total < used then
-    raise exception '%: Anggaran % lebih kecil dari total RPD yang sudah diisi (%). Kurangi RPD lebih dulu.',
-      (select nama_kua from kua where id = new.kua_id), rp(new.nominal_total), rp(used);
-  end if;
+  if new.items is null or jsonb_typeof(new.items) <> 'object' then raise exception 'Format anggaran tidak valid.'; end if;
+  for k, v in select key, value from jsonb_each(new.items) loop
+    select nama_kua into nm from kua where id::text = k;
+    if nm is null then raise exception 'KUA % tidak dikenal.', k; end if;
+    if jsonb_typeof(v) <> 'number' or (v #>> '{}') !~ '^[0-9]+$' then
+      raise exception '%: anggaran harus bilangan bulat dan tidak negatif.', nm; end if;
+    if length(v #>> '{}') > 10 then
+      raise exception '%: anggaran maksimal 10 digit (Rp 9.999.999.999).', nm; end if;
+    n := (v #>> '{}')::bigint;
+    if n > 0 then r := r || jsonb_build_object(k, n); end if;
+  end loop;
+  new.items := r;
+  -- kunci yang sama dengan guard RPD (KUA + tahun), selalu berurutan menurut id KUA
+  for kid in select id from kua order by id loop perform pg_advisory_xact_lock(kid, new.tahun); end loop;
+  for kid, used in select kua_id, sum(total) from rpd where tahun = new.tahun group by kua_id having sum(total) > 0 loop
+    n := coalesce((r ->> kid::text)::bigint, 0);
+    if n < used then
+      raise exception '%: Anggaran % lebih kecil dari total RPD yang sudah diisi (%). Kurangi RPD lebih dulu.',
+        (select nama_kua from kua where id = kid), rp(n), rp(used); end if;
+  end loop;
+  new.total := coalesce((select sum(value::bigint) from jsonb_each_text(r)), 0);
   new.updated_by := auth.uid(); new.updated_at := now();
   return new;
 end $$;
@@ -198,103 +253,40 @@ drop trigger if exists anggaran_guard on public.anggaran;
 create trigger anggaran_guard before insert or update on public.anggaran
   for each row execute function public.anggaran_guard();
 
+-- Anggaran satu tahun: {"<id KUA>": nominal}. Admin: semua KUA. Operator: hanya KUA-nya sendiri.
+create or replace function public.anggaran_tahun(p_tahun int) returns jsonb
+language sql security definer stable set search_path = public as $$
+  select coalesce((select case
+           when public.is_admin() then a.items
+           when public.my_kua() is not null and a.items ? public.my_kua()::text
+             then jsonb_build_object(public.my_kua()::text, a.items -> public.my_kua()::text)
+           else '{}'::jsonb end
+         from public.anggaran a where a.tahun = p_tahun), '{}'::jsonb);
+$$;
+
+-- Atur anggaran: hanya KUA yang dikirim yang berubah (digabung ke baris tahun itu; nilai 0 = hapus). Hanya admin.
+create or replace function public.set_anggaran(p_tahun int, p_items jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'Hanya admin yang dapat mengatur anggaran.'; end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'object' then raise exception 'Format anggaran tidak valid.'; end if;
+  perform 1 from anggaran where tahun = p_tahun for update;
+  if found then update anggaran set items = items || p_items where tahun = p_tahun;
+  else insert into anggaran (tahun, items) values (p_tahun, p_items); end if;
+end $$;
+revoke execute on function public.anggaran_tahun(int) from public, anon;
+grant execute on function public.anggaran_tahun(int) to authenticated;
+revoke execute on function public.set_anggaran(int, jsonb) from public, anon;
+grant execute on function public.set_anggaran(int, jsonb) to authenticated;
+
 alter table public.anggaran enable row level security;
 drop policy if exists ang_read on public.anggaran;
-create policy ang_read on public.anggaran for select to authenticated using (public.is_admin() or kua_id = public.my_kua());
 drop policy if exists ang_admin on public.anggaran;
 create policy ang_admin on public.anggaran for all to authenticated using (public.is_admin()) with check (public.is_admin());
+revoke all on public.anggaran from anon;
+revoke delete, truncate on public.anggaran from authenticated;
 
--- 7) AUTOPAYMENT LAMA (ARSIP; digantikan bagian 9b. Tidak dipakai lagi oleh validasi, dimigrasikan sekali ke SAKTI) -----------
--- Versi konfigurasi: (mulai, sampai) agar riwayat bulan lampau tidak berubah ketika nominal diganti.
-create table if not exists public.autopayment_pos (
-  kua_id int not null references public.kua(id) on delete cascade,
-  pos_id int not null references public.pos(id) on delete cascade,
-  nominal bigint not null default 0 check (nominal >= 0),
-  mulai date not null default date_trunc('month', now() at time zone 'Asia/Jakarta')::date,
-  sampai date,
-  created_by uuid references auth.users(id) default auth.uid(),
-  created_at timestamptz not null default now(),
-  primary key (kua_id, pos_id, mulai)
-);
--- (database lama: lengkapi kolom dan kunci utama)
-alter table public.autopayment_pos add column if not exists nominal bigint not null default 0 check (nominal >= 0);
-alter table public.autopayment_pos add column if not exists mulai date not null default date_trunc('month', now() at time zone 'Asia/Jakarta')::date;
-alter table public.autopayment_pos add column if not exists sampai date;
-do $$ begin
-  if (select array_length(conkey, 1) from pg_constraint where conrelid = 'public.autopayment_pos'::regclass and contype = 'p') = 2 then
-    alter table public.autopayment_pos drop constraint autopayment_pos_pkey;
-    alter table public.autopayment_pos add primary key (kua_id, pos_id, mulai);
-  end if;
-end $$;
-
-create or replace function public.autopayment_pos_guard() returns trigger
-language plpgsql security definer set search_path = public as $$
-begin
-  if not exists (select 1 from pos where id = new.pos_id and kode_pos in ('522111','522112','522113')) then
-    raise exception 'AutoPayment hanya untuk Listrik, Telepon/Internet, dan Air.'; end if;
-  return new;
-end $$;
-drop trigger if exists autopayment_pos_guard on public.autopayment_pos;
-create trigger autopayment_pos_guard before insert or update on public.autopayment_pos
-  for each row execute function public.autopayment_pos_guard();
-
--- AutoPayment virtual: nominal tetap selama versi konfigurasi berlaku, sampai bulan berjalan (WIB)
-create or replace function public.auto_items(p_kua int, p_tahun int, p_bulan int) returns jsonb
-language sql stable set search_path = public as $$
-  select coalesce(jsonb_object_agg(pos_id::text, nominal), '{}'::jsonb) from autopayment_pos
-   where kua_id = p_kua and nominal > 0
-     and make_date(p_tahun, p_bulan, 1) <= date_trunc('month', now() at time zone 'Asia/Jakarta')::date
-     and make_date(p_tahun, p_bulan, 1) >= mulai
-     and (sampai is null or make_date(p_tahun, p_bulan, 1) <= sampai);
-$$;
-
-create or replace function public.auto_year(p_kua int, p_pos int, p_tahun int) returns bigint
-language sql stable set search_path = public as $$
-  select coalesce(sum(a.nominal), 0)::bigint from autopayment_pos a, generate_series(1, 12) m
-   where a.kua_id = p_kua and a.pos_id = p_pos and a.nominal > 0
-     and make_date(p_tahun, m, 1) <= date_trunc('month', now() at time zone 'Asia/Jakarta')::date
-     and make_date(p_tahun, m, 1) >= a.mulai and (a.sampai is null or make_date(p_tahun, m, 1) <= a.sampai);
-$$;
-
--- Atur AutoPayment sekaligus: [{"kua_id":1,"pos_id":7,"nominal":300000}, ...]; nominal 0 = nonaktifkan. Berlaku mulai bulan ini.
-create or replace function public.set_autopayment(p_items jsonb) returns void
-language plpgsql security definer set search_path = public as $$
-declare it jsonb; a record; n bigint; cur date := date_trunc('month', now() at time zone 'Asia/Jakarta')::date;
-begin
-  if not public.is_admin() then raise exception 'Hanya admin yang dapat mengatur AutoPayment.'; end if;
-  for it in select value from jsonb_array_elements(p_items) loop
-    n := coalesce((it ->> 'nominal')::bigint, 0);
-    select * into a from autopayment_pos where kua_id = (it ->> 'kua_id')::int and pos_id = (it ->> 'pos_id')::int and sampai is null;
-    if n > 0 then
-      if found then
-        if a.nominal = n then continue; end if;
-        if a.mulai >= cur then
-          update autopayment_pos set nominal = n where kua_id = a.kua_id and pos_id = a.pos_id and mulai = a.mulai;
-        else
-          update autopayment_pos set sampai = (cur - interval '1 month')::date where kua_id = a.kua_id and pos_id = a.pos_id and mulai = a.mulai;
-          insert into autopayment_pos (kua_id, pos_id, nominal, mulai) values (a.kua_id, a.pos_id, n, cur);
-        end if;
-      else
-        insert into autopayment_pos (kua_id, pos_id, nominal, mulai) values ((it ->> 'kua_id')::int, (it ->> 'pos_id')::int, n, cur);
-      end if;
-    elsif found then
-      if a.mulai >= cur then
-        delete from autopayment_pos where kua_id = a.kua_id and pos_id = a.pos_id and mulai = a.mulai;
-      else
-        update autopayment_pos set sampai = (cur - interval '1 month')::date where kua_id = a.kua_id and pos_id = a.pos_id and mulai = a.mulai;
-      end if;
-    end if;
-  end loop;
-end $$;
-revoke execute on function public.set_autopayment(jsonb) from public, anon;
-grant execute on function public.set_autopayment(jsonb) to authenticated;
-
-alter table public.autopayment_pos enable row level security;
-drop policy if exists ap_admin on public.autopayment_pos;
-create policy ap_admin on public.autopayment_pos for all to authenticated
-  using (public.is_admin()) with check (public.is_admin());
-drop policy if exists ap_read on public.autopayment_pos;
-create policy ap_read on public.autopayment_pos for select to authenticated using (kua_id = public.my_kua());
+-- 7) (kosong) AutoPayment lama (nominal tetap) sudah digantikan SAKTI di bagian 9b. Sisa objek lamanya dibersihkan di bagian 11.
 
 -- 8) RPD: 1 record = 1 KUA x 1 bulan -----------------------------------------------------------
 create table if not exists public.rpd (
@@ -317,7 +309,7 @@ begin
     raise exception 'Anda tidak berhak mengubah data KUA lain.'; end if;
   new.items := norm_items(new.items); new.total := items_total(new.items);
   perform pg_advisory_xact_lock(new.kua_id, new.tahun);
-  select nominal_total into cap from anggaran where kua_id = new.kua_id and tahun = new.tahun;
+  select (items ->> new.kua_id::text)::bigint into cap from anggaran where tahun = new.tahun;
   if cap is null then raise exception 'Anggaran Tahunan % belum ditetapkan admin untuk KUA ini.', new.tahun; end if;
   select coalesce(sum(total), 0) into used from rpd where kua_id = new.kua_id and tahun = new.tahun and bulan <> new.bulan;
   if used + new.total > cap then
@@ -352,61 +344,93 @@ create table if not exists public.realisasi (
   submitted_by uuid references auth.users(id), submitted_at timestamptz,
   verified_by uuid references auth.users(id), verified_at timestamptz,
   paid_at timestamptz,
+  nominal_dibayar bigint check (nominal_dibayar is null or nominal_dibayar > 0),
   unique (kua_id, tahun, bulan)
 );
+-- (database lama: lengkapi kolom nominal yang dibayarkan admin; wajib diisi saat status Dibayar, dijaga trigger)
+alter table public.realisasi add column if not exists nominal_dibayar bigint check (nominal_dibayar is null or nominal_dibayar > 0);
 create index if not exists realisasi_filter on public.realisasi (tahun, status, kua_id);
 
 -- Operator: hanya boleh membuat (belum ada) atau memperbaiki yang berstatus rejected; setelah dikirim jadi waiting dan terkunci.
--- Admin: boleh mengubah status apa pun kapan pun, tetapi TIDAK boleh mengubah nominal / dokumen LPJ.
+-- Admin: boleh mengubah status apa pun kapan pun, tetapi TIDAK boleh mengubah nominal / dokumen LPJ. Status Dibayar wajib
+-- menyertakan nominal yang dibayarkan (1 .. total Realisasi, maks 10 digit).
+-- Impor data lama: hanya impor_baris() (admin) yang menyalakan penanda bop.impor. Aturan PROSES operator (kepemilikan, status,
+-- jadwal tanggal 10, LPJ wajib, POS SAKTI) dilewati karena ini data historis; aturan HITUNGAN (RPD) tetap berlaku.
 create or replace function public.realisasi_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare sk jsonb; rpd_m bigint; sk_m bigint; ctx text; k text; v bigint; cap bigint; used bigint;
+declare impor boolean := coalesce(current_setting('bop.impor', true), '') = 'on';
+        sk jsonb; rpd_m bigint; sk_m bigint; ctx text; k text; v bigint; lama bigint; cap bigint; used bigint; pid int;
 begin
-  if tg_op = 'UPDATE' and public.is_admin() then
-    if (new.kua_id, new.tahun, new.bulan, new.items, new.total, new.file_lpj_url)
-       is distinct from (old.kua_id, old.tahun, old.bulan, old.items, old.total, old.file_lpj_url) then
-      raise exception 'Admin hanya dapat mengubah status dan catatan, bukan nominal atau dokumen LPJ.'; end if;
-    if new.status = 'rejected' and btrim(coalesce(new.catatan_admin, '')) = '' then
-      raise exception 'Alasan penolakan wajib diisi.'; end if;
-    if new.status <> old.status then
-      new.verified_by := auth.uid(); new.verified_at := now();
-      new.paid_at := case when new.status = 'paid' then now() end;
+  if not impor then
+    if tg_op = 'UPDATE' and public.is_admin() then
+      if (new.kua_id, new.tahun, new.bulan, new.items, new.total, new.file_lpj_url)
+         is distinct from (old.kua_id, old.tahun, old.bulan, old.items, old.total, old.file_lpj_url) then
+        raise exception 'Admin hanya dapat mengubah status dan catatan, bukan nominal atau dokumen LPJ.'; end if;
+      if new.status = 'rejected' and btrim(coalesce(new.catatan_admin, '')) = '' then
+        raise exception 'Alasan penolakan wajib diisi.'; end if;
+      if new.status = 'paid' then
+        if new.nominal_dibayar is null then
+          raise exception 'Nominal yang dibayarkan wajib diisi untuk status Dibayar.'; end if;
+        if new.nominal_dibayar <= 0 then
+          raise exception 'Nominal yang dibayarkan harus lebih dari Rp 0.'; end if;
+        if new.nominal_dibayar > nominal_max() then
+          raise exception 'Nominal yang dibayarkan maksimal 10 digit (Rp 9.999.999.999).'; end if;
+        if new.nominal_dibayar > new.total then
+          raise exception 'Nominal yang dibayarkan (%) melebihi total Realisasi (%).', rp(new.nominal_dibayar), rp(new.total); end if;
+      else
+        new.nominal_dibayar := null;
+      end if;
+      if new.status <> old.status then
+        new.verified_by := auth.uid(); new.verified_at := now();
+        new.paid_at := case when new.status = 'paid' then now() end;
+      end if;
+      return new;
     end if;
-    return new;
+
+    if public.my_kua() is distinct from new.kua_id then
+      raise exception 'Anda tidak berhak mengubah data KUA lain.'; end if;
+    if tg_op = 'UPDATE' then
+      if old.status <> 'rejected' then
+        raise exception 'Realisasi berstatus % tidak dapat diubah. Hanya Realisasi yang ditolak yang dapat diperbaiki.',
+          case old.status when 'waiting' then 'Menunggu verifikasi' when 'approved' then 'Disetujui' else 'Dibayar' end; end if;
+      if (new.kua_id, new.tahun, new.bulan) is distinct from (old.kua_id, old.tahun, old.bulan) then
+        raise exception 'KUA, tahun, dan bulan tidak dapat diubah.'; end if;
+      new.catatan_admin := old.catatan_admin; new.verified_by := old.verified_by; new.verified_at := old.verified_at;
+    else
+      new.catatan_admin := null; new.verified_by := null; new.verified_at := null;
+    end if;
+    new.paid_at := null; new.nominal_dibayar := null; new.status := 'waiting'; new.submitted_by := auth.uid(); new.submitted_at := now();
   end if;
 
-  if public.my_kua() is distinct from new.kua_id then
-    raise exception 'Anda tidak berhak mengubah data KUA lain.'; end if;
-  if tg_op = 'UPDATE' then
-    if old.status <> 'rejected' then
-      raise exception 'Realisasi berstatus % tidak dapat diubah. Hanya Realisasi yang ditolak yang dapat diperbaiki.',
-        case old.status when 'waiting' then 'Menunggu verifikasi' when 'approved' then 'Disetujui' else 'Dibayar' end; end if;
-    if (new.kua_id, new.tahun, new.bulan) is distinct from (old.kua_id, old.tahun, old.bulan) then
-      raise exception 'KUA, tahun, dan bulan tidak dapat diubah.'; end if;
-    new.catatan_admin := old.catatan_admin; new.verified_by := old.verified_by; new.verified_at := old.verified_at;
-  else
-    new.catatan_admin := null; new.verified_by := null; new.verified_at := null;
-  end if;
-  new.paid_at := null; new.status := 'waiting'; new.submitted_by := auth.uid(); new.submitted_at := now();
-  new.items := norm_items(new.items); new.total := items_total(new.items);
-
-  if coalesce((select (value #>> '{}')::boolean from config where key = 'realisasi_enabled'), false) is not true then
-    raise exception 'Pengisian Realisasi sedang ditutup oleh admin.'; end if;
-  if (now() at time zone 'Asia/Jakarta')::date < make_date(new.tahun, new.bulan, 10) then
-    raise exception 'Realisasi % % baru dapat disubmit mulai tanggal 10 %.', nama_bulan(new.bulan), new.tahun, nama_bulan(new.bulan); end if;
-  if new.total > 0 and new.file_lpj_url is null then
-    raise exception 'LPJ wajib dilampirkan (unggah file LPJ).'; end if;
-
+  new.items := norm_items(new.items);
   select nama_kua into ctx from kua where id = new.kua_id;
   perform pg_advisory_xact_lock(new.kua_id, new.tahun);
-  -- POS bermetode SAKTI pada bulan itu hanya diinput admin (tabel realisasi_sakti), tidak boleh diisi operator
-  for k in select jsonb_object_keys(new.items) loop
-    if metode_pos(new.kua_id, k::int, new.tahun, new.bulan) = 'SAKTI' then
-      raise exception '%: POS % bermetode SAKTI pada % %. Realisasinya diinput oleh Admin dan tidak dapat diisi manual.',
-        ctx, pos_label(k::int), nama_bulan(new.bulan), new.tahun; end if;
-  end loop;
-  sk := sakti_items(new.kua_id, new.tahun, new.bulan);
 
+  if not impor then
+    -- POS yang dicentang SAKTI hanya diinput admin (tabel realisasi_sakti): operator tidak boleh mengisi atau mengubahnya.
+    -- Nilai lama (warisan sebelum dicentang) dipertahankan, jadi Realisasi yang ditolak tetap dapat diperbaiki.
+    for pid in select p.id from pos p where pos_sakti_ok(p.id) and metode_pos(new.kua_id, p.id) = 'SAKTI' loop
+      k := pid::text;
+      v := coalesce((new.items ->> k)::bigint, 0);
+      lama := case when tg_op = 'UPDATE' then coalesce((old.items ->> k)::bigint, 0) else 0 end;
+      if v > 0 and v <> lama then
+        raise exception '%: POS % dibayar lewat SAKTI. Realisasinya diinput oleh Admin dan tidak dapat diisi manual.',
+          ctx, pos_label(pid); end if;
+      new.items := (new.items - k) || case when lama > 0 then jsonb_build_object(k, lama) else '{}'::jsonb end;
+    end loop;
+  end if;
+  new.total := items_total(new.items);
+
+  if not impor then
+    if coalesce((select (value #>> '{}')::boolean from config where key = 'realisasi_enabled'), false) is not true then
+      raise exception 'Pengisian Realisasi sedang ditutup oleh admin.'; end if;
+    if (now() at time zone 'Asia/Jakarta')::date < make_date(new.tahun, new.bulan, 10) then
+      raise exception 'Realisasi % % baru dapat disubmit mulai tanggal 10 %.', nama_bulan(new.bulan), new.tahun, nama_bulan(new.bulan); end if;
+    if new.total > 0 and new.file_lpj_url is null then
+      raise exception 'LPJ wajib dilampirkan (unggah file LPJ).'; end if;
+  end if;
+
+  sk := sakti_items(new.kua_id, new.tahun, new.bulan);
   select coalesce(sum(total), 0) into rpd_m from rpd where kua_id = new.kua_id and tahun = new.tahun and bulan = new.bulan;
   sk_m := items_total(sk);
   if new.total + sk_m > rpd_m then
@@ -439,22 +463,21 @@ create policy rl_upd on public.realisasi for update to authenticated
   with check (public.is_admin() or kua_id = public.my_kua());
 
 -- 9b) PEMBAYARAN SAKTI --------------------------------------------------------------------------------------
--- Tiap KUA + POS punya metode pembayaran: MANUAL (operator mengisi Realisasi) atau SAKTI (admin menginput Realisasi SAKTI;
--- operator tidak bisa mengisinya). Hanya Listrik 522111, Telepon/Internet 522112, dan Air 522113 yang dapat memakai SAKTI.
--- KUA + POS yang belum diatur = MANUAL (perilaku lama tidak berubah).
--- Konfigurasi berversi per bulan berlaku (mulai): metode suatu bulan = versi terbaru dengan mulai <= bulan itu. Mengganti
--- metode hanya mengubah bulan sejak berlaku; Realisasi bulan sebelumnya (manual maupun SAKTI) tidak disentuh.
--- Realisasi SAKTI disimpan terpisah (realisasi_sakti, 1 baris = KUA x POS x bulan) dan dijumlahkan dengan Realisasi manual
--- pada semua validasi dan laporan. Tidak ada DELETE untuk siapa pun (data keuangan): koreksi dengan UPDATE.
+-- Hanya Listrik (522111) dan Telepon/Internet (522112) yang dibayar lewat SAKTI (autopayment). Pengaturannya GLOBAL: satu
+-- ceklis per KUA + POS, tanpa bulan/tahun berlaku (tabel metode_pembayaran; belum diatur = MANUAL).
+--   Tercentang (SAKTI) : admin menginput nominalnya tiap bulan di Realisasi SAKTI (tabel realisasi_sakti, 1 baris = KUA x POS x
+--                        bulan, hanya nominal); operator tidak dapat mengisinya.
+--   Tidak tercentang   : MANUAL, operator mengisi Realisasi seperti biasa.
+-- Realisasi SAKTI dijumlahkan dengan Realisasi manual pada semua validasi dan laporan. Agar tidak terhitung ganda, satu bulan
+-- hanya boleh punya satu sumber per POS: Realisasi SAKTI ditolak bila Realisasi manual bulan itu sudah memuat POS yang sama.
+-- Tidak ada DELETE untuk siapa pun (data keuangan): koreksi dengan UPDATE (nominal dikosongkan = Rp 0).
 
 create table if not exists public.metode_pembayaran (
   kua_id int not null references public.kua(id),
   pos_id int not null references public.pos(id),
   metode text not null check (metode in ('MANUAL','SAKTI')),
-  mulai date not null check (extract(day from mulai) = 1 and mulai between date '2020-01-01' and date '2100-12-01'),
-  created_by uuid references auth.users(id), created_at timestamptz not null default now(),
   updated_by uuid references auth.users(id), updated_at timestamptz not null default now(),
-  primary key (kua_id, pos_id, mulai)
+  primary key (kua_id, pos_id)
 );
 
 create table if not exists public.realisasi_sakti (
@@ -464,31 +487,67 @@ create table if not exists public.realisasi_sakti (
   tahun int not null check (tahun between 2020 and 2100),
   bulan int not null check (bulan between 1 and 12),
   nominal bigint not null default 0 check (nominal >= 0),
-  status_bayar text not null default 'BELUM_DIBAYAR' check (status_bayar in ('BELUM_DIBAYAR','SUDAH_DIBAYAR')),
-  tanggal_bayar date,
-  sumber text not null default 'SAKTI' check (sumber = 'SAKTI'),
-  catatan text check (catatan is null or char_length(catatan) <= 500),
-  created_by uuid references auth.users(id), created_at timestamptz not null default now(),
   updated_by uuid references auth.users(id), updated_at timestamptz not null default now(),
-  unique (kua_id, pos_id, tahun, bulan),
-  check (status_bayar = 'SUDAH_DIBAYAR' or (nominal = 0 and tanggal_bayar is null))
+  unique (kua_id, pos_id, tahun, bulan)
 );
 create index if not exists realisasi_sakti_filter on public.realisasi_sakti (tahun, bulan, kua_id);
 
+-- Air (522113) tidak lagi dibayar lewat SAKTI: pengaturan dan baris Realisasi SAKTI-nya dibersihkan (Air tetap POS manual biasa).
+-- Dibatalkan bila ada Realisasi SAKTI Air yang bernominal, supaya tidak ada uang yang hilang diam-diam.
+do $$
+declare air int; n bigint;
+begin
+  select id into air from public.pos where kode_pos = '522113';
+  if air is null then return; end if;
+  select count(*) into n from public.realisasi_sakti where pos_id = air and nominal > 0;
+  if n > 0 then
+    raise exception 'Dibatalkan: ada % baris Realisasi SAKTI untuk Air (522113) bernominal > 0, padahal SAKTI hanya Listrik dan Telepon/Internet. Pindahkan nilainya ke Realisasi manual lebih dulu, lalu jalankan: delete from public.realisasi_sakti where pos_id = %;', n, air;
+  end if;
+  delete from public.realisasi_sakti where pos_id = air;
+  delete from public.metode_pembayaran where pos_id = air;
+end $$;
+
+-- (database lama) Pengaturan berversi per bulan -> satu baris global per KUA + POS: dipakai versi yang berlaku SAAT INI
+-- (versi yang mulai berlakunya masih di masa depan dibuang). Kolom mulai, created_by, created_at dihapus.
+do $$
+declare pk text;
+begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'metode_pembayaran' and column_name = 'mulai') then
+    drop trigger if exists metode_guard on public.metode_pembayaran;
+    delete from public.metode_pembayaran where mulai > date_trunc('month', now() at time zone 'Asia/Jakarta')::date;
+    delete from public.metode_pembayaran a using public.metode_pembayaran b
+     where a.kua_id = b.kua_id and a.pos_id = b.pos_id and a.mulai < b.mulai;
+    select conname into pk from pg_constraint where conrelid = 'public.metode_pembayaran'::regclass and contype = 'p';
+    execute format('alter table public.metode_pembayaran drop constraint %I', pk);
+    alter table public.metode_pembayaran drop column mulai, drop column if exists created_by, drop column if exists created_at;
+    alter table public.metode_pembayaran add primary key (kua_id, pos_id);
+  end if;
+end $$;
+
+-- (database lama) Realisasi SAKTI tanpa status/tanggal/keterangan: baris "Belum dibayar" (Rp 0) dibuang, kolom yang tidak
+-- berguna dihapus (status_bayar, tanggal_bayar, sumber, catatan, created_by, created_at).
+do $$ begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'realisasi_sakti' and column_name = 'status_bayar') then
+    drop trigger if exists realisasi_sakti_guard on public.realisasi_sakti;
+    delete from public.realisasi_sakti where nominal = 0;
+    alter table public.realisasi_sakti drop column status_bayar, drop column if exists tanggal_bayar, drop column if exists sumber,
+      drop column if exists catatan, drop column if exists created_by, drop column if exists created_at;
+  end if;
+end $$;
+
 create or replace function public.pos_sakti_ok(p_pos int) returns boolean
 language sql stable set search_path = public as $$
-  select exists (select 1 from pos where id = p_pos and kode_pos in ('522111','522112','522113'));
+  select exists (select 1 from pos where id = p_pos and kode_pos in ('522111','522112'));
 $$;
 
--- Metode yang berlaku untuk KUA + POS pada suatu bulan (belum ada konfigurasi = MANUAL)
-create or replace function public.metode_pos(p_kua int, p_pos int, p_tahun int, p_bulan int) returns text
+-- Metode KUA + POS (global): belum diatur = MANUAL
+create or replace function public.metode_pos(p_kua int, p_pos int) returns text
 language sql stable set search_path = public as $$
-  select coalesce((select metode from metode_pembayaran
-                    where kua_id = p_kua and pos_id = p_pos and mulai <= make_date(p_tahun, p_bulan, 1)
-                    order by mulai desc limit 1), 'MANUAL');
+  select coalesce((select metode from metode_pembayaran where kua_id = p_kua and pos_id = p_pos), 'MANUAL');
 $$;
+drop function if exists public.metode_pos(int, int, int, int);
 
--- Realisasi SAKTI satu KUA pada satu bulan: {"<id POS>": nominal}. Belum dibayar bernominal 0, jadi tidak ikut.
+-- Realisasi SAKTI satu KUA pada satu bulan: {"<id POS>": nominal}. Nominal 0 (dikosongkan) tidak ikut.
 create or replace function public.sakti_items(p_kua int, p_tahun int, p_bulan int) returns jsonb
 language sql stable set search_path = public as $$
   select coalesce(jsonb_object_agg(pos_id::text, nominal), '{}'::jsonb) from realisasi_sakti
@@ -500,45 +559,32 @@ language sql stable set search_path = public as $$
   select coalesce(sum(nominal), 0)::bigint from realisasi_sakti where kua_id = p_kua and pos_id = p_pos and tahun = p_tahun;
 $$;
 
--- Hanya admin. Versi baru tidak boleh bertabrakan dengan data yang sudah ada pada bulan-bulan yang metodenya berubah:
---   MANUAL -> SAKTI ditolak bila sudah ada Realisasi manual untuk POS itu; SAKTI -> MANUAL ditolak bila sudah ada Realisasi SAKTI.
+-- Hanya admin. Pengaturan global: mencentang SAKTI selalu boleh; mengembalikan ke MANUAL ditolak selama KUA + POS itu
+-- masih punya Realisasi SAKTI bernominal (kosongkan dulu nominalnya di Realisasi SAKTI).
 create or replace function public.metode_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare lim date; bad text; ctx text; y int; yr int := extract(year from now() at time zone 'Asia/Jakarta')::int;
+declare bad text; ctx text; y int;
 begin
-  if not public.is_admin() then raise exception 'Hanya admin yang dapat mengubah metode pembayaran.'; end if;
-  if new.kua_id is null or new.pos_id is null or new.mulai is null or new.metode is null then
-    raise exception 'Data metode pembayaran tidak lengkap.'; end if;
-  if tg_op = 'UPDATE' and (new.kua_id, new.pos_id, new.mulai) is distinct from (old.kua_id, old.pos_id, old.mulai) then
-    raise exception 'KUA, POS, dan bulan berlaku tidak dapat diubah.'; end if;
+  if not public.is_admin() then raise exception 'Hanya admin yang dapat mengubah pengaturan SAKTI.'; end if;
+  if new.kua_id is null or new.pos_id is null or new.metode is null then
+    raise exception 'Data pengaturan SAKTI tidak lengkap.'; end if;
+  if tg_op = 'UPDATE' and (new.kua_id, new.pos_id) is distinct from (old.kua_id, old.pos_id) then
+    raise exception 'KUA dan POS tidak dapat diubah.'; end if;
   select nama_kua into ctx from kua where id = new.kua_id;
   if ctx is null then raise exception 'KUA tidak ditemukan.'; end if;
   if not pos_sakti_ok(new.pos_id) then
-    raise exception 'Metode pembayaran hanya dapat diatur untuk Listrik (522111), Telepon/Internet (522112), dan Air (522113).'; end if;
-  -- kunci yang sama dengan guard Realisasi (KUA + tahun) agar tidak berbalapan dengan operator
-  for y in extract(year from new.mulai)::int .. greatest(extract(year from new.mulai)::int, yr) loop
+    raise exception 'SAKTI hanya dapat diatur untuk Listrik (522111) dan Telepon/Internet (522112).'; end if;
+  -- kunci yang sama dengan guard Realisasi SAKTI (KUA + tahun) agar tidak berbalapan
+  for y in select distinct tahun from realisasi_sakti where kua_id = new.kua_id order by 1 loop
     perform pg_advisory_xact_lock(new.kua_id, y);
   end loop;
-  select min(mulai) into lim from metode_pembayaran where kua_id = new.kua_id and pos_id = new.pos_id and mulai > new.mulai;
-  if new.metode = 'SAKTI' then
-    select nama_bulan(r.bulan) || ' ' || r.tahun into bad from realisasi r
-     where r.kua_id = new.kua_id and coalesce((r.items ->> new.pos_id::text)::bigint, 0) > 0
-       and make_date(r.tahun, r.bulan, 1) >= new.mulai and (lim is null or make_date(r.tahun, r.bulan, 1) < lim)
-     order by r.tahun, r.bulan limit 1;
-    if bad is not null then
-      raise exception '%: POS % sudah punya Realisasi manual pada %, jadi belum bisa SAKTI mulai % %. Pilih bulan berlaku sesudahnya.',
-        ctx, pos_label(new.pos_id), bad, nama_bulan(extract(month from new.mulai)::int), extract(year from new.mulai)::int; end if;
-  else
+  if new.metode = 'MANUAL' then
     select nama_bulan(s.bulan) || ' ' || s.tahun into bad from realisasi_sakti s
-     where s.kua_id = new.kua_id and s.pos_id = new.pos_id and s.nominal > 0
-       and make_date(s.tahun, s.bulan, 1) >= new.mulai and (lim is null or make_date(s.tahun, s.bulan, 1) < lim)
-     order by s.tahun, s.bulan limit 1;
+     where s.kua_id = new.kua_id and s.pos_id = new.pos_id and s.nominal > 0 order by s.tahun, s.bulan limit 1;
     if bad is not null then
-      raise exception '%: POS % sudah punya Realisasi SAKTI pada %, jadi belum bisa MANUAL mulai % %. Pilih bulan berlaku sesudahnya.',
-        ctx, pos_label(new.pos_id), bad, nama_bulan(extract(month from new.mulai)::int), extract(year from new.mulai)::int; end if;
+      raise exception '%: POS % sudah punya Realisasi SAKTI (mulai %), jadi belum bisa dikembalikan ke MANUAL. Kosongkan dulu nominalnya di menu Realisasi SAKTI.',
+        ctx, pos_label(new.pos_id), bad; end if;
   end if;
-  if tg_op = 'INSERT' then new.created_by := auth.uid(); new.created_at := now();
-  else new.created_by := old.created_by; new.created_at := old.created_at; end if;
   new.updated_by := auth.uid(); new.updated_at := now();
   return new;
 end $$;
@@ -546,12 +592,11 @@ drop trigger if exists metode_guard on public.metode_pembayaran;
 create trigger metode_guard before insert or update on public.metode_pembayaran
   for each row execute function public.metode_guard();
 
--- Hanya admin; POS harus bermetode SAKTI pada bulan itu; periode sudah berjalan (WIB); Belum dibayar = Rp 0; Sudah dibayar wajib bertanggal.
--- Jumlahnya ikut aturan yang sama dengan Realisasi manual: (manual + SAKTI) sebulan <= RPD bulan itu, dan POS setahun <= RPD POS itu setahun.
+-- Hanya admin; POS harus tercentang SAKTI; periode sudah berjalan (WIB); nominal 0..9.999.999.999.
+-- Jumlahnya ikut aturan yang sama dengan Realisasi manual: (manual + SAKTI) sebulan <= RPD bulan itu, dan POS setahun <= RPD POS setahun.
 create or replace function public.realisasi_sakti_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare ctx text; rpd_m bigint; man_m bigint; sak_m bigint; cap bigint; used bigint;
-        today date := (now() at time zone 'Asia/Jakarta')::date;
+declare ctx text; rpd_m bigint; man_m bigint; sak_m bigint; cap bigint; used bigint; man_pos bigint;
 begin
   if not public.is_admin() then raise exception 'Realisasi SAKTI hanya dapat diinput oleh Admin.'; end if;
   if new.kua_id is null or new.pos_id is null then raise exception 'KUA dan POS wajib diisi.'; end if;
@@ -562,25 +607,21 @@ begin
   select nama_kua into ctx from kua where id = new.kua_id;
   if ctx is null then raise exception 'KUA tidak ditemukan.'; end if;
   if not pos_sakti_ok(new.pos_id) then
-    raise exception '%: POS % tidak dapat dibayar lewat SAKTI. Hanya Listrik, Telepon/Internet, dan Air.', ctx, coalesce(pos_label(new.pos_id), new.pos_id::text); end if;
+    raise exception '%: POS % tidak dapat dibayar lewat SAKTI. Hanya Listrik dan Telepon/Internet.', ctx, coalesce(pos_label(new.pos_id), new.pos_id::text); end if;
   if coalesce(new.nominal, -1) < 0 then raise exception 'Nominal tidak boleh negatif.'; end if;
-  if metode_pos(new.kua_id, new.pos_id, new.tahun, new.bulan) <> 'SAKTI' then
-    raise exception '%: POS % bermetode MANUAL pada % %. Realisasi SAKTI hanya untuk POS bermetode SAKTI.',
-      ctx, pos_label(new.pos_id), nama_bulan(new.bulan), new.tahun; end if;
+  if new.nominal > nominal_max() then raise exception '%: nominal maksimal 10 digit (Rp 9.999.999.999).', ctx; end if;
+  if metode_pos(new.kua_id, new.pos_id) <> 'SAKTI' then
+    raise exception '%: POS % belum dicentang SAKTI di Pengaturan SAKTI.', ctx, pos_label(new.pos_id); end if;
   if make_date(new.tahun, new.bulan, 1) > date_trunc('month', now() at time zone 'Asia/Jakarta')::date then
     raise exception 'Realisasi SAKTI % % belum dapat diinput karena periodenya belum berjalan.', nama_bulan(new.bulan), new.tahun; end if;
-  if coalesce(new.status_bayar, '') not in ('BELUM_DIBAYAR', 'SUDAH_DIBAYAR') then raise exception 'Status pembayaran tidak valid.'; end if;
-  if new.status_bayar = 'BELUM_DIBAYAR' then
-    if new.nominal <> 0 or new.tanggal_bayar is not null then
-      raise exception 'Realisasi berstatus Belum dibayar harus bernominal Rp 0 dan tanpa tanggal pembayaran.'; end if;
-  else
-    if new.tanggal_bayar is null then raise exception 'Tanggal pembayaran wajib diisi untuk Realisasi yang sudah dibayar.'; end if;
-    if new.tanggal_bayar > today then raise exception 'Tanggal pembayaran tidak boleh melebihi hari ini.'; end if;
-  end if;
-  new.catatan := nullif(btrim(coalesce(new.catatan, '')), '');
 
   perform pg_advisory_xact_lock(new.kua_id, new.tahun);
   if new.nominal > 0 and (tg_op = 'INSERT' or new.nominal is distinct from old.nominal) then
+    select coalesce((items ->> new.pos_id::text)::bigint, 0) into man_pos from realisasi
+     where kua_id = new.kua_id and tahun = new.tahun and bulan = new.bulan;
+    if coalesce(man_pos, 0) > 0 then
+      raise exception '%: POS % sudah punya Realisasi manual pada % %. Realisasi SAKTI tidak dapat diinput untuk bulan yang sudah diisi manual.',
+        ctx, pos_label(new.pos_id), nama_bulan(new.bulan), new.tahun; end if;
     select coalesce(sum(total), 0) into rpd_m from rpd where kua_id = new.kua_id and tahun = new.tahun and bulan = new.bulan;
     select coalesce(sum(total), 0) into man_m from realisasi where kua_id = new.kua_id and tahun = new.tahun and bulan = new.bulan;
     select coalesce(sum(nominal), 0) into sak_m from realisasi_sakti
@@ -596,9 +637,7 @@ begin
       raise exception '%: Realisasi POS % melebihi total RPD setahun. Batas: %, terpakai (bulan lain): %, dimasukkan: %, kelebihan: %.',
         ctx, pos_label(new.pos_id), rp(cap), rp(used), rp(new.nominal), rp(used + new.nominal - cap); end if;
   end if;
-  if tg_op = 'INSERT' then new.created_by := auth.uid(); new.created_at := now();
-  else new.created_by := old.created_by; new.created_at := old.created_at; end if;
-  new.sumber := 'SAKTI'; new.updated_by := auth.uid(); new.updated_at := now();
+  new.updated_by := auth.uid(); new.updated_at := now();
   return new;
 end $$;
 drop trigger if exists realisasi_sakti_guard on public.realisasi_sakti;
@@ -626,57 +665,91 @@ create policy rs_upd on public.realisasi_sakti for update to authenticated using
 revoke all on public.metode_pembayaran, public.realisasi_sakti from anon;
 revoke delete, truncate on public.metode_pembayaran, public.realisasi_sakti from authenticated;
 
--- Migrasi SEKALI dari AutoPayment lama (nominal tetap) agar angka bulan-bulan yang sudah berjalan tidak berubah:
---   * tiap versi autopayment_pos menjadi metode SAKTI mulai bulan itu (dan MANUAL setelah versi ditutup);
---   * tiap bulan yang tercakup (sampai bulan berjalan) menjadi satu baris Realisasi SAKTI berstatus Sudah dibayar.
--- Sesudahnya bulan baru TIDAK terisi otomatis lagi: admin menginput realisasi SAKTI yang sebenarnya tiap bulan.
--- Penanda di config mencegah pengulangan (dan menyimpan ringkasan hasil). Tabel autopayment_pos dibiarkan sebagai arsip.
-do $$
-declare cur date := date_trunc('month', now() at time zone 'Asia/Jakarta')::date; n_ver int := 0; n_row int := 0; n_bentrok int := 0;
+-- 9c) IMPOR DATA LAMA (menu "Impor Data Lama", hanya admin) --------------------------------------------------------
+-- Menulis data dari Spreadsheet/Apps Script lama ke tabel baru per baris; satu baris gagal tidak membatalkan yang lain
+-- (alasannya dikembalikan). Semua aturan database tetap berlaku (batas anggaran/RPD, SAKTI), kecuali aturan PROSES operator
+-- pada Realisasi (lihat realisasi_guard). p_jenis: anggaran | metode | rpd | realisasi | sakti.
+--   p_timpa = false : baris yang sudah ada dilewati (data baru di Supabase tidak tertimpa). true : ditimpa.
+-- Hasil: {"ok": n, "lewati": n, "gagal": [{"kua_id","tahun","bulan","pos_id","pesan"}]}
+create or replace function public.impor_baris(p_jenis text, p_rows jsonb, p_timpa boolean default false) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare r jsonb; ok int := 0; lewati int := 0; gagal jsonb := '[]'::jsonb; ada boolean;
+        kid int; thn int; bln int; pid int;
 begin
-  if exists (select 1 from public.config where key = 'sakti_migrasi_autopayment') then return; end if;
-  if exists (select 1 from public.autopayment_pos where nominal > 0) then
-    alter table public.metode_pembayaran disable trigger metode_guard;
-    alter table public.realisasi_sakti disable trigger realisasi_sakti_guard;
+  if not public.is_admin() then raise exception 'Hanya admin yang dapat mengimpor data.'; end if;
+  if p_jenis not in ('anggaran', 'metode', 'rpd', 'realisasi', 'sakti') then raise exception 'Jenis data impor tidak dikenal.'; end if;
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' then raise exception 'Format data impor tidak valid.'; end if;
+  if jsonb_array_length(p_rows) > 300 then raise exception 'Maksimal 300 baris per panggilan.'; end if;
+  perform set_config('bop.impor', 'on', true);
+  for r in select value from jsonb_array_elements(p_rows) loop
+    begin
+      kid := (r ->> 'kua_id')::int; thn := (r ->> 'tahun')::int; bln := (r ->> 'bulan')::int; pid := (r ->> 'pos_id')::int;
+      if p_jenis = 'anggaran' then
+        select exists (select 1 from anggaran where tahun = thn and items ? kid::text) into ada;
+        if ada and not p_timpa then lewati := lewati + 1; continue; end if;
+        perform public.set_anggaran(thn, jsonb_build_object(kid::text, (r ->> 'nominal')::bigint));
 
-    insert into public.metode_pembayaran (kua_id, pos_id, metode, mulai)
-    select kua_id, pos_id, case when bool_or(m = 'SAKTI') then 'SAKTI' else 'MANUAL' end, bln
-      from (select kua_id, pos_id, mulai as bln, 'SAKTI' as m from public.autopayment_pos where nominal > 0
-            union all
-            select kua_id, pos_id, (sampai + interval '1 month')::date, 'MANUAL' from public.autopayment_pos
-             where nominal > 0 and sampai is not null) e
-     group by kua_id, pos_id, bln
-    on conflict (kua_id, pos_id, mulai) do nothing;
-    get diagnostics n_ver = row_count;
+      elsif p_jenis = 'metode' then
+        select exists (select 1 from metode_pembayaran where kua_id = kid and pos_id = pid) into ada;
+        if ada and not p_timpa then lewati := lewati + 1; continue; end if;
+        update metode_pembayaran set metode = r ->> 'metode' where kua_id = kid and pos_id = pid;
+        if not found then insert into metode_pembayaran (kua_id, pos_id, metode) values (kid, pid, r ->> 'metode'); end if;
 
-    insert into public.realisasi_sakti (kua_id, pos_id, tahun, bulan, nominal, status_bayar, catatan)
-    select a.kua_id, a.pos_id, extract(year from (a.mulai + make_interval(months => g)))::int,
-           extract(month from (a.mulai + make_interval(months => g)))::int, a.nominal, 'SUDAH_DIBAYAR',
-           'Migrasi dari AutoPayment (nominal tetap)'
-      from public.autopayment_pos a
-     cross join lateral generate_series(0, ((extract(year from least(coalesce(a.sampai, cur), cur)) - extract(year from a.mulai)) * 12
-            + extract(month from least(coalesce(a.sampai, cur), cur)) - extract(month from a.mulai))::int) g
-     where a.nominal > 0 and a.mulai <= cur
-    on conflict (kua_id, pos_id, tahun, bulan) do nothing;
-    get diagnostics n_row = row_count;
+      elsif p_jenis = 'rpd' then
+        select exists (select 1 from rpd where kua_id = kid and tahun = thn and bulan = bln) into ada;
+        if ada and not p_timpa then lewati := lewati + 1; continue; end if;
+        update rpd set items = r -> 'items' where kua_id = kid and tahun = thn and bulan = bln;
+        if not found then insert into rpd (kua_id, tahun, bulan, items) values (kid, thn, bln, r -> 'items'); end if;
 
-    alter table public.metode_pembayaran enable trigger metode_guard;
-    alter table public.realisasi_sakti enable trigger realisasi_sakti_guard;
+      elsif p_jenis = 'realisasi' then
+        select exists (select 1 from realisasi where kua_id = kid and tahun = thn and bulan = bln) into ada;
+        if ada and not p_timpa then
+          -- sudah ada: hanya lengkapi tautan folder LPJ bila masih kosong (berkas yang gagal disalin pertama kali)
+          if r ->> 'file_lpj_url' is not null then
+            update realisasi set file_lpj_url = r ->> 'file_lpj_url' where kua_id = kid and tahun = thn and bulan = bln and file_lpj_url is null;
+          end if;
+          lewati := lewati + 1; continue;
+        end if;
+        update realisasi set items = r -> 'items', status = r ->> 'status', file_lpj_url = coalesce(r ->> 'file_lpj_url', file_lpj_url),
+               catatan_admin = nullif(btrim(coalesce(r ->> 'catatan_admin', '')), ''),
+               submitted_at = coalesce((r ->> 'submitted_at')::timestamptz, submitted_at, now()),
+               verified_at = (r ->> 'verified_at')::timestamptz, paid_at = (r ->> 'paid_at')::timestamptz,
+               nominal_dibayar = null
+         where kua_id = kid and tahun = thn and bulan = bln;
+        if not found then
+          insert into realisasi (kua_id, tahun, bulan, items, status, file_lpj_url, catatan_admin, submitted_at, verified_at, paid_at)
+          values (kid, thn, bln, r -> 'items', r ->> 'status', r ->> 'file_lpj_url',
+                  nullif(btrim(coalesce(r ->> 'catatan_admin', '')), ''),
+                  coalesce((r ->> 'submitted_at')::timestamptz, now()), (r ->> 'verified_at')::timestamptz, (r ->> 'paid_at')::timestamptz);
+        end if;
 
-    -- bulan yang sudah punya Realisasi manual DAN SAKTI untuk POS yang sama (warisan aturan lama): hanya dilaporkan, tidak diubah
-    select count(*) into n_bentrok from public.realisasi r
-      cross join lateral jsonb_each(r.items) i
-      join public.realisasi_sakti s on s.kua_id = r.kua_id and s.tahun = r.tahun and s.bulan = r.bulan and s.pos_id::text = i.key
-     where s.nominal > 0 and (i.value #>> '{}')::bigint > 0;
-  end if;
-  insert into public.config (key, value)
-  values ('sakti_migrasi_autopayment', jsonb_build_object('waktu', now(), 'versi_metode', n_ver, 'baris_realisasi_sakti', n_row, 'bentrok_dengan_manual', n_bentrok))
-  on conflict (key) do nothing;
-  raise notice 'Migrasi AutoPayment -> SAKTI: % versi metode, % baris Realisasi SAKTI, % bulan bentrok dengan Realisasi manual.', n_ver, n_row, n_bentrok;
+      else  -- sakti
+        select exists (select 1 from realisasi_sakti where kua_id = kid and pos_id = pid and tahun = thn and bulan = bln and nominal > 0) into ada;
+        if ada and not p_timpa then lewati := lewati + 1; continue; end if;
+        update realisasi_sakti set nominal = (r ->> 'nominal')::bigint where kua_id = kid and pos_id = pid and tahun = thn and bulan = bln;
+        if not found then insert into realisasi_sakti (kua_id, pos_id, tahun, bulan, nominal) values (kid, pid, thn, bln, (r ->> 'nominal')::bigint); end if;
+      end if;
+      ok := ok + 1;
+    exception when others then
+      gagal := gagal || jsonb_build_array(jsonb_build_object('kua_id', kid, 'tahun', thn, 'bulan', bln, 'pos_id', pid, 'pesan', sqlerrm));
+    end;
+  end loop;
+  perform set_config('bop.impor', 'off', true);
+  return jsonb_build_object('ok', ok, 'lewati', lewati, 'gagal', gagal);
 end $$;
+revoke execute on function public.impor_baris(text, jsonb, boolean) from public, anon;
+grant execute on function public.impor_baris(text, jsonb, boolean) to authenticated;
 
 -- 10) SALIN DATA LAMA (hanya bila tabel lama ada dan tabel baru masih kosong) --------------------------
--- Baris AutoPayment lama tidak disalin: kini dihitung dari tabel autopayment_pos.
+-- Baris AutoPayment lama tidak disalin (digantikan SAKTI, bagian 9b).
+-- Anggaran per KUA (anggaran_lama) -> 1 baris per tahun. Lebih dulu dari RPD karena RPD dibatasi anggaran.
+do $$ begin
+  if to_regclass('public.anggaran_lama') is not null and not exists (select 1 from public.anggaran) then
+    insert into public.anggaran (tahun, items)
+    select tahun, coalesce(jsonb_object_agg(kua_id::text, nominal_total) filter (where nominal_total > 0), '{}'::jsonb)
+      from public.anggaran_lama group by tahun;
+  end if;
+end $$;
 do $$ begin
   if to_regclass('public.rpd_lama') is not null and not exists (select 1 from public.rpd) then
     insert into public.rpd (kua_id, tahun, bulan, items, total, updated_by, updated_at)
@@ -698,7 +771,7 @@ do $$ begin
   end if;
 end $$;
 
--- 11) PEMBERSIHAN: penerbitan otomatis lama (tidak dipakai lagi) dan tabel lama ---------------------------
+-- 11) PEMBERSIHAN: penerbitan otomatis lama, AutoPayment lama, dan tabel lama ---------------------------
 do $$ begin perform cron.unschedule('autopayment-harian'); exception when others then null; end $$;
 drop function if exists public.generate_autopayment(int, int);
 drop function if exists public.realisasi_month_lock();
@@ -725,6 +798,40 @@ end $$;
 
 drop table if exists public.rpd_lama;
 drop table if exists public.realisasi_lama;
+
+-- Hapus anggaran_lama (struktur per KUA). Pengaman: dibatalkan bila ada anggaran lama yang belum sama di tabel baru.
+do $$
+declare hilang int;
+begin
+  if to_regclass('public.anggaran_lama') is not null then
+    select count(*) into hilang from public.anggaran_lama l
+     where l.nominal_total > 0
+       and coalesce((select (a.items ->> l.kua_id::text)::bigint from public.anggaran a where a.tahun = l.tahun), 0) <> l.nominal_total;
+    if hilang > 0 then
+      raise exception 'Dibatalkan: % anggaran lama belum sama di tabel anggaran yang baru.', hilang;
+    end if;
+  end if;
+end $$;
+drop table if exists public.anggaran_lama;
+
+-- AutoPayment lama (nominal tetap) sudah digantikan SAKTI: hapus fungsi, tabel arsip, dan penanda migrasinya.
+-- Pengaman: tabel arsip hanya dihapus bila migrasi ke SAKTI pernah berjalan (penanda ada) atau tabelnya tidak berisi nominal.
+drop trigger if exists autopayment_pos_guard on public.autopayment_pos;
+do $$ begin
+  if to_regclass('public.autopayment_pos') is not null then
+    if exists (select 1 from public.config where key = 'sakti_migrasi_autopayment')
+       or not exists (select 1 from public.autopayment_pos where nominal > 0) then
+      drop table public.autopayment_pos;
+    else
+      raise notice 'autopayment_pos masih berisi nominal dan belum pernah dimigrasikan ke SAKTI: tabel DIBIARKAN. Pindahkan datanya lewat menu Impor Data Lama atau Realisasi SAKTI, lalu jalankan ulang file ini.';
+    end if;
+  end if;
+end $$;
+drop function if exists public.autopayment_pos_guard();
+drop function if exists public.auto_items(int, int, int);
+drop function if exists public.auto_year(int, int, int);
+drop function if exists public.set_autopayment(jsonb);
+delete from public.config where key in ('sakti_migrasi_autopayment', 'wajib_lpj');
 -- 12) JASPRO TRANSPORT (alat sekali pakai: Laporan Nominatif PNBP NR) ---------------------------------------
 -- Hemat kuota: HANYA SATU baris (id = 1). Setiap simpan menimpa kolom yang dikirim; tanpa riwayat, log, atau tabel per bulan.
 -- master = Master Rekening [{id,nama,namaPemilik,noRekening}] | laporan = {fileName, rows:[...]} terakhir (null = belum ada)

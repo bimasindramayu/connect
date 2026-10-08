@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BOP KUA Indramayu</title>
+<title>Jalin · Bimas Islam Indramayu</title>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
@@ -66,13 +66,13 @@ dialog.wide{width:min(1100px,calc(100% - 1rem));height:calc(100% - 1rem);max-wid
 
 <section id="auth" class="d-none">
   <div class="card"><div class="card-body p-4 p-sm-5">
-    <div class="text-center mb-4"><span class="brand"><i class="bx bxs-wallet"></i> BOP KUA</span></div>
+    <div class="text-center mb-4"><span class="brand"><i class="bx bx-link-alt"></i> Jalin</span></div>
     <h5 class="mb-1">Selamat datang 👋</h5>
-    <p class="mb-4">Masuk untuk mengelola BOP KUA se-Kabupaten Indramayu.</p>
+    <p class="mb-4">Masuk untuk mengelola layanan KUA se-Kabupaten Indramayu.</p>
     <div id="msg"></div>
     <form id="f">
-      <label class="form-label" for="em">Email</label>
-      <input id="em" type="email" class="form-control mb-3" autocomplete="username" required autofocus>
+      <label class="form-label" for="un">Username</label>
+      <input id="un" type="text" class="form-control mb-3" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="mis. kua_anjatan" required autofocus>
       <label class="form-label" for="pw">Password</label>
       <div class="input-group mb-3">
         <input id="pw" type="password" class="form-control" autocomplete="current-password" required>
@@ -90,7 +90,7 @@ dialog.wide{width:min(1100px,calc(100% - 1rem));height:calc(100% - 1rem);max-wid
 
 <div id="app" class="d-none">
   <aside id="side">
-    <div class="p-4 pb-3"><a href="#bop" class="text-decoration-none"><span class="brand"><i class="bx bxs-wallet"></i> BOP KUA</span></a></div>
+    <div class="p-4 pb-3"><a href="#bop" class="text-decoration-none"><span class="brand"><i class="bx bx-link-alt"></i> Jalin</span></a></div>
     <nav class="nav flex-column">
       <details open>
         <summary class="nav-link"><i class="bx bx-wallet"></i>BOP<i class="bx bx-chevron-down ms-auto"></i></summary>
@@ -101,6 +101,7 @@ dialog.wide{width:min(1100px,calc(100% - 1rem));height:calc(100% - 1rem);max-wid
         <a class="nav-link sub admin-only d-none" href="#metode"><i class="bx bx-toggle-right"></i>Pengaturan SAKTI</a>
         <a class="nav-link sub admin-only d-none" href="#sakti"><i class="bx bx-transfer"></i>Realisasi SAKTI</a>
         <a class="nav-link sub admin-only d-none" href="#config"><i class="bx bx-slider"></i>Config</a>
+        <a class="nav-link sub admin-only d-none" href="#impor"><i class="bx bx-import"></i>Impor Data Lama</a>
         <a class="nav-link sub" href="#laporan"><i class="bx bx-file"></i>Laporan</a>
       </details>
       <details class="admin-only d-none">
@@ -128,15 +129,21 @@ dialog.wide{width:min(1100px,calc(100% - 1rem));height:calc(100% - 1rem);max-wid
 </div>
 
 <dialog id="dlg"></dialog>
+<dialog id="vdlg"></dialog>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-/* ====== ISI 3 NILAI INI ====== */
+/* ====== ISI NILAI INI (sekali per instalasi) ====== */
 const CFG = {
+  nama: 'Jalin',                                   // nama aplikasi; juga nama folder master di Google Drive (samakan dengan APP_NAME di index.ts dan bop.mjs)
   url: 'https://lpfwkitppdnlcakkncov.supabase.co',
   key: 'sb_publishable_AfVmUT86ttPMaiO3iUmJew_u3l3IBPF',
-  turnstile: '0x4AAAAAAFKG36vwdFMGZBiz'   // test key; ganti dengan Site Key Turnstile Anda
+  turnstile: '0x4AAAAAAFKG36vwdFMGZBiz',           // test key; ganti dengan Site Key Turnstile Anda
+  domain: 'domainanda.com'                           // domain email di balik username (pengguna tidak pernah mengetiknya); SAMAKAN dengan EMAIL_DOMAIN di .env
+  //https://script.google.com/macros/s/AKfycbwQZiSPbvdnz-814dlNsdI6seG4SQG43JAqbX23RuYaGZR2_-V8i1BlkONATP6ZbeSi/exec
 };
-/* ============================= */
+/* =================================================== */
+document.title = `${CFG.nama} · Bimas Islam Indramayu`;   // judul tab dan logo mengikuti CFG.nama (mengganti nama cukup di sini)
+document.querySelectorAll('.brand').forEach(b => { b.lastChild.textContent = ' ' + CFG.nama; });
 const LS = localStorage, SS = sessionStorage, RK = 'bop.remember', EK = 'bop.email';
 const remembered = () => LS.getItem(RK) === '1';
 // Ingat saya: sesi di localStorage (tetap login setelah browser ditutup). Tidak dicentang: sessionStorage (hilang saat tab ditutup).
@@ -160,9 +167,11 @@ const resetCaptcha = () => { token = null; if (window.turnstile && wid != null) 
 
 const loadRemember = () => {
   $('rem').checked = remembered();
-  if (remembered()) $('em').value = LS.getItem(EK) || '';
-  if ($('em').value) $('pw').focus();
+  if (remembered()) $('un').value = (LS.getItem(EK) || '').replace('@' + CFG.domain, '');
+  if ($('un').value) $('pw').focus();
 };
+// Login memakai username (mis. kua_anjatan). Email penuh tetap diterima (untuk akun lama / admin dengan email sendiri).
+const toEmail = u => { u = u.trim().toLowerCase(); return u.includes('@') ? u : `${u}@${CFG.domain}`; };
 const PW_ERR = 'Password minimal 8 karakter dan harus sama di kedua kolom.';
 const errId = e => ({ same_password: 'Password baru tidak boleh sama dengan password lama.', weak_password: 'Password terlalu lemah. Tambahkan huruf besar, angka, atau simbol.' }[e.code] || e.message);
 const eyeBtn = id => `<button type="button" class="btn btn-outline-secondary" data-eye="${id}" aria-label="Tampilkan password"><i class="bx bx-show"></i></button>`;
@@ -187,20 +196,21 @@ const pairOk = p => {
   return a.length >= 8 && same;
 };
 const bindPair = p => [1, 2].forEach(n => $(p + n).addEventListener('input', () => pairOk(p)));
-$('dlg').onclose = () => { if (vOff) vOff(); vOff = null; $('dlg').className = ''; $('dlg').replaceChildren(); };
+$('dlg').onclose = () => { $('dlg').className = ''; $('dlg').replaceChildren(); };
+$('vdlg').onclose = () => { if (vOff) vOff(); vOff = null; $('vdlg').className = ''; $('vdlg').replaceChildren(); };
 
 $('f').onsubmit = async e => {
   e.preventDefault();
   if (!token) return $('msg').innerHTML = note('Selesaikan captcha terlebih dahulu.', 'warning');
   $('go').disabled = true; $('msg').innerHTML = '';
-  const rem = $('rem').checked, mail = $('em').value.trim();
+  const rem = $('rem').checked, user = $('un').value.trim();
   LS.setItem(RK, rem ? '1' : '0'); // harus diset sebelum login agar sesi masuk ke storage yang benar
   const { error } = await sb.auth.signInWithPassword({
-    email: mail, password: $('pw').value, options: { captchaToken: token }
+    email: toEmail(user), password: $('pw').value, options: { captchaToken: token }
   });
   $('go').disabled = false;
-  if (!error) { if (rem) LS.setItem(EK, mail); else LS.removeItem(EK); }
-  if (error) { $('msg').innerHTML = note('Login gagal: email/password salah atau captcha tidak valid.'); resetCaptcha(); }
+  if (!error) { if (rem) LS.setItem(EK, user); else LS.removeItem(EK); }
+  if (error) { $('msg').innerHTML = note('Login gagal: username atau password salah, atau captcha tidak valid.'); resetCaptcha(); }
 };
 
 const show = v => { $('auth').classList.toggle('d-none', v !== 'auth'); $('app').classList.toggle('d-none', v !== 'app'); };
@@ -214,7 +224,7 @@ async function boot(session) {
     $('msg').innerHTML = note('Profil akun tidak ditemukan. Hubungi admin.');
     return;
   }
-  me = { ...data, email: session.user.email };
+  me = { ...data, email: session.user.email, username: (session.user.email || '').split('@')[0] };
   $('uName').textContent = me.nama;
   $('uRole').textContent = me.role === 'admin' ? 'Admin' : (me.kua || 'Operator');
   $('uAv').textContent = me.nama.charAt(0).toUpperCase();
@@ -228,11 +238,11 @@ sb.auth.onAuthStateChange((ev, s) => { if (ev !== 'TOKEN_REFRESHED') setTimeout(
 $('out').onclick = () => sb.auth.signOut();
 $('burger').onclick = () => $('side').classList.toggle('open');
 
-const pages = { bop: pageBop, rpd: pageRpd, laporan: pageLaporan, realisasi: pageRealisasi, anggaran: pageAnggaran, verifikasi: pageVerifikasi, metode: pageMetode, sakti: pageSakti, config: pageConfig, pengaturan: pagePengaturan, jaspro: pageJaspro, bast: pageBast, 'bast-buat': pageBastBuat, 'bast-pegawai': pageBastPegawai, 'bast-setting': pageBastSetting };
+const pages = { bop: pageBop, rpd: pageRpd, laporan: pageLaporan, realisasi: pageRealisasi, anggaran: pageAnggaran, verifikasi: pageVerifikasi, metode: pageMetode, sakti: pageSakti, config: pageConfig, impor: pageImpor, pengaturan: pagePengaturan, jaspro: pageJaspro, bast: pageBast, 'bast-buat': pageBastBuat, 'bast-pegawai': pageBastPegawai, 'bast-setting': pageBastSetting };
 function route() {
   if (!me) return;
   let k = location.hash.slice(1) in pages ? location.hash.slice(1) : 'bop';
-  if (['anggaran', 'verifikasi', 'metode', 'sakti', 'config', 'jaspro', 'bast', 'bast-buat', 'bast-pegawai', 'bast-setting'].includes(k) && me.role !== 'admin') k = 'bop'; // dijaga juga oleh RLS
+  if (['anggaran', 'verifikasi', 'metode', 'sakti', 'config', 'impor', 'jaspro', 'bast', 'bast-buat', 'bast-pegawai', 'bast-setting'].includes(k) && me.role !== 'admin') k = 'bop'; // dijaga juga oleh RLS
   if (k === 'realisasi' && me.role === 'admin') k = 'bop';
   document.querySelectorAll('#side .nav-link').forEach(a => a.classList.toggle('active', a.hash === '#' + k));
   $('side').classList.remove('open');
@@ -261,9 +271,10 @@ async function master() {
 }
 const rp = n => String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const num = s => parseInt(String(s).replace(/\D/g, '') || '0', 10);   // tanpa minus => tidak pernah negatif
-const fmtIn = el => {   // format 1.500.000 saat mengetik, kursor tetap di tempatnya
+const MAXD = 10;   // semua input nominal maksimal 10 digit (Rp 9.999.999.999); sama dengan nominal_max() di database
+const fmtIn = el => {   // format 1.500.000 saat mengetik (maks. 10 digit), kursor tetap di tempatnya
   const d = el.value.slice(0, el.selectionStart).replace(/\D/g, '').length;
-  el.value = el.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  el.value = el.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, MAXD).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   let i = 0, c = 0;
   while (i < el.value.length && c < d) if (/\d/.test(el.value[i++])) c++;
   el.setSelectionRange(i, i);
@@ -278,28 +289,29 @@ async function pageAnggaran() {
   const load = async () => {
     const t = +$('ay').value;
     let m, a;
-    try { [m, a] = await Promise.all([master(), sb.from('anggaran').select('kua_id,nominal_total').eq('tahun', t)]); if (a.error) throw a.error; }
+    try { [m, a] = await Promise.all([master(), sb.rpc('anggaran_tahun', { p_tahun: t })]); if (a.error) throw a.error; }
     catch (e) { return live(ep) && ($('atab').innerHTML = note(e.message)); }
     if (!live(ep)) return;
-    const set = Object.fromEntries(a.data.map(r => [r.kua_id, r.nominal_total]));
-    const n = m.kua.filter(k => set[k.id] != null).length;
-    $('atab').innerHTML = `<p class="mb-2"><b>${n}</b> dari ${m.kua.length} KUA sudah diset untuk ${t}.</p>
+    const set = a.data || {};   // { "<id KUA>": nominal }: di database seluruh anggaran satu tahun hanya 1 baris
+    const n = m.kua.filter(k => set[k.id] != null).length, tot = m.kua.reduce((s, k) => s + (set[k.id] || 0), 0);
+    $('atab').innerHTML = `<p class="mb-2"><b>${n}</b> dari ${m.kua.length} KUA sudah diset untuk ${t}. Total anggaran: <b>Rp ${rp(tot)}</b>.</p>
       <table class="table table-hover align-middle"><thead><tr><th>KUA</th><th>Status</th><th>Anggaran (Rp)</th></tr></thead><tbody>${m.kua.map(k => `<tr>
         <td>${esc(k.nama_kua)}</td>
         <td><span class="badge ${set[k.id] != null ? 'bg-label-primary' : 'bg-secondary'}">${set[k.id] != null ? 'Sudah diset' : 'Belum diset'}</span></td>
         <td><input class="form-control form-control-sm text-end" style="min-width:140px" inputmode="numeric" placeholder="0" data-k="${k.id}" value="${set[k.id] != null ? rp(set[k.id]) : ''}"></td>
         </tr>`).join('')}</tbody></table>
+      <p class="small text-muted">Maksimal 10 digit per KUA. Mengosongkan kolom menghapus anggaran KUA itu (ditolak bila RPD-nya sudah diisi).</p>
       <button class="btn btn-primary" id="asave">Simpan Anggaran ${t}</button>`;
     $('atab').oninput = e => { if (e.target.dataset.k) fmtIn(e.target); };
     $('asave').onclick = async () => {
-      const rows = [...$('atab').querySelectorAll('[data-k]')]
-        .filter(i => i.value.trim() && num(i.value) !== set[i.dataset.k])
-        .map(i => ({ kua_id: +i.dataset.k, tahun: t, nominal_total: num(i.value) }));
-      if (!rows.length) return $('amsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
+      const items = {};   // hanya KUA yang berubah; yang lain tidak tersentuh (digabung di server)
+      $('atab').querySelectorAll('[data-k]').forEach(i => { const v = i.value.trim() ? num(i.value) : 0; if (v !== (set[i.dataset.k] || 0)) items[i.dataset.k] = v; });
+      const c = Object.keys(items).length;
+      if (!c) return $('amsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
       $('asave').disabled = true;
-      const { error } = await sb.from('anggaran').upsert(rows, { onConflict: 'kua_id,tahun' });   // satu transaksi: gagal satu = batal semua
+      const { error } = await sb.rpc('set_anggaran', { p_tahun: t, p_items: items });   // satu transaksi: gagal satu = batal semua
       if (!live(ep)) return;
-      $('amsg').innerHTML = error ? note(error.message) : note(`Anggaran ${t} tersimpan untuk ${rows.length} KUA.`, 'success');
+      $('amsg').innerHTML = error ? note(error.message) : note(`Anggaran ${t} tersimpan untuk ${c} KUA.`, 'success');
       if (error) $('asave').disabled = false; else load();
     };
   };
@@ -311,18 +323,12 @@ const ST = { waiting: ['bg-warning', 'Menunggu verifikasi'], approved: ['bg-info
 const sumT = a => a.reduce((s, x) => s + x.total, 0);
 const isum = o => Object.values(o || {}).reduce((s, v) => s + v, 0);
 const posLabel = p => `${p.kode_pos} · ${p.nama_rincian || p.nama_pos}`;   // kode akun + nama POS/rincian
-const mfirst = (t, b) => `${t}-${String(b).padStart(2, '0')}-01`;
-/* ====== Pembayaran SAKTI: metode per KUA + POS (berversi per bulan berlaku) dan Realisasi SAKTI yang diinput admin ====== */
-const SAKTI_POS = ['522111', '522112', '522113'];   // Listrik, Telepon/Internet, Air: hanya POS ini yang dapat bermetode SAKTI
-const SB = { SUDAH_DIBAYAR: ['bg-success', 'Sudah dibayar'], BELUM_DIBAYAR: ['bg-warning', 'Belum dibayar'] };
-const metodeOf = (vers, kid, pid, t, b) => {   // versi terbaru dengan mulai <= bulan itu; belum diatur = MANUAL (sama dengan fungsi SQL metode_pos)
-  const d = mfirst(t, b); let best = null;
-  vers.forEach(v => { if (v.kua_id === kid && v.pos_id === pid && v.mulai <= d && (!best || v.mulai > best.mulai)) best = v; });
-  return best ? best.metode : 'MANUAL';
-};
+/* ====== Pembayaran SAKTI: hanya Listrik dan Telepon/Internet. Ceklis GLOBAL per KUA + POS (tanpa bulan/tahun berlaku) dan
+   nominal bulanan yang diinput admin (Realisasi SAKTI) ====== */
+const SAKTI_POS = ['522111', '522112'];   // Listrik dan Telepon/Internet: hanya POS ini yang dapat dibayar lewat SAKTI
+const metodeOf = (vers, kid, pid) => vers.find(v => v.kua_id === kid && v.pos_id === pid)?.metode || 'MANUAL';   // belum diatur = MANUAL (sama dengan fungsi SQL metode_pos)
 const saktiOf = (rs, b) => { const o = {}; rs.forEach(x => { if (x.bulan === b && x.nominal > 0) o[x.pos_id] = x.nominal; }); return o; };   // {pos_id: nominal} Realisasi SAKTI satu bulan
 const saktiYear = (rs, pid) => rs.reduce((s, x) => s + (x.pos_id === pid ? x.nominal : 0), 0);
-const tglId = s => { const [y, m, d] = s.split('-'); return `${+d} ${BLN3[+m - 1]} ${y}`; };
 
 /* ====== Edge Function "bop": reset password, unggah/hapus/daftar/baca dokumen LPJ (folder pusat Google Drive) ====== */
 async function api(q, opt = {}) {
@@ -344,7 +350,7 @@ async function showDocs(el, ctx, opt = {}) {   // ctx = { kua, tahun, bulan }; o
     el.innerHTML = files.length ? `<ul class="list-unstyled mb-0">${files.map((f, i) => `<li class="d-flex align-items-center gap-2 mb-1"><i class="bx bx-file"></i><span class="me-auto text-break">${esc(f.name)}</span><button class="btn btn-sm btn-outline-primary" data-f="${i}">Lihat</button>${opt.del ? `<button class="btn btn-sm btn-outline-danger" data-x="${i}" aria-label="Hapus"><i class="bx bx-trash"></i></button>` : ''}</li>`).join('')}</ul>` : '<span class="small">Belum ada dokumen.</span>';
     el.onclick = async e => {
       const v = e.target.closest('[data-f]'), x = e.target.closest('[data-x]');
-      if (v) return openViewer(files, +v.dataset.f, ctx);
+      if (v) return openViewer(files, +v.dataset.f, f => api({ action: 'file', ...ctx, id: f.id }));
       if (!x || !confirm(`Hapus file "${files[+x.dataset.x].name}" dari Google Drive?`)) return;
       x.disabled = true;
       try { await api({ action: 'delete', ...ctx, id: files[+x.dataset.x].id }, { method: 'POST' }); showDocs(el, ctx, opt); }
@@ -353,16 +359,22 @@ async function showDocs(el, ctx, opt = {}) {   // ctx = { kua, tahun, bulan }; o
   } catch (e) { el.innerHTML = note(e.message); if (opt.onCount) opt.onCount(null); }
 }
 
-/* ====== Pratinjau dokumen: zoom (mouse/trackpad/sentuh), geser, putar. Posisi dijepit agar dokumen tak pernah hilang dari layar ====== */
+/* ====== Pratinjau dokumen, SATU penampil untuk semua menu (Realisasi, Verifikasi, BAST NR): zoom (mouse/trackpad/sentuh), geser,
+   putar, dan penunjuk halaman PDF ("Halaman 2 dari 7"). Posisi dijepit agar dokumen tak pernah hilang dari layar ====== */
 const PDF_JS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
 const PDF_WK = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 let vOff = null;
-async function openViewer(files, idx, ctx) {
-  const d = $('dlg'), btn = (k, ic, lb) => `<button type="button" class="btn btn-outline-secondary" data-v="${k}" aria-label="${lb}" title="${lb}"><i class="bx ${ic}"></i></button>`;
+// files = [{ name }]; load(file) = fungsi yang mengembalikan Response isi file (PDF/gambar dikenali dari Content-Type).
+// Dialog tersendiri (#vdlg) sehingga dapat dibuka di atas dialog lain (mis. detail BAST NR) tanpa menutupnya.
+async function openViewer(files, idx, load) {
+  const d = $('vdlg'), btn = (k, ic, lb) => `<button type="button" class="btn btn-outline-secondary" data-v="${k}" aria-label="${lb}" title="${lb}"><i class="bx ${ic}"></i></button>`;
   d.className = 'wide';
   d.innerHTML = `<div class="d-flex flex-column h-100">
     <div class="d-flex align-items-center flex-wrap gap-2 p-2 border-bottom">
-      <select id="vf" class="form-select form-select-sm" style="flex:1 1 140px;width:auto;min-width:0">${files.map((f, i) => `<option value="${i}"${i === idx ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}</select>
+      ${files.length > 1
+        ? `<select id="vf" class="form-select form-select-sm" style="flex:1 1 140px;width:auto;min-width:0">${files.map((f, i) => `<option value="${i}"${i === idx ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}</select>`
+        : `<div class="fw-semibold text-truncate" style="flex:1 1 140px;min-width:0" title="${esc(files[idx].name)}">${esc(files[idx].name)}</div>`}
+      <span id="vpg" class="badge bg-label-primary text-nowrap d-none" aria-live="polite"></span>
       <div class="btn-group btn-group-sm">${btn('out', 'bx-zoom-out', 'Perkecil')}${btn('in', 'bx-zoom-in', 'Perbesar')}${btn('fit', 'bx-fullscreen', 'Pas layar')}${btn('ccw', 'bx-rotate-left', 'Putar kiri')}${btn('cw', 'bx-rotate-right', 'Putar kanan')}</div>
       <button type="button" class="btn btn-sm btn-primary" id="vx">Tutup</button></div>
     <div id="vp" style="flex:1;min-height:0;position:relative;overflow:hidden;touch-action:none;background:#e9ecef;user-select:none;-webkit-user-select:none">
@@ -372,8 +384,20 @@ async function openViewer(files, idx, ctx) {
   d.showModal();
   const vp = $('vp'), st = $('vst'), inn = $('vin'), P = new Map();
   let W = 0, H = 0, rot = 0, s = 1, x = 0, y = 0, gen = 0, pdf = null, url = null, io = null;
+  let pTop = [], pH = [], cur = -1;   // posisi atas dan tinggi tiap halaman PDF di ruang dokumen (sebelum diputar)
   const dim = () => rot % 180 ? [H, W] : [W, H];
   const lim = () => { const [bw, bh] = dim(), base = vp.clientWidth / bw; return [Math.max(Math.min(base, vp.clientHeight / bh) * 0.9, base * 0.15), base * 6]; };
+  const pageInd = () => {   // halaman yang paling banyak terlihat. Dihitung di ruang dokumen, jadi benar untuk semua rotasi
+    const el = $('vpg'), n = pTop.length;
+    if (!el) return;
+    if (!n || !W) { el.classList.add('d-none'); cur = -1; return; }
+    const vw = vp.clientWidth, vh = vp.clientHeight;
+    // rentang sumbu susun halaman (tegak lurus tumpukan) yang tampak di layar, menurut rotasi
+    const [a, b] = rot === 0 ? [-y / s, (vh - y) / s] : rot === 180 ? [H - (vh - y) / s, H + y / s] : rot === 90 ? [H - (vw - x) / s, H + x / s] : [-x / s, (vw - x) / s];
+    let best = 0, bo = -Infinity;
+    for (let k = 0; k < n; k++) { const o = Math.min(b, pTop[k] + pH[k]) - Math.max(a, pTop[k]); if (o > bo) { bo = o; best = k; } }
+    if (best !== cur || el.classList.contains('d-none')) { cur = best; el.textContent = `Halaman ${best + 1} dari ${n}`; el.classList.remove('d-none'); }
+  };
   const apply = () => {   // jepit zoom dan posisi: dokumen selalu terlihat (kecil = di tengah, besar = tepi tak keluar layar)
     if (!W) return;
     const [bw, bh] = dim(), vw = vp.clientWidth, vh = vp.clientHeight, [lo, hi] = lim();
@@ -383,6 +407,7 @@ async function openViewer(files, idx, ctx) {
     st.style.width = bw + 'px'; st.style.height = bh + 'px';
     st.style.transform = `translate(${x}px,${y}px) scale(${s})`;
     inn.style.transform = ['', `translate(${H}px,0) rotate(90deg)`, `translate(${W}px,${H}px) rotate(180deg)`, `translate(0,${W}px) rotate(270deg)`][rot / 90];
+    pageInd();
   };
   const fit = () => { if (!W) return; s = vp.clientWidth / dim()[0]; x = y = 0; apply(); };
   const zoomAt = (cx, cy, k) => {
@@ -432,7 +457,7 @@ async function openViewer(files, idx, ctx) {
   };
   const ro = new ResizeObserver(apply); ro.observe(vp);
 
-  const clean = () => { if (io) io.disconnect(); if (pdf) pdf.destroy(); if (url) URL.revokeObjectURL(url); io = pdf = url = null; inn.replaceChildren(); W = H = 0; rot = 0; };
+  const clean = () => { if (io) io.disconnect(); if (pdf) pdf.destroy(); if (url) URL.revokeObjectURL(url); io = pdf = url = null; inn.replaceChildren(); W = H = 0; rot = 0; pTop = []; pH = []; pageInd(); };
   const paint = async (box, pg) => {   // render halaman PDF hanya saat mendekati layar
     const k = W / pg.getViewport({ scale: 1 }).width, v = pg.getViewport({ scale: k * Math.min(window.devicePixelRatio || 1, 1.5) }), c = document.createElement('canvas');
     c.width = v.width; c.height = v.height; c.style.cssText = 'width:100%;height:100%;display:block';
@@ -442,10 +467,10 @@ async function openViewer(files, idx, ctx) {
   const show = async i => {
     const my = ++gen; clean(); $('vm').textContent = 'Memuat dokumen…';
     try {
-      const blob = await (await api({ action: 'file', ...ctx, id: files[i].id })).blob();
+      const blob = await (await load(files[i])).blob();
       if (my !== gen) return;
       const cw = Math.min(vp.clientWidth, 1100);
-      if (files[i].mimeType === 'application/pdf') {
+      if ((blob.type || files[i].mimeType || '').startsWith('application/pdf')) {
         await loadJs(PDF_JS);
         pdfjsLib.GlobalWorkerOptions.workerSrc ||= URL.createObjectURL(new Blob([`importScripts("${PDF_WK}")`], { type: 'text/javascript' }));
         const doc = await pdfjsLib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
@@ -460,6 +485,7 @@ async function openViewer(files, idx, ctx) {
         pgs.forEach((pg, n) => {
           const v1 = pg.getViewport({ scale: 1 }), h = Math.round(v1.height * cw / v1.width), box = document.createElement('div');
           box.dataset.n = n; box.style.cssText = `width:${cw}px;height:${h}px;margin-bottom:8px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25)`;
+          pTop.push(H); pH.push(h);
           inn.append(box); io.observe(box); H += h + 8;
         });
       } else {
@@ -474,7 +500,7 @@ async function openViewer(files, idx, ctx) {
       $('vm').textContent = ''; fit();
     } catch (e) { if (my === gen) $('vm').innerHTML = note(e.message); }
   };
-  $('vf').onchange = () => show(+$('vf').value);
+  if ($('vf')) $('vf').onchange = () => show(+$('vf').value);
   $('vx').onclick = () => d.close();
   vOff = () => { gen++; clean(); ro.disconnect(); d.onclick = null; };
   show(idx);
@@ -490,11 +516,11 @@ async function pageRpd() {
   $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">RPD</h4>
     <div class="d-flex flex-wrap gap-2 mb-3">${admin ? `<select id="rk" class="form-select" style="width:auto" aria-label="Kecamatan"><option value="0">Semua Kecamatan</option>${m.kua.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>` : ''}${yearSel('ry', y)}</div>
     <div id="xmsg"></div><div id="rbody">Memuat…</div></div></div>`;
-  let rows = [], ang = [], cap = null, t, kid;
+  let rows = [], ang = {}, cap = null, t, kid;   // ang = { "<id KUA>": anggaran }
   const listAll = () => {   // admin: semua kecamatan sekaligus
-    const A = Object.fromEntries(ang.map(a => [a.kua_id, a.nominal_total])), R = {};
+    const A = ang, R = {};
     rows.forEach(r => R[r.kua_id] = (R[r.kua_id] || 0) + r.total);
-    const ta = ang.reduce((s, a) => s + a.nominal_total, 0), tr = sumT(rows);
+    const ta = Object.values(ang).reduce((s, v) => s + v, 0), tr = sumT(rows);
     $('rbody').oninput = null;
     $('rbody').innerHTML = `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Kecamatan</th><th class="text-end">Anggaran (Rp)</th><th class="text-end">Total RPD (Rp)</th><th class="text-end">Sisa (Rp)</th><th></th></tr></thead><tbody>${m.kua.map(k => `<tr><td>${esc(k.nama_kua)}</td><td class="text-end">${A[k.id] != null ? rp(A[k.id]) : '<span class="badge bg-secondary">Belum diset</span>'}</td><td class="text-end">${rp(R[k.id])}</td><td class="text-end">${A[k.id] != null ? rp(A[k.id] - (R[k.id] || 0)) : '-'}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-k="${k.id}">Detail</button></td></tr>`).join('')}</tbody>
       <tfoot><tr class="fw-semibold"><td>Total ${t}</td><td class="text-end">${rp(ta)}</td><td class="text-end">${rp(tr)}</td><td class="text-end">${rp(ta - tr)}</td><td></td></tr></tfoot></table></div>`;
@@ -550,11 +576,11 @@ async function pageRpd() {
   const load = async () => {
     t = +$('ry').value; kid = admin ? +$('rk').value : me.kua_id;
     $('rbody').textContent = 'Memuat…';
-    const qa = sb.from('anggaran').select('kua_id,nominal_total').eq('tahun', t), qr = sb.from('rpd').select('kua_id,bulan,items,total').eq('tahun', t);
-    const [a, r] = await Promise.all([kid ? qa.eq('kua_id', kid) : qa, kid ? qr.eq('kua_id', kid) : qr]);
+    const qr = sb.from('rpd').select('kua_id,bulan,items,total').eq('tahun', t);
+    const [a, r] = await Promise.all([sb.rpc('anggaran_tahun', { p_tahun: t }), kid ? qr.eq('kua_id', kid) : qr]);   // anggaran 1 baris per tahun; operator hanya menerima KUA-nya
     if (!live(ep)) return;
     if (a.error || r.error) return $('rbody').innerHTML = note((a.error || r.error).message);
-    ang = a.data; rows = r.data; cap = kid ? (ang[0] ? ang[0].nominal_total : null) : null;
+    ang = a.data || {}; rows = r.data; cap = kid ? (ang[kid] ?? null) : null;
     kid ? list() : listAll();
   };
   ['ry', 'rk'].forEach(id => { if ($(id)) $(id).onchange = () => { $('xmsg').innerHTML = ''; load(); }; });
@@ -578,16 +604,16 @@ async function pageRealisasi() {
     $('lbody').innerHTML = `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Bulan</th><th class="text-end">RPD (Rp)</th><th class="text-end">Realisasi (Rp)</th><th>Status</th><th></th></tr></thead><tbody>${BULAN.map((n, i) => {
         if (ms && ms !== i + 1) return '';
         const b = i + 1, r = rec(b), st = r ? ST[r.status] : ['bg-secondary', 'Belum diisi'], au = isum(saktiOf(rs, b)); ta += au;
-        return `<tr><td>${n}</td><td class="text-end">${rp(rpdOf(b)?.total)}</td><td class="text-end">${rp((r?.total || 0) + au)}</td><td><span class="badge ${st[0]}">${st[1]}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${b}">Detail</button></td></tr>`; }).join('')}</tbody>
+        return `<tr><td>${n}</td><td class="text-end">${rp(rpdOf(b)?.total)}</td><td class="text-end">${rp((r?.total || 0) + au)}</td><td><span class="badge ${st[0]}">${st[1]}</span>${r?.status === 'paid' && r.nominal_dibayar ? `<div class="small">Rp ${rp(r.nominal_dibayar)}</div>` : ''}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${b}">Detail</button></td></tr>`; }).join('')}</tbody>
       <tfoot><tr class="fw-semibold"><td>Total ${ms ? BULAN[ms - 1] + ' ' : ''}${t}</td><td class="text-end">${rp(sumT(rpd.filter(x => !ms || x.bulan === ms)))}</td><td class="text-end">${rp(sumT(rl.filter(x => !ms || x.bulan === ms)) + ta)}</td><td colspan="2"></td></tr></tfoot></table></div>`;
     $('lbody').onclick = e => { const b = e.target.closest('[data-b]'); if (b) detail(+b.dataset.b); };
   };
   const detail = b => {
-    const r = rec(b), au = saktiOf(rs, b), mt = Object.fromEntries(m.pos.map(p => [p.id, metodeOf(vers, me.kua_id, p.id, t, b)])), cur = r ? r.items : {}, ri = rpdOf(b)?.items || {}, lpj = r?.file_lpj_url || '';
+    const r = rec(b), au = saktiOf(rs, b), mt = Object.fromEntries(m.pos.map(p => [p.id, metodeOf(vers, me.kua_id, p.id)])), cur = r ? r.items : {}, ri = rpdOf(b)?.items || {}, lpj = r?.file_lpj_url || '';
     const open = m.cfg.realisasi_enabled === true, okDate = now >= new Date(t, b - 1, 10), edit = open && (!r || r.status === 'rejected');
     let nDocs = lpj ? null : 0, upl = '';   // jumlah dokumen LPJ di Drive; upl = folder yang baru diunggah pada sesi ini
     $('lbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="lback"><i class="bx bx-arrow-back"></i> Kembali</button>
-      <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">Realisasi ${BULAN[b - 1]} ${t}</h5>${r ? `<span class="badge ${ST[r.status][0]}">${ST[r.status][1]}</span>` : ''}</div>
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">Realisasi ${BULAN[b - 1]} ${t}</h5>${r ? `<span class="badge ${ST[r.status][0]}">${ST[r.status][1]}</span>` : ''}${r?.status === 'paid' && r.nominal_dibayar ? `<span class="small">Dibayar admin <b>Rp ${rp(r.nominal_dibayar)}</b></span>` : ''}</div>
       <div id="lsum" class="alert alert-primary py-2"></div>
       ${r && r.status === 'rejected' ? note('Ditolak admin' + (r.catatan_admin ? ': ' + r.catatan_admin : '') + '. Perbaiki nominal atau dokumen LPJ, lalu kirim ulang.', 'danger') : ''}
       ${r && r.status !== 'rejected' ? note(`Realisasi berstatus ${ST[r.status][1]} dan tidak dapat diubah. Hanya Realisasi yang ditolak yang dapat diperbaiki.`, 'info') : ''}
@@ -595,10 +621,10 @@ async function pageRealisasi() {
       ${edit && !okDate ? note(`Realisasi ${BULAN[b - 1]} ${t} baru dapat disubmit mulai 10 ${BULAN[b - 1]} ${t}.`, 'info') : ''}
       <div id="lerr"></div>
       <div class="table-responsive"><table class="table align-middle"><thead><tr><th>POS</th><th class="text-end">RPD bulan ini (Rp)</th><th style="width:190px">Realisasi (Rp)</th><th class="text-end">Sisa anggaran POS</th></tr></thead><tbody>${m.pos.map(p => {
-        const S = mt[p.id] === 'SAKTI', sr = S ? rs.find(x => x.pos_id === p.id && x.bulan === b) : null, a = sr?.nominal || 0, ro = !edit || S, bs = SB[sr?.status_bayar || 'BELUM_DIBAYAR'];
+        const S = mt[p.id] === 'SAKTI', a = S ? (au[p.id] || 0) : 0, old = S ? (cur[p.id] || 0) : 0, ro = !edit || S;   // old = nilai manual lama yang dipertahankan
         return `<tr><td>${esc(posLabel(p))}${p.nama_rincian ? `<div class="small">${esc(p.nama_pos)}</div>` : ''}</td>
           <td class="text-end">${rp(ri[p.id])}</td>
-          <td><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${S ? (a ? rp(a) : '') : cur[p.id] ? rp(cur[p.id]) : ''}"${ro ? ' disabled' : ''}>${S ? `<div class="small mt-1"><span class="badge bg-label-primary">SAKTI</span> <span class="badge ${bs[0]}">${bs[1]}</span>${sr?.tanggal_bayar ? ' ' + esc(tglId(sr.tanggal_bayar)) : ''}</div><div class="small">Realisasi dikelola oleh Admin.</div>` : ''}</td>
+          <td><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${S ? (a || old ? rp(a || old) : '') : cur[p.id] ? rp(cur[p.id]) : ''}"${ro ? ' disabled' : ''}>${S ? (a ? '<div class="small mt-1"><span class="badge bg-success">Sudah dibayar SAKTI</span></div>' : old ? '<div class="small mt-1"><span class="badge bg-label-primary">SAKTI</span> nilai sebelumnya dipertahankan</div>' : '<div class="small mt-1"><span class="badge bg-warning">Belum dibayar SAKTI</span></div>') : ''}</td>
           <td class="text-end"><b id="sisa${p.id}"></b></td></tr>`; }).join('')}</tbody>
         <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end" id="trpd"></td><td class="text-end" id="treal"></td><td></td></tr></tfoot></table></div>
       <div class="mb-3"><div class="fw-semibold mb-1">Dokumen LPJ</div><div id="ldocs"><span class="small">Belum ada dokumen.</span></div></div>
@@ -611,7 +637,7 @@ async function pageRealisasi() {
       const inp = [...$('lbody').querySelectorAll('[data-p]')], errs = [], aTot = isum(au), rpdBln = rpdOf(b)?.total || 0;
       let man = 0;
       inp.forEach(i => {
-        const pid = +i.dataset.p, p = m.pos.find(x => x.id === pid), v = mt[pid] === 'SAKTI' ? 0 : num(i.value); man += v;
+        const pid = +i.dataset.p, p = m.pos.find(x => x.id === pid), v = mt[pid] === 'SAKTI' ? (cur[pid] || 0) : num(i.value); man += v;
         const cap = rpd.reduce((s, x) => s + (x.items[pid] || 0), 0), used = rl.filter(x => x.bulan !== b).reduce((s, x) => s + (x.items[pid] || 0), 0) + saktiYear(rs, pid), sisa = cap - used - v;
         $('sisa' + pid).textContent = 'Rp ' + rp(sisa); $('sisa' + pid).className = sisa < 0 ? 'text-danger' : '';
         if (sisa < 0) errs.push(`${posLabel(p)}: melebihi RPD setahun. Batas Rp ${rp(cap)}; terpakai di bulan lain dan SAKTI Rp ${rp(used)}; dimasukkan Rp ${rp(v)}; kelebihan Rp ${rp(-sisa)}.`);
@@ -657,9 +683,9 @@ async function pageRealisasi() {
     t = +$('lt').value;
     const [p, r, c, sk] = await Promise.all([
       sb.from('rpd').select('bulan,items,total').eq('kua_id', me.kua_id).eq('tahun', t),
-      sb.from('realisasi').select('bulan,items,total,status,catatan_admin,file_lpj_url').eq('kua_id', me.kua_id).eq('tahun', t),
-      vers ? { data: vers } : sb.from('metode_pembayaran').select('kua_id,pos_id,metode,mulai').eq('kua_id', me.kua_id),   // metode pembayaran cukup dimuat sekali
-      sb.from('realisasi_sakti').select('pos_id,bulan,nominal,status_bayar,tanggal_bayar').eq('kua_id', me.kua_id).eq('tahun', t)
+      sb.from('realisasi').select('bulan,items,total,status,catatan_admin,file_lpj_url,nominal_dibayar').eq('kua_id', me.kua_id).eq('tahun', t),
+      vers ? { data: vers } : sb.from('metode_pembayaran').select('kua_id,pos_id,metode').eq('kua_id', me.kua_id),   // pengaturan SAKTI cukup dimuat sekali
+      sb.from('realisasi_sakti').select('pos_id,bulan,nominal').eq('kua_id', me.kua_id).eq('tahun', t)
     ]);
     if (!live(ep)) return;
     const err = p.error || r.error || c.error || sk.error;
@@ -688,7 +714,7 @@ async function pageVerifikasi() {
   const kn = id => m.kua.find(k => k.id === id)?.nama_kua || id;
   const list = () => {
     $('vbody').innerHTML = G.length ? `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Kecamatan</th><th>Periode</th><th class="text-end">Total (Rp)</th><th>Status</th><th></th></tr></thead><tbody>${G.map((f, i) =>
-        `<tr><td>${esc(kn(f.kua_id))}</td><td>${BULAN[f.bulan - 1]} ${f.tahun}</td><td class="text-end">${rp(f.total)}</td><td><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-i="${i}">Detail</button></td></tr>`).join('')}</tbody></table></div>`
+        `<tr><td>${esc(kn(f.kua_id))}</td><td>${BULAN[f.bulan - 1]} ${f.tahun}</td><td class="text-end">${rp(f.total)}</td><td><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span>${f.status === 'paid' ? `<div class="small">${f.nominal_dibayar ? 'Rp ' + rp(f.nominal_dibayar) : 'nominal belum dicatat'}</div>` : ''}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-i="${i}">Detail</button></td></tr>`).join('')}</tbody></table></div>`
       : '<p class="mb-0">Tidak ada Realisasi untuk filter ini.</p>';
     $('vbody').onclick = e => { const b = e.target.closest('[data-i]'); if (b) detail(+b.dataset.i); };
   };
@@ -701,7 +727,7 @@ async function pageVerifikasi() {
     if (!live(ep)) return;
     const ri = rr.data?.items || {}, sakti = (rk.data || []).reduce((a, x) => a + x.nominal, 0);
     $('vbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="vback"><i class="bx bx-arrow-back"></i> Kembali</button>
-      <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">${esc(kn(f.kua_id))} · ${BULAN[f.bulan - 1]} ${f.tahun}</h5><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span></div>
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">${esc(kn(f.kua_id))} · ${BULAN[f.bulan - 1]} ${f.tahun}</h5><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span>${f.status === 'paid' ? `<span class="small">Dibayar <b>${f.nominal_dibayar ? 'Rp ' + rp(f.nominal_dibayar) : '(nominal belum dicatat)'}</b></span>` : ''}</div>
       ${f.status === 'rejected' && f.catatan_admin ? note('Alasan penolakan: ' + f.catatan_admin, 'danger') : ''}
       <div class="table-responsive"><table class="table align-middle"><thead><tr><th>POS</th><th class="text-end">RPD bulan ini (Rp)</th><th class="text-end">Realisasi (Rp)</th></tr></thead><tbody>${m.pos.filter(p => f.items[p.id] || ri[p.id]).map(p => `<tr><td>${esc(posLabel(p))}</td><td class="text-end">${rp(ri[p.id])}</td><td class="text-end">${rp(f.items[p.id])}</td></tr>`).join('')}</tbody>
         <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end">${rp(isum(ri))}</td><td class="text-end">${rp(f.total)}</td></tr></tfoot></table></div>
@@ -709,29 +735,35 @@ async function pageVerifikasi() {
       <div class="fw-semibold mb-1">Dokumen LPJ</div><div id="vdocs" class="mb-3"></div>
       <div class="border rounded p-3"><div class="fw-semibold mb-2">Ubah status</div>
         <select id="vst" class="form-select mb-2" style="max-width:260px">${Object.entries(ST).map(([k, v]) => `<option value="${k}"${k === f.status ? ' selected' : ''}>${v[1]}</option>`).join('')}</select>
+        <div id="vpaidbox" class="mb-2${f.status === 'paid' ? '' : ' d-none'}" style="max-width:260px"><label class="form-label small mb-1" for="vpaid">Nominal yang dibayarkan (Rp)</label>
+          <input id="vpaid" class="form-control text-end" inputmode="numeric" placeholder="0" value="${rp(f.nominal_dibayar || f.total)}">
+          <div class="form-text">Wajib diisi. Maksimal 10 digit dan tidak melebihi total Realisasi Rp ${rp(f.total)}.</div></div>
         <textarea id="vnote" class="form-control mb-2${f.status === 'rejected' ? '' : ' d-none'}" rows="2" placeholder="Alasan penolakan (wajib)">${esc(f.catatan_admin || '')}</textarea>
         <div id="vperr"></div>
         <button class="btn btn-primary" id="vsave">Simpan status</button>
         <div class="form-text mt-2">Admin dapat mengubah status kapan saja, tetapi tidak dapat mengubah nominal atau dokumen LPJ.</div></div>`;
     showDocs($('vdocs'), { kua: f.kua_id, tahun: f.tahun, bulan: f.bulan });
     $('vback').onclick = list;
-    $('vst').onchange = () => $('vnote').classList.toggle('d-none', $('vst').value !== 'rejected');
+    $('vst').onchange = () => { $('vnote').classList.toggle('d-none', $('vst').value !== 'rejected'); $('vpaidbox').classList.toggle('d-none', $('vst').value !== 'paid'); };
+    $('vpaid').oninput = () => fmtIn($('vpaid'));
     $('vsave').onclick = async () => {
-      const st = $('vst').value, why = $('vnote').value.trim(), warn = txt => $('vperr').innerHTML = note(txt, 'warning');
-      if (st === f.status && st !== 'rejected') return warn('Status belum diubah.');
+      const st = $('vst').value, why = $('vnote').value.trim(), paid = num($('vpaid').value), warn = txt => $('vperr').innerHTML = note(txt, 'warning');
+      if (st === f.status && st !== 'rejected' && !(st === 'paid' && paid !== (f.nominal_dibayar || 0))) return warn('Status belum diubah.');
       if (st === 'rejected' && !why) return warn('Alasan penolakan wajib diisi.');
+      if (st === 'paid' && !paid) return warn('Nominal yang dibayarkan wajib diisi.');
+      if (st === 'paid' && paid > f.total) return warn(`Nominal yang dibayarkan (Rp ${rp(paid)}) melebihi total Realisasi (Rp ${rp(f.total)}).`);
       $('vsave').disabled = true;
-      const { error } = await sb.from('realisasi').update(st === 'rejected' ? { status: st, catatan_admin: why } : { status: st })
+      const { error } = await sb.from('realisasi').update(st === 'rejected' ? { status: st, catatan_admin: why } : st === 'paid' ? { status: st, nominal_dibayar: paid } : { status: st })
         .eq('kua_id', f.kua_id).eq('tahun', f.tahun).eq('bulan', f.bulan);
       if (!live(ep)) return;
       if (error) { $('vperr').innerHTML = note(error.message); $('vsave').disabled = false; return; }
-      $('vmsg').innerHTML = note(`Status ${kn(f.kua_id)} ${BULAN[f.bulan - 1]} ${f.tahun} diubah menjadi ${ST[st][1]}.`, 'success');
+      $('vmsg').innerHTML = note(`Status ${kn(f.kua_id)} ${BULAN[f.bulan - 1]} ${f.tahun} diubah menjadi ${ST[st][1]}${st === 'paid' ? ` (Rp ${rp(paid)})` : ''}.`, 'success');
       await load();
     };
   };
   const load = async () => {
     $('vbody').textContent = 'Memuat…';
-    let q = sb.from('realisasi').select('kua_id,tahun,bulan,items,total,status,catatan_admin').eq('tahun', +$('vy').value);
+    let q = sb.from('realisasi').select('kua_id,tahun,bulan,items,total,status,catatan_admin,nominal_dibayar').eq('tahun', +$('vy').value);
     if (+$('vk').value) q = q.eq('kua_id', +$('vk').value);
     if (+$('vb').value) q = q.eq('bulan', +$('vb').value);
     if ($('vs').value) q = q.eq('status', $('vs').value);
@@ -744,106 +776,84 @@ async function pageVerifikasi() {
   load();
 }
 
-/* ====== Pengaturan SAKTI (admin): metode pembayaran per KUA + POS. Berlaku mulai bulan yang dipilih; bulan sebelumnya tidak berubah ====== */
+/* ====== Pengaturan SAKTI (admin): ceklis GLOBAL per KUA + POS (Listrik dan Telepon/Internet). Tanpa bulan/tahun berlaku ====== */
 async function pageMetode() {
-  const ep = EP, now = new Date();
+  const ep = EP;
   let m;
   try { m = await master(); } catch (e) { return live(ep) && ($('view').innerHTML = note('Gagal memuat data master: ' + e.message)); }
   if (!live(ep)) return;
-  const P = m.pos.filter(p => SAKTI_POS.includes(p.kode_pos)), nm = p => p.nama_pos.replace('Belanja Langganan ', '');   // Listrik, Telepon/Internet, Air
+  const P = m.pos.filter(p => SAKTI_POS.includes(p.kode_pos)), nm = p => p.nama_pos.replace('Belanja Langganan ', '');   // Listrik, Telepon/Internet
   $('view').innerHTML = `<div class="card"><div class="card-body">
-    <h4 class="mb-1">Pengaturan Pembayaran SAKTI</h4>
-    <p class="mb-3">Pilih metode pembayaran tiap KUA untuk Listrik, Telepon/Internet, dan Air. <b>MANUAL</b>: operator KUA mengisi Realisasi seperti biasa. <b>SAKTI</b>: Realisasi diinput Admin di menu Realisasi SAKTI dan tidak dapat diisi operator. Perubahan berlaku mulai bulan yang dipilih di bawah; bulan sebelumnya tidak berubah. POS yang belum diatur otomatis MANUAL.</p>
-    <div class="d-flex flex-wrap align-items-center gap-2 mb-3"><span class="fw-semibold">Berlaku mulai</span>
-      <select id="mb" class="form-select" style="width:auto" aria-label="Bulan">${BULAN.map((n, i) => `<option value="${i + 1}"${i === now.getMonth() ? ' selected' : ''}>${n}</option>`).join('')}</select>${yearSel('my', now.getFullYear())}</div>
+    <h4 class="mb-1">Pengaturan SAKTI</h4>
+    <p class="mb-3">Centang KUA yang pembayaran <b>Listrik</b> dan <b>Telepon/Internet</b>-nya lewat SAKTI (autopayment). Berlaku untuk semua bulan. KUA yang dicentang: nominalnya diinput Admin di menu <a href="#sakti">Realisasi SAKTI</a> dan tidak dapat diisi operator. KUA yang tidak dicentang: operator mengisi Realisasi seperti biasa.</p>
     <div id="mmsg"></div><div id="mbody">Memuat…</div></div></div>`;
   let vers = [];
+  const mark = c => c.closest('td').classList.toggle('table-warning', (c.checked ? 1 : 0) !== +c.dataset.o);
   const draw = () => {
-    const t = +$('my').value, b = +$('mb').value;
-    const cnt = P.map(p => m.kua.filter(k => metodeOf(vers, k.id, p.id, t, b) === 'SAKTI').length);
-    $('mbody').innerHTML = `<p class="mb-2">KUA bermetode SAKTI pada ${BULAN[b - 1]} ${t}: ${P.map((p, i) => `${esc(nm(p))} <b>${cnt[i]}</b>`).join(' · ')} (dari ${m.kua.length} KUA).</p>
-      <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>KUA</th>${P.map(p => `<th>${esc(p.kode_pos)} · ${esc(nm(p))}</th>`).join('')}</tr></thead>
-      <tbody>${m.kua.map(k => `<tr><td>${esc(k.nama_kua)}</td>${P.map(p => { const v = metodeOf(vers, k.id, p.id, t, b);
-        return `<td><select class="form-select form-select-sm" style="min-width:120px" data-k="${k.id}" data-p="${p.id}" data-o="${v}" aria-label="Metode ${esc(k.nama_kua)} ${esc(nm(p))}"><option${v === 'MANUAL' ? ' selected' : ''}>MANUAL</option><option${v === 'SAKTI' ? ' selected' : ''}>SAKTI</option></select></td>`; }).join('')}</tr>`).join('')}</tbody></table></div>
+    const cnt = P.map(p => m.kua.filter(k => metodeOf(vers, k.id, p.id) === 'SAKTI').length);
+    $('mbody').innerHTML = `<p class="mb-2">KUA yang dicentang SAKTI: ${P.map((p, i) => `${esc(nm(p))} <b>${cnt[i]}</b>`).join(' · ')} (dari ${m.kua.length} KUA).</p>
+      <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>KUA</th>${P.map((p, i) => `<th class="text-center"><label class="d-flex align-items-center justify-content-center gap-2 mb-0"><input type="checkbox" class="form-check-input mt-0" data-all="${p.id}" aria-label="Centang semua ${esc(nm(p))}"${cnt[i] === m.kua.length ? ' checked' : ''}>${esc(p.kode_pos)} · ${esc(nm(p))}</label></th>`).join('')}</tr></thead>
+      <tbody>${m.kua.map(k => `<tr><td>${esc(k.nama_kua)}</td>${P.map(p => { const on = metodeOf(vers, k.id, p.id) === 'SAKTI';
+        return `<td class="text-center"><input type="checkbox" class="form-check-input" data-k="${k.id}" data-p="${p.id}" data-o="${on ? 1 : 0}"${on ? ' checked' : ''} aria-label="SAKTI ${esc(k.nama_kua)} ${esc(nm(p))}"></td>`; }).join('')}</tr>`).join('')}</tbody></table></div>
       <button class="btn btn-primary" id="msave">Simpan pengaturan</button>`;
-    $('mbody').onchange = e => { if (e.target.dataset.o) e.target.closest('td').classList.toggle('table-warning', e.target.value !== e.target.dataset.o); };
-    $('msave').onclick = async () => {
-      const mulai = mfirst(t, b), rows = [];
-      $('mbody').querySelectorAll('select[data-k]').forEach(s => { if (s.value !== s.dataset.o) rows.push({ kua_id: +s.dataset.k, pos_id: +s.dataset.p, metode: s.value, mulai }); });
+    $('mbody').onchange = e => {
+      if (e.target.dataset.all) $('mbody').querySelectorAll(`input[data-p="${e.target.dataset.all}"]`).forEach(c => { c.checked = e.target.checked; mark(c); });
+      else if (e.target.dataset.o != null) mark(e.target);
+    };
+    $('msave').onclick = async () => {   // hanya baris yang berubah, satu transaksi
+      const rows = [];
+      $('mbody').querySelectorAll('input[data-k]').forEach(c => { if ((c.checked ? 1 : 0) !== +c.dataset.o) rows.push({ kua_id: +c.dataset.k, pos_id: +c.dataset.p, metode: c.checked ? 'SAKTI' : 'MANUAL' }); });
       if (!rows.length) return $('mmsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
       $('msave').disabled = true;
-      const { error } = await sb.from('metode_pembayaran').upsert(rows, { onConflict: 'kua_id,pos_id,mulai' });   // satu transaksi: gagal satu = batal semua
+      const { error } = await sb.from('metode_pembayaran').upsert(rows, { onConflict: 'kua_id,pos_id' });   // satu transaksi: gagal satu = batal semua
       if (!live(ep)) return;
       $('msave').disabled = false;
-      $('mmsg').innerHTML = error ? note(error.message) : note(`Metode pembayaran tersimpan untuk ${rows.length} KUA/POS, berlaku mulai ${BULAN[b - 1]} ${t}. Realisasi bulan sebelumnya tidak berubah.`, 'success');
+      $('mmsg').innerHTML = error ? note(error.message) : note(`Pengaturan SAKTI tersimpan untuk ${rows.length} KUA/POS.`, 'success');
       if (!error) load();
     };
   };
   const load = async () => {
     $('mbody').textContent = 'Memuat…';
-    const r = await sb.from('metode_pembayaran').select('kua_id,pos_id,metode,mulai');
+    const r = await sb.from('metode_pembayaran').select('kua_id,pos_id,metode');
     if (!live(ep)) return;
     if (r.error) return $('mbody').innerHTML = note(r.error.message);
     vers = r.data; draw();
   };
-  ['my', 'mb'].forEach(id => $(id).onchange = () => { $('mmsg').innerHTML = ''; draw(); });   // hanya tampilan; data sudah dimuat
   load();
 }
 
-/* ====== Realisasi SAKTI (admin): input realisasi pembayaran SAKTI per KUA + POS + bulan. Operator hanya membaca (RLS + trigger menjaga) ====== */
+/* ====== Realisasi SAKTI (admin): tampilan sama dengan Pengaturan SAKTI, tetapi ceklis diganti kolom nominal (per bulan) ====== */
 async function pageSakti() {
   const ep = EP, now = new Date();
   let m;
   try { m = await master(); } catch (e) { return live(ep) && ($('view').innerHTML = note('Gagal memuat data master: ' + e.message)); }
   if (!live(ep)) return;
-  const P = m.pos.filter(p => SAKTI_POS.includes(p.kode_pos));
-  const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);   // tanggal lokal yyyy-mm-dd
-  const sel = (id, label, opts) => `<select id="${id}" class="form-select" style="width:auto" aria-label="${label}">${opts.map(([v, x]) => `<option value="${v}">${esc(x)}</option>`).join('')}</select>`;
+  const P = m.pos.filter(p => SAKTI_POS.includes(p.kode_pos)), nm = p => p.nama_pos.replace('Belanja Langganan ', '');
   $('view').innerHTML = `<div class="card"><div class="card-body">
     <h4 class="mb-1">Realisasi SAKTI</h4>
-    <p class="mb-3">Input realisasi pembayaran SAKTI (Listrik, Telepon/Internet, Air). Hanya KUA + POS bermetode SAKTI pada bulan terpilih yang tampil; atur metodenya di <a href="#metode">Pengaturan SAKTI</a>. Realisasi ini otomatis dijumlahkan dengan Realisasi manual pada batas RPD dan Laporan. Status Belum dibayar berarti Rp 0.</p>
+    <p class="mb-3">Input nominal pembayaran SAKTI untuk <b>Listrik</b> dan <b>Telepon/Internet</b> pada bulan terpilih. Hanya kolom KUA yang dicentang di <a href="#metode">Pengaturan SAKTI</a> yang dapat diisi. Nominal otomatis dijumlahkan dengan Realisasi manual pada batas RPD dan Laporan.</p>
     <div class="d-flex flex-wrap gap-2 mb-3">${yearSel('sy', now.getFullYear())}
-      <select id="sm" class="form-select" style="width:auto" aria-label="Bulan">${BULAN.map((n, i) => `<option value="${i + 1}"${i === now.getMonth() ? ' selected' : ''}>${n}</option>`).join('')}</select>
-      ${sel('sk', 'Kecamatan', [[0, 'Semua Kecamatan'], ...m.kua.map(k => [k.id, k.nama_kua])])}
-      ${sel('sp', 'POS', [[0, 'Semua POS'], ...P.map(p => [p.id, posLabel(p)])])}
-      ${sel('ss', 'Status pembayaran', [['', 'Semua status'], ['SUDAH_DIBAYAR', 'Sudah dibayar'], ['BELUM_DIBAYAR', 'Belum dibayar']])}</div>
+      <select id="sm" class="form-select" style="width:auto" aria-label="Bulan">${BULAN.map((n, i) => `<option value="${i + 1}"${i === now.getMonth() ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
     <div id="smsg"></div><div id="sbody">Memuat…</div></div></div>`;
-  let vers = [], rs = [], rd = {}, rows = [], t, b;
+  let vers = [], rs = [];
+  const sums = () => P.map(p => [...$('sbody').querySelectorAll(`input[data-p="${p.id}"]`)].reduce((s, i) => s + num(i.value), 0));
   const draw = () => {
-    t = +$('sy').value; b = +$('sm').value;
-    const fk = +$('sk').value, fp = +$('sp').value, fs = $('ss').value, all = [];
-    m.kua.forEach(k => P.forEach(p => {
-      if (metodeOf(vers, k.id, p.id, t, b) !== 'SAKTI') return;
-      const r = rs.find(x => x.kua_id === k.id && x.pos_id === p.id);
-      all.push({ k, p, r, st: r?.status_bayar || 'BELUM_DIBAYAR' });
-    }));
-    rows = all.filter(x => (!fk || x.k.id === fk) && (!fp || x.p.id === fp) && (!fs || x.st === fs));
-    const paid = all.filter(x => x.st === 'SUDAH_DIBAYAR').length, tot = rs.reduce((s, x) => s + x.nominal, 0);
-    if (!all.length) return $('sbody').innerHTML = `<p class="mb-0">Belum ada KUA/POS bermetode SAKTI pada ${BULAN[b - 1]} ${t}. Atur dulu di menu <a href="#metode">Pengaturan SAKTI</a>.</p>`;
-    $('sbody').innerHTML = `<p class="mb-2">${BULAN[b - 1]} ${t}: <b>${paid}</b> dari ${all.length} KUA/POS SAKTI sudah dibayar · Total Realisasi SAKTI <b>Rp ${rp(tot)}</b></p>
-      ${rows.length ? `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>KUA</th><th>POS</th><th class="text-end">RPD bulan ini (Rp)</th><th>Status</th><th>Nominal (Rp)</th><th>Tanggal bayar</th><th>Keterangan</th></tr></thead>
-      <tbody>${rows.map((x, i) => { const on = x.st === 'SUDAH_DIBAYAR'; return `<tr data-i="${i}"><td>${esc(x.k.nama_kua)}</td><td>${esc(posLabel(x.p))}</td><td class="text-end">${rp(rd[x.k.id]?.[x.p.id])}</td>
-        <td><select class="form-select form-select-sm" style="min-width:140px" data-f="st" aria-label="Status pembayaran"><option value="BELUM_DIBAYAR"${on ? '' : ' selected'}>Belum dibayar</option><option value="SUDAH_DIBAYAR"${on ? ' selected' : ''}>Sudah dibayar</option></select></td>
-        <td><input class="form-control form-control-sm text-end" style="min-width:130px" inputmode="numeric" placeholder="0" data-f="nom" aria-label="Nominal" value="${x.r?.nominal ? rp(x.r.nominal) : ''}"${on ? '' : ' disabled'}></td>
-        <td><input type="date" class="form-control form-control-sm" style="min-width:140px" data-f="tgl" aria-label="Tanggal pembayaran" max="${today}" value="${x.r?.tanggal_bayar || ''}"${on ? '' : ' disabled'}></td>
-        <td><input class="form-control form-control-sm" style="min-width:170px" data-f="cat" maxlength="500" placeholder="Autopayment SAKTI" aria-label="Keterangan" value="${esc(x.r?.catatan || '')}"></td></tr>`; }).join('')}</tbody></table></div>
-      <button class="btn btn-primary" id="ssave">Simpan Realisasi SAKTI</button>` : '<p class="mb-0">Tidak ada baris untuk filter ini.</p>'}`;
-    $('sbody').onchange = e => {   // Belum dibayar = Rp 0 tanpa tanggal; Sudah dibayar membuka nominal dan tanggal
-      if (e.target.dataset.f !== 'st') return;
-      const tr = e.target.closest('tr'), on = e.target.value === 'SUDAH_DIBAYAR', nom = tr.querySelector('[data-f=nom]'), tg = tr.querySelector('[data-f=tgl]');
-      nom.disabled = tg.disabled = !on;
-      if (!on) { nom.value = ''; tg.value = ''; } else if (!tg.value) tg.value = today;
-    };
-    $('sbody').oninput = e => { if (e.target.dataset.f === 'nom') fmtIn(e.target); };
-    if ($('ssave')) $('ssave').onclick = async () => {   // hanya baris yang berubah, satu transaksi
+    const t = +$('sy').value, b = +$('sm').value;
+    const future = t * 12 + b > now.getFullYear() * 12 + now.getMonth() + 1;   // periode belum berjalan: ditolak juga oleh database
+    const val = (k, p) => rs.find(x => x.kua_id === k.id && x.pos_id === p.id)?.nominal || 0;
+    const any = m.kua.some(k => P.some(p => metodeOf(vers, k.id, p.id) === 'SAKTI'));
+    $('sbody').innerHTML = `${future ? note(`${BULAN[b - 1]} ${t} belum berjalan, jadi Realisasi SAKTI belum dapat diinput.`, 'warning') : ''}${any ? '' : note('Belum ada KUA yang dicentang SAKTI. Atur dulu di menu Pengaturan SAKTI.', 'info')}
+      <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>KUA</th>${P.map(p => `<th class="text-end">${esc(p.kode_pos)} · ${esc(nm(p))} (Rp)</th>`).join('')}</tr></thead>
+      <tbody>${m.kua.map(k => `<tr><td>${esc(k.nama_kua)}</td>${P.map(p => { const on = metodeOf(vers, k.id, p.id) === 'SAKTI', v = val(k, p);
+        return `<td><input class="form-control form-control-sm text-end" style="min-width:140px" inputmode="numeric" placeholder="${on ? '0' : '-'}" data-k="${k.id}" data-p="${p.id}" data-o="${v}" aria-label="Nominal ${esc(k.nama_kua)} ${esc(nm(p))}" value="${v ? rp(v) : ''}"${on && !future ? '' : ' disabled'}></td>`; }).join('')}</tr>`).join('')}</tbody>
+      <tfoot><tr class="fw-semibold"><td>Total ${BULAN[b - 1]} ${t}</td>${P.map(p => `<td class="text-end" data-tot="${p.id}"></td>`).join('')}</tr></tfoot></table></div>
+      <button class="btn btn-primary" id="ssave"${future || !any ? ' disabled' : ''}>Simpan Realisasi SAKTI</button>`;
+    const tot = () => sums().forEach((v, i) => $('sbody').querySelector(`[data-tot="${P[i].id}"]`).textContent = rp(v));
+    tot();
+    $('sbody').oninput = e => { if (e.target.dataset.p) { fmtIn(e.target); tot(); } };
+    $('ssave').onclick = async () => {   // hanya sel yang berubah, satu transaksi
       const out = [];
-      for (const tr of $('sbody').querySelectorAll('tr[data-i]')) {
-        const x = rows[+tr.dataset.i], st = tr.querySelector('[data-f=st]').value, on = st === 'SUDAH_DIBAYAR',
-          nom = on ? num(tr.querySelector('[data-f=nom]').value) : 0, tg = on ? tr.querySelector('[data-f=tgl]').value : '', cat = tr.querySelector('[data-f=cat]').value.trim();
-        if (st === x.st && nom === (x.r?.nominal || 0) && tg === (x.r?.tanggal_bayar || '') && cat === (x.r?.catatan || '')) continue;
-        if (on && !tg) return $('smsg').innerHTML = note(`${x.k.nama_kua} · ${posLabel(x.p)}: tanggal pembayaran wajib diisi untuk status Sudah dibayar.`, 'warning');
-        out.push({ kua_id: x.k.id, pos_id: x.p.id, tahun: t, bulan: b, nominal: nom, status_bayar: st, tanggal_bayar: tg || null, catatan: cat || null });
-      }
+      $('sbody').querySelectorAll('input[data-k]:not([disabled])').forEach(i => { const v = num(i.value); if (v !== +i.dataset.o) out.push({ kua_id: +i.dataset.k, pos_id: +i.dataset.p, tahun: t, bulan: b, nominal: v }); });
       if (!out.length) return $('smsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
       $('ssave').disabled = true;
       const { error } = await sb.from('realisasi_sakti').upsert(out, { onConflict: 'kua_id,pos_id,tahun,bulan' });
@@ -856,18 +866,293 @@ async function pageSakti() {
   const load = async () => {
     const y = +$('sy').value, mo = +$('sm').value;
     $('sbody').textContent = 'Memuat…';
-    const [v, r, d] = await Promise.all([
-      sb.from('metode_pembayaran').select('kua_id,pos_id,metode,mulai'),
-      sb.from('realisasi_sakti').select('kua_id,pos_id,nominal,status_bayar,tanggal_bayar,catatan').eq('tahun', y).eq('bulan', mo),
-      sb.from('rpd').select('kua_id,items').eq('tahun', y).eq('bulan', mo)]);
+    const [v, r] = await Promise.all([
+      sb.from('metode_pembayaran').select('kua_id,pos_id,metode'),
+      sb.from('realisasi_sakti').select('kua_id,pos_id,nominal').eq('tahun', y).eq('bulan', mo)]);
     if (!live(ep)) return;
-    const err = v.error || r.error || d.error;
+    const err = v.error || r.error;
     if (err) return $('sbody').innerHTML = note(err.message);
-    vers = v.data; rs = r.data; rd = Object.fromEntries(d.data.map(x => [x.kua_id, x.items])); draw();
+    vers = v.data; rs = r.data; draw();
   };
   ['sy', 'sm'].forEach(id => $(id).onchange = () => { $('smsg').innerHTML = ''; load(); });
-  ['sk', 'sp', 'ss'].forEach(id => $(id).onchange = () => { $('smsg').innerHTML = ''; draw(); });
   load();
+}
+
+/* ====== Impor Data Lama (admin): ambil data dari Spreadsheet/Apps Script sistem lama, tulis ke Jalin, dan SALIN berkas LPJ-nya ke
+   struktur Google Drive baru (Jalin / BOP / LPJ / tahun / Kecamatan ...). Hanya data yang dipakai Jalin yang dibawa. Aman diulang ====== */
+const LG_URL = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
+const lgKey = s => String(s || '').toLowerCase().replace(/^kua\s+/, '').replace(/^kec\.?\s+/, '').replace(/\s+/g, ' ').trim();   // "KUA Anjatan" = "KUA Kec. Anjatan"
+const lgNum = v => { const n = Math.round(Number(v)); return Number.isFinite(n) && n > 0 ? n : 0; };   // hanya nominal positif yang dibawa
+const lgBulan = v => { const s = String(v ?? '').trim().toLowerCase(), i = BULAN.findIndex(b => b.toLowerCase() === s); return i >= 0 ? i + 1 : /^\d{1,2}$/.test(s) && +s >= 1 && +s <= 12 ? +s : 0; };
+const lgStatus = s => ({ waiting: 'waiting', pending: 'waiting', approved: 'approved', rejected: 'rejected', paid: 'paid' })[String(s || '').trim().toLowerCase()] || 'waiting';
+const lgTime = s => { const d = s ? new Date(s) : null; return d && !isNaN(d) ? d.toISOString() : null; };
+const lgDriveId = u => (String(u || '').match(/\/d\/([\w-]{10,100})/) || String(u || '').match(/[?&]id=([\w-]{10,100})/) || [])[1] || '';
+
+async function legacyCall(url, action, data = {}) {   // sama seperti apiCall sistem lama: POST tanpa header, supaya tidak ada preflight CORS
+  let r;
+  try { r = await fetch(url, { method: 'POST', body: JSON.stringify({ action, ...data }) }); }
+  catch { throw new Error('Tidak dapat menghubungi Apps Script lama. Periksa alamat Web App dan koneksi internet.'); }
+  if (!r.ok) throw new Error(`Apps Script lama membalas kode ${r.status}.`);
+  let j; try { j = await r.json(); } catch { throw new Error('Balasan Apps Script lama bukan JSON. Pastikan alamatnya berakhiran /exec dan aksesnya "Siapa saja".'); }
+  if (!j || !j.success) throw new Error((j && j.message) || `Apps Script lama menolak ${action}.`);
+  return j.data;
+}
+
+async function legacyFetch(url, opt, log) {   // hanya yang dipilih; tahun dipersempit di sumber agar balasan kecil
+  const yr = opt.tahun ? { year: opt.tahun } : {}, raw = { budgets: [], rpds: [], reals: [], apCfg: {}, apNom: [] }, arr = x => Array.isArray(x) ? x : [];
+  if (opt.parts.anggaran) { log('Membaca Anggaran…'); raw.budgets = arr(await legacyCall(url, 'getBudgets', yr)); }
+  if (opt.parts.rpd) { log('Membaca RPD…'); raw.rpds = arr(await legacyCall(url, 'getRPDs', yr)); }
+  if (opt.parts.realisasi) { log('Membaca Realisasi…'); raw.reals = arr(await legacyCall(url, 'getRealisasis', yr)); }
+  if (opt.parts.sakti || opt.parts.realisasi) {   // Realisasi perlu tahu POS mana yang Auto Payment (nilainya digantikan Realisasi SAKTI)
+    log('Membaca pengaturan Auto Payment…'); raw.apCfg = (await legacyCall(url, 'getAutoPaymentConfig')) || {};
+  }
+  if (opt.parts.sakti) {
+    const yNow = new Date().getFullYear(), years = opt.tahun ? [opt.tahun]
+      : [...new Set([...raw.budgets, ...raw.rpds, ...raw.reals].map(r => +r.year).filter(Boolean))].sort();
+    for (const yy of years.length ? years : [yNow - 1, yNow]) {
+      log(`Membaca nominal Auto Payment ${yy}…`);
+      raw.apNom.push({ year: yy, data: (await legacyCall(url, 'getAutoPaymentNominalYear', { year: yy })) || {} });
+    }
+  }
+  return raw;
+}
+
+// Ubah data lama menjadi baris untuk Jalin. Murni (tanpa jaringan/DOM). Yang tidak dipakai Jalin tidak ikut:
+// ID, Total (dihitung ulang), nama pengguna/verifikator, metadata file, nilai Rp 0, baris kosong, KUA/POS tak dikenal.
+function legacyPlan(raw, m, opt) {
+  const kmap = new Map(m.kua.map(k => [lgKey(k.nama_kua), k.id])), pmap = new Map(), bad = { kua: new Set(), pos: new Set(), tahun: 0 };
+  m.pos.forEach(p => pmap.set(p.kode_pos + '|' + (p.nama_rincian ? p.nama_rincian.toLowerCase().trim() : '*'), p.id));
+  const posOf = (code, item) => pmap.get(code + '|' + String(item || '').toLowerCase().trim()) ?? pmap.get(code + '|*');
+  const kuaOf = n => { const id = kmap.get(lgKey(n)); if (!id) bad.kua.add(String(n || '(kosong)')); return id; };
+  const yearOf = y => { const t = +y; return t >= 2020 && t <= 2100 ? t : 0; };
+  const scope = t => !!t && (!opt.tahun || t === opt.tahun);   // tahun tidak valid (0) tidak pernah lolos, termasuk saat "Semua tahun"
+  const sPos = m.pos.filter(p => SAKTI_POS.includes(p.kode_pos)), P = opt.parts;
+  const out = { anggaran: [], rpd: [], realisasi: [], metode: [], sakti: [], warn: [], baca: { budgets: raw.budgets.length, rpds: raw.rpds.length, reals: raw.reals.length, apNom: 0 }, berkas: 0 };
+  const hitung = (data, buang) => {   // {kode: {rincian: nilai}} -> {id POS: nominal}; POS dalam `buang` (Auto Payment) tidak dibawa
+    const it = {}; let dibuang = 0;
+    Object.entries(data || {}).forEach(([code, v]) => (v && typeof v === 'object' ? Object.entries(v) : [['Nominal', v]]).forEach(([item, val]) => {
+      const n = lgNum(val); if (!n) return;
+      const pid = posOf(code, item);
+      if (!pid) { bad.pos.add(`${code} · ${item}`); return; }
+      if (buang && buang.has(pid)) { dibuang += n; return; }
+      it[pid] = (it[pid] || 0) + n;
+    }));
+    return { it, dibuang };
+  };
+
+  // Pengaturan Auto Payment lama (ceklis global) -> ceklis SAKTI Jalin. Dibutuhkan juga untuk Realisasi.
+  const flagged = new Map();
+  Object.entries(raw.apCfg || {}).forEach(([nama, cfg]) => {
+    const kid = kuaOf(nama); if (!kid) return;
+    sPos.forEach(p => {
+      const on = !!cfg && (cfg[p.kode_pos] === true || cfg[p.kode_pos] === 'TRUE');
+      if (P.sakti) out.metode.push({ kua_id: kid, pos_id: p.id, metode: on ? 'SAKTI' : 'MANUAL' });
+      if (on) { if (!flagged.has(kid)) flagged.set(kid, new Set()); flagged.get(kid).add(p.id); }
+    });
+  });
+
+  // Anggaran: 1 nilai per KUA per tahun
+  if (P.anggaran) {
+    const mp = new Map();
+    raw.budgets.forEach(b => {
+      const kid = kuaOf(b.kua), t = yearOf(b.year), n = lgNum(b.total ?? b.budget);
+      if (!kid || !scope(t) || !n) { if (kid && !t) bad.tahun++; return; }
+      mp.set(kid + '|' + t, { kua_id: kid, tahun: t, nominal: n });
+    });
+    out.anggaran = [...mp.values()];
+  }
+
+  // RPD: rincian per POS per KUA per bulan (baris tanpa nominal dilewati)
+  if (P.rpd) {
+    const mp = new Map();
+    raw.rpds.forEach(r => {
+      const kid = kuaOf(r.kua), t = yearOf(r.year), b = lgBulan(r.month);
+      if (!kid || !scope(t) || !b) { if (kid && (!t || !b)) bad.tahun++; return; }
+      const { it } = hitung(r.data); if (!Object.keys(it).length) return;
+      mp.set(`${kid}|${t}|${b}`, { kua_id: kid, tahun: t, bulan: b, items: it });
+    });
+    out.rpd = [...mp.values()];
+  }
+
+  // Nominal Auto Payment -> Realisasi SAKTI (hanya KUA + POS yang dicentang)
+  const sk = new Map(); let taktif = 0;
+  if (P.sakti) {
+    (raw.apNom || []).forEach(({ year, data }) => {
+      const t = yearOf(year); if (!t || !scope(t)) return;
+      Object.entries(data || {}).forEach(([bulan, byKua]) => {
+        const b = lgBulan(bulan); if (!b) return;
+        Object.entries(byKua || {}).forEach(([nama, e]) => {
+          const kid = kuaOf(nama); if (!kid) return;
+          sPos.forEach(p => {
+            const n = lgNum(e && e[p.kode_pos]); if (!n) return;
+            out.baca.apNom++;
+            if (flagged.get(kid)?.has(p.id)) sk.set(`${kid}|${p.id}|${t}|${b}`, { kua_id: kid, pos_id: p.id, tahun: t, bulan: b, nominal: n }); else taktif++;
+          });
+        });
+      });
+    });
+    out.sakti = [...sk.values()];
+    if (taktif) out.warn.push(`${taktif} nominal Auto Payment milik KUA/POS yang tidak dicentang tidak dibawa.`);
+  }
+
+  // Realisasi: rincian per POS (POS Auto Payment tidak dibawa: digantikan Realisasi SAKTI), status, catatan, waktu, dan berkas LPJ
+  if (P.realisasi) {
+    const mp = new Map(); let ganda = 0, tanpaBerkas = 0, lepasN = 0;
+    raw.reals.forEach(r => {
+      const kid = kuaOf(r.kua), t = yearOf(r.year), b = lgBulan(r.month);
+      if (!kid || !scope(t) || !b) { if (kid && (!t || !b)) bad.tahun++; return; }
+      const { it, dibuang } = hitung(r.data, flagged.get(kid));
+      if (dibuang) lepasN++;
+      if (!Object.keys(it).length) return;
+      const st = lgStatus(r.status), dibuat = lgTime(r.createdAt) || lgTime(r.updatedAt), ver = lgTime(r.verifiedAt) || lgTime(r.updatedAt);
+      const berkas = (Array.isArray(r.files) ? r.files : []).map(f => {
+        const id = f && (f.fileId || f.id), url = f && (f.fileUrl || f.url) || (id ? `https://drive.google.com/file/d/${id}/view` : '');
+        return lgDriveId(url) ? { url, nama: String(f.fileName || f.originalName || f.name || f.uniqueName || 'LPJ') } : null;
+      }).filter(Boolean);
+      const key = `${kid}|${t}|${b}`, baru = { kua_id: kid, tahun: t, bulan: b, items: it, status: st,
+        catatan_admin: String(r.notes || '').trim() || null, submitted_at: dibuat,
+        verified_at: st === 'waiting' ? null : ver, paid_at: st === 'paid' ? ver : null, files: berkas, _u: String(r.updatedAt || '') };
+      if (mp.has(key)) { ganda++; if (baru._u < mp.get(key)._u) return; }
+      mp.set(key, baru);
+    });
+    out.realisasi = [...mp.values()];
+    out.realisasi.forEach(r => { out.berkas += r.files.length; if (!r.files.length) tanpaBerkas++; delete r._u; });
+    if (ganda) out.warn.push(`${ganda} Realisasi ganda untuk KUA + bulan yang sama: dipakai yang terbaru.`);
+    if (tanpaBerkas) out.warn.push(`${tanpaBerkas} Realisasi tidak punya berkas LPJ di sistem lama.`);
+    if (lepasN) out.warn.push(`${lepasN} Realisasi memuat nilai POS Auto Payment (Listrik/Telepon): nilainya tidak dibawa karena digantikan Realisasi SAKTI, seperti perhitungan sistem lama.`);
+  }
+
+  if (bad.kua.size) out.warn.unshift(`KUA tidak dikenali (dilewati): ${[...bad.kua].join(', ')}.`);
+  if (bad.pos.size) out.warn.push(`POS/rincian tidak dikenali (dilewati): ${[...bad.pos].join(', ')}.`);
+  if (bad.tahun) out.warn.push(`${bad.tahun} baris dilewati karena tahun atau bulannya tidak valid.`);
+  return out;
+}
+
+async function pageImpor() {
+  const ep = EP;
+  let m;
+  try { m = await master(); } catch (e) { return live(ep) && ($('view').innerHTML = note('Gagal memuat data master: ' + e.message)); }
+  if (!live(ep)) return;
+  const y = new Date().getFullYear(), kn = id => m.kua.find(k => k.id === id)?.nama_kua || id;
+  const chk = (id, label, on = true) => `<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" id="${id}"${on ? ' checked' : ''}><label class="form-check-label" for="${id}">${label}</label></div>`;
+  $('view').innerHTML = `<div class="card"><div class="card-body">
+    <h4 class="mb-1">Impor Data Lama</h4>
+    <p class="mb-3">Ambil data dari Spreadsheet/Apps Script sistem lama ke ${esc(CFG.nama)}, termasuk <b>menyalin berkas LPJ</b> ke Google Drive ${esc(CFG.nama)} (<code>${esc(CFG.nama)} / BOP / LPJ / tahun / Kecamatan …</code>). Aman diulang: berkas yang sudah tersalin tidak digandakan.</p>
+    <div id="imsg"></div>
+    <div class="row g-3 mb-3">
+      <div class="col-lg-8"><label class="form-label" for="iurl">Alamat Web App sistem lama</label>
+        <input id="iurl" class="form-control" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(LS.getItem('jalin.legacy') || '')}" autocomplete="off" spellcheck="false">
+        <div class="form-text">Sama dengan <code>SCRIPT_URL</code> di config.js sistem lama. Diingat di browser ini.</div></div>
+      <div class="col-sm-6 col-lg-2"><label class="form-label" for="ith">Tahun</label>
+        <select id="ith" class="form-select"><option value="0">Semua tahun</option>${[y - 2, y - 1, y, y + 1].map(v => `<option${v === y ? ' selected' : ''}>${v}</option>`).join('')}</select></div>
+      <div class="col-sm-6 col-lg-2"><label class="form-label" for="imd">Data yang sudah ada</label>
+        <select id="imd" class="form-select"><option value="0">Lewati (aman)</option><option value="1">Timpa</option></select></div></div>
+    <div class="mb-2"><div class="fw-semibold mb-1">Yang dibawa</div>
+      ${chk('ip_anggaran', 'Anggaran')}${chk('ip_rpd', 'RPD')}${chk('ip_realisasi', 'Realisasi + berkas LPJ')}${chk('ip_sakti', 'SAKTI (Auto Payment: ceklis + nominal)')}</div>
+    <p class="small mb-3"><b>Tidak dibawa</b> karena tidak dipakai ${esc(CFG.nama)}: akun dan password pengguna (akun dibuat lewat <code>bop.mjs</code>), kuota API, konfigurasi lama, riwayat/log, ID dan Total (dihitung ulang), nama pengunggah/verifikator, metadata file, nilai Rp 0 atau baris kosong, serta KUA/POS yang tidak dikenali. Air tidak lagi SAKTI.</p>
+    <button class="btn btn-primary" id="icek"><i class="bx bx-search-alt"></i> Ambil data &amp; pratinjau</button>
+    <div id="ihasil" class="mt-4"></div></div></div>`;
+  let plan = null, stop = false;
+  const opts = () => ({ url: $('iurl').value.trim(), tahun: +$('ith').value, timpa: $('imd').value === '1',
+    parts: { anggaran: $('ip_anggaran').checked, rpd: $('ip_rpd').checked, realisasi: $('ip_realisasi').checked, sakti: $('ip_sakti').checked } });
+  const log = t => { const el = $('ilog'); if (el) el.textContent = t; };
+  const nm = { anggaran: 'Anggaran', rpd: 'RPD', realisasi: 'Realisasi', sakti: 'Realisasi SAKTI', metode: 'Pengaturan SAKTI' };
+
+  const showPlan = () => {
+    const o = plan.opt, P = o.parts, b = plan.baca;
+    const row = (jenis, dibaca, siap, extra = '') => `<tr><td>${jenis}</td><td class="text-end">${dibaca}</td><td class="text-end"><b>${siap}</b></td><td>${extra}</td></tr>`;
+    const sakMet = plan.metode.filter(r => r.metode === 'SAKTI').length;
+    $('ihasil').innerHTML = `<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Jenis data</th><th class="text-end">Dibaca</th><th class="text-end">Akan diimpor</th><th></th></tr></thead><tbody>
+      ${P.anggaran ? row('Anggaran', b.budgets, plan.anggaran.length, 'per KUA per tahun') : ''}
+      ${P.rpd ? row('RPD', b.rpds, plan.rpd.length, 'per KUA per bulan') : ''}
+      ${P.realisasi ? row('Realisasi', b.reals, plan.realisasi.length, `${plan.berkas} berkas LPJ akan disalin ke Google Drive`) : ''}
+      ${P.sakti ? row('Pengaturan SAKTI', '-', sakMet, 'KUA/POS yang dicentang') + row('Realisasi SAKTI', b.apNom, plan.sakti.length, 'nominal per KUA/POS/bulan') : ''}</tbody></table></div>
+      ${plan.warn.length ? `<div class="alert alert-warning py-2"><b>Perhatian</b><ul class="mb-0">${plan.warn.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
+      <p class="small mb-2">Mode: <b>${o.timpa ? 'Timpa data yang sudah ada' : 'Lewati data yang sudah ada'}</b>${plan.berkas ? ` · Perkiraan waktu salin berkas: ±${Math.ceil(plan.berkas * 3 / 60)} menit. Biarkan tab ini terbuka.` : ''}</p>
+      <div class="d-flex gap-2"><button class="btn btn-success" id="igo"><i class="bx bx-import"></i> Impor sekarang</button><button class="btn btn-outline-secondary d-none" id="istop">Hentikan</button></div>
+      <div id="ilog" class="small mt-3"></div><div id="ires" class="mt-3"></div>`;
+    $('igo').onclick = runImport;
+    $('istop').onclick = () => { stop = true; $('istop').disabled = true; log('Menghentikan setelah langkah ini selesai…'); };
+  };
+
+  const runImport = async () => {
+    const o = plan.opt, hasil = [], gagalBerkas = [];
+    let fatal = '';
+    stop = false; $('igo').disabled = true; $('icek').disabled = true; $('istop').classList.remove('d-none');
+    let copied = 0, ada = 0;
+    const step = async (jenis, rows) => {   // RPC impor_baris per 100 baris; satu baris gagal tidak membatalkan yang lain
+      const tot = { jenis, ok: 0, lewati: 0, gagal: [] };
+      for (let i = 0; i < rows.length; i += 100) {
+        log(`${nm[jenis]}: ${Math.min(i + 100, rows.length)} dari ${rows.length}…`);
+        const { data, error } = await sb.rpc('impor_baris', { p_jenis: jenis, p_rows: rows.slice(i, i + 100), p_timpa: o.timpa });
+        if (error) throw new Error(`${nm[jenis]}: ${error.message}`);
+        tot.ok += data.ok; tot.lewati += data.lewati; tot.gagal.push(...data.gagal.map(g => ({ jenis, ...g })));
+      }
+      hasil.push(tot);
+    };
+    try {
+      if (o.parts.anggaran) await step('anggaran', plan.anggaran);
+      if (o.parts.sakti) await step('metode', o.timpa ? plan.metode : plan.metode.filter(r => r.metode === 'SAKTI'));
+      if (o.parts.rpd) await step('rpd', plan.rpd);
+      if (o.parts.realisasi) {
+        // baris asli Jalin (diajukan operator, submitted_by terisi) tidak disentuh pada mode Lewati; baris hasil impor sebelumnya boleh dilengkapi berkasnya
+        const exist = new Map();
+        if (!o.timpa) (await fetchAll(() => { let q = sb.from('realisasi').select('kua_id,tahun,bulan,submitted_by'); if (o.tahun) q = q.eq('tahun', o.tahun); return q.order('kua_id').order('tahun').order('bulan'); }))
+          .forEach(r => exist.set(`${r.kua_id}|${r.tahun}|${r.bulan}`, r));
+        const todo = plan.realisasi.filter(r => { const e = exist.get(`${r.kua_id}|${r.tahun}|${r.bulan}`); return !e || e.submitted_by == null; });
+        const lewatiAsli = plan.realisasi.length - todo.length;
+        let n = 0;
+        for (const r of todo) {
+          if (stop) break;
+          n++;
+          for (const f of r.files) {   // berurutan: folder tidak dibuat ganda dan Google Drive tidak kewalahan
+            if (stop) break;
+            log(`Realisasi ${n} dari ${todo.length}: ${kn(r.kua_id)} ${BULAN[r.bulan - 1]} ${r.tahun}, menyalin “${f.nama}”…`);
+            try {
+              const j = await (await api({ action: 'impor-lpj' }, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kua: r.kua_id, tahun: r.tahun, bulan: r.bulan, url: f.url, nama: f.nama }) })).json();
+              r.file_lpj_url = j.folderUrl; if (j.ada) ada++; else copied++;
+            } catch (e) { gagalBerkas.push({ kua_id: r.kua_id, tahun: r.tahun, bulan: r.bulan, nama: f.nama, pesan: e.message }); }
+          }
+        }
+        const kirim = todo.slice(0, stop ? n : todo.length).map(({ files, ...row }) => row);
+        await step('realisasi', kirim);
+        hasil[hasil.length - 1].lewati += lewatiAsli;
+      }
+      if (o.parts.sakti && !stop) await step('sakti', plan.sakti);
+    } catch (e) {
+      fatal = e.message;
+    }
+    if (!live(ep)) return;
+    log(stop ? 'Dihentikan. Jalankan lagi untuk melanjutkan (yang sudah masuk tidak digandakan).' : 'Selesai.');
+    $('istop').classList.add('d-none'); $('igo').disabled = false; $('icek').disabled = false;
+    const pl = id => { const p = m.pos.find(x => x.id === id); return p ? posLabel(p) : 'POS ' + id; };
+    const gagal = hasil.flatMap(h => h.gagal), lbl = g => `${kn(g.kua_id)}${g.bulan ? ' · ' + BULAN[g.bulan - 1] + ' ' + g.tahun : g.tahun ? ' · ' + g.tahun : ''}${g.pos_id ? ' · ' + pl(g.pos_id) : ''}`;
+    $('ires').innerHTML = `${fatal ? note('Impor berhenti: ' + fatal) : ''}
+      <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Jenis data</th><th class="text-end">Masuk</th><th class="text-end">Dilewati</th><th class="text-end">Gagal</th></tr></thead><tbody>
+        ${hasil.map(h => `<tr><td>${nm[h.jenis]}</td><td class="text-end">${h.ok}</td><td class="text-end">${h.lewati}</td><td class="text-end${h.gagal.length ? ' text-danger fw-semibold' : ''}">${h.gagal.length}</td></tr>`).join('')}
+        ${plan.opt.parts.realisasi ? `<tr><td>Berkas LPJ</td><td class="text-end">${copied}</td><td class="text-end">${ada}</td><td class="text-end${gagalBerkas.length ? ' text-danger fw-semibold' : ''}">${gagalBerkas.length}</td></tr>` : ''}</tbody></table></div>
+      ${gagal.length || gagalBerkas.length ? `<div class="alert alert-danger py-2"><b>Yang gagal</b> (perbaiki penyebabnya lalu jalankan impor lagi, yang sudah masuk tidak digandakan):<ul class="mb-0">${
+        gagal.slice(0, 40).map(g => `<li>${esc(nm[g.jenis])} · ${esc(lbl(g))}: ${esc(g.pesan)}</li>`).join('')}${
+        gagalBerkas.slice(0, 40).map(g => `<li>Berkas · ${esc(lbl(g))} “${esc(g.nama)}”: ${esc(g.pesan)}</li>`).join('')}${
+        gagal.length + gagalBerkas.length > 80 ? '<li>… dan lainnya.</li>' : ''}</ul></div>` : fatal || stop ? '' : note('Semua data yang dipilih berhasil diproses.', 'success')}`;
+  };
+
+  $('icek').onclick = async () => {
+    const o = opts();
+    if (!LG_URL.test(o.url)) return $('imsg').innerHTML = note('Alamat Web App tidak valid. Contoh: https://script.google.com/macros/s/…/exec', 'warning');
+    if (!Object.values(o.parts).some(Boolean)) return $('imsg').innerHTML = note('Pilih minimal satu jenis data.', 'warning');
+    $('imsg').innerHTML = ''; $('icek').disabled = true; plan = null;
+    $('ihasil').innerHTML = '<div class="small" id="ilog">Menghubungi sistem lama…</div>';
+    try {
+      const raw = await legacyFetch(o.url, o, log);
+      if (!live(ep)) return;
+      plan = legacyPlan(raw, m, o); plan.opt = o;
+      LS.setItem('jalin.legacy', o.url);
+      showPlan();
+    } catch (e) { if (live(ep)) $('ihasil').innerHTML = note(e.message); }
+    if (live(ep)) $('icek').disabled = false;
+  };
 }
 
 /* ====== Multi-select dengan chip (tanpa library): pilih banyak, cari dengan mengetik, hapus lewat tombol x.
@@ -1015,24 +1300,23 @@ async function buildReport(f, m) {
   };
 }
 
-async function buildSakti(f, m) {   // Rekap RPD vs Realisasi per KUA x POS: SAKTI, Manual, Total, Sisa; filter POS, metode, dan status pembayaran
+async function buildSakti(f, m) {   // Rekap RPD vs Realisasi per KUA x POS: SAKTI, Manual, Total, Sisa; filter POS dan metode
   const stf = { ok: ['approved', 'paid'], paid: ['paid'] }[f.st], per = q => f.per === 'bulan' ? q.eq('bulan', f.bulan) : q, kua = q => f.kid ? q.eq('kua_id', f.kid) : q;
   const [rpd, rel, rs, vers] = await Promise.all([
     fetchAll(() => per(kua(sb.from('rpd').select('kua_id,bulan,items').eq('tahun', f.tahun))).order('kua_id').order('bulan')),
     fetchAll(() => { let q = per(kua(sb.from('realisasi').select('kua_id,bulan,items').eq('tahun', f.tahun))); if (stf) q = q.in('status', stf); return q.order('kua_id').order('bulan'); }),
-    fetchAll(() => per(kua(sb.from('realisasi_sakti').select('kua_id,pos_id,bulan,nominal,status_bayar').eq('tahun', f.tahun))).order('kua_id').order('pos_id').order('bulan')),
-    fetchAll(() => kua(sb.from('metode_pembayaran').select('kua_id,pos_id,metode,mulai')).order('kua_id').order('pos_id').order('mulai'))]);
+    fetchAll(() => per(kua(sb.from('realisasi_sakti').select('kua_id,pos_id,bulan,nominal').eq('tahun', f.tahun))).order('kua_id').order('pos_id').order('bulan')),
+    fetchAll(() => kua(sb.from('metode_pembayaran').select('kua_id,pos_id,metode')).order('kua_id').order('pos_id'))]);
   const R = {}, M2 = {}, S = {}, all = !f.kid, lead = all ? 3 : 2, cols = f.per === 'bulan' ? [f.bulan] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
   rpd.forEach(r => R[r.kua_id + '|' + r.bulan] = r.items);
   rel.forEach(r => M2[r.kua_id + '|' + r.bulan] = r.items);
   rs.forEach(r => S[r.kua_id + '|' + r.pos_id + '|' + r.bulan] = r);
   const KS = all ? m.kua : m.kua.filter(k => k.id === f.kid), PS = f.pos ? m.pos.filter(p => p.id === f.pos) : m.pos, body = [];
   KS.forEach(k => PS.forEach(p => {
+    if (f.metode && f.metode !== (SAKTI_POS.includes(p.kode_pos) ? metodeOf(vers, k.id, p.id) : 'MANUAL')) return;   // pengaturan SAKTI global per KUA + POS
     let a = 0, mn = 0, sk = 0;
-    cols.forEach(b => {   // filter metode dan status berlaku per sel (KUA + POS + bulan) sesuai metode yang berlaku pada bulan itu
-      const mt = SAKTI_POS.includes(p.kode_pos) ? metodeOf(vers, k.id, p.id, f.tahun, b) : 'MANUAL', sr = S[k.id + '|' + p.id + '|' + b];
-      if (f.metode && f.metode !== mt) return;
-      if (f.sb && f.sb !== (mt === 'SAKTI' ? (sr?.status_bayar || 'BELUM_DIBAYAR') : null)) return;
+    cols.forEach(b => {
+      const sr = S[k.id + '|' + p.id + '|' + b];
       a += R[k.id + '|' + b]?.[p.id] || 0; mn += M2[k.id + '|' + b]?.[p.id] || 0; sk += sr?.nominal || 0;
     });
     if (a || mn || sk) body.push([...(all ? [k.nama_kua] : []), p.kode_pos, p.nama_rincian || p.nama_pos, a, sk, mn, sk + mn, a - sk - mn]);
@@ -1044,7 +1328,7 @@ async function buildSakti(f, m) {   // Rekap RPD vs Realisasi per KUA x POS: SAK
     head, body, total, lead, det: false,
     title: `Laporan Rekap Manual vs SAKTI ${f.tahun}`,
     sub: [kn, f.per === 'bulan' ? `${BULAN[f.bulan - 1]} ${f.tahun}` : `Tahun ${f.tahun}`, f.pos ? posLabel(m.pos.find(p => p.id === f.pos)) : null,
-      f.metode ? 'Metode ' + f.metode : null, f.sb ? SB[f.sb][1] : null,
+      f.metode ? 'Metode ' + f.metode : null,
       { ok: 'Manual: Disetujui + Dibayar', paid: 'Manual: Dibayar saja', all: 'Manual: Semua status' }[f.st],
       'Dicetak ' + new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })].filter(Boolean).join(' · '),
     name: `laporan-sakti-${f.tahun}${f.per === 'bulan' ? '-' + mm : ''}-${all ? 'semua-kua' : kn.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
@@ -1096,7 +1380,6 @@ async function pageLaporan() {
       ${col('gs', 'Status Realisasi (manual)', [['ok', 'Disetujui + Dibayar'], ['paid', 'Dibayar saja'], ['all', 'Semua status']], 'ok')}
       ${col('gm', 'Metode pembayaran', [['', 'Semua metode'], ['MANUAL', 'MANUAL'], ['SAKTI', 'SAKTI']], '')}
       ${col('gq', 'POS', [[0, 'Semua POS'], ...m.pos.map(p => [p.id, posLabel(p)])], 0)}
-      ${col('gy', 'Status pembayaran SAKTI', [['', 'Semua status'], ['SUDAH_DIBAYAR', 'Sudah dibayar'], ['BELUM_DIBAYAR', 'Belum dibayar']], '')}
     </div>
     <div class="mt-4 d-flex flex-wrap gap-2">
       <button class="btn btn-primary" data-x="xlsx"><i class="bx bx-spreadsheet"></i> Unduh Excel</button>
@@ -1106,15 +1389,13 @@ async function pageLaporan() {
     $('gb').classList.toggle('d-none', $('gp').value !== 'bulan');
     $('gs').closest('.col-sm-6').classList.toggle('d-none', n === 'rpd');
     $('gf').closest('.col-sm-6').classList.toggle('d-none', sk);   // rekap Manual vs SAKTI hanya satu bentuk
-    ['gm', 'gq', 'gy'].forEach(id => $(id).closest('.col-sm-6').classList.toggle('d-none', !sk));
-    if ($('gm').value === 'MANUAL') $('gy').value = '';   // status pembayaran hanya berlaku untuk POS bermetode SAKTI
-    $('gy').disabled = $('gm').value === 'MANUAL';
+    ['gm', 'gq'].forEach(id => $(id).closest('.col-sm-6').classList.toggle('d-none', !sk));
   };
   $('gform').onchange = sync; sync();
   $('view').onclick = async e => {
     const b = e.target.closest('[data-x]'); if (!b) return;
     const f = { nom: $('gn').value, bentuk: $('gf').value, tahun: +$('gt').value, per: $('gp').value, bulan: +$('gb').value, st: $('gs').value,
-      metode: $('gm').value, pos: +$('gq').value || 0, sb: $('gy').value, kid: admin ? +$('gc').value || 0 : me.kua_id };
+      metode: $('gm').value, pos: +$('gq').value || 0, kid: admin ? +$('gc').value || 0 : me.kua_id };
     const btns = $('view').querySelectorAll('[data-x]');
     btns.forEach(x => x.disabled = true); $('gmsg').innerHTML = note('Menyiapkan laporan…', 'info');
     try {
@@ -1132,9 +1413,10 @@ function pageBop() {
     ['rpd', 'RPD', 'bx-calendar-edit', 'Rencana penarikan dana bulanan', ''],
     ['realisasi', 'Realisasi', 'bx-receipt', 'Isi realisasi dan unggah LPJ', 'o'],
     ['verifikasi', 'Verifikasi', 'bx-check-shield', 'Setujui atau tolak realisasi', 'a'],
-    ['metode', 'Pengaturan SAKTI', 'bx-toggle-right', 'Metode pembayaran MANUAL atau SAKTI', 'a'],
-    ['sakti', 'Realisasi SAKTI', 'bx-transfer', 'Input realisasi pembayaran SAKTI', 'a'],
+    ['metode', 'Pengaturan SAKTI', 'bx-toggle-right', 'Centang KUA yang dibayar lewat SAKTI', 'a'],
+    ['sakti', 'Realisasi SAKTI', 'bx-transfer', 'Input nominal pembayaran SAKTI', 'a'],
     ['config', 'Config', 'bx-slider', 'Pengaturan sistem', 'a'],
+    ['impor', 'Impor Data Lama', 'bx-import', 'Ambil data dari Spreadsheet lama', 'a'],
     ['laporan', 'Laporan', 'bx-file', 'Unduh Excel dan PDF', '']];
   $('view').innerHTML = `<h4 class="mb-1">BOP</h4><p class="mb-3">Halo, <b>${esc(me.nama)}</b>. Pilih modul:</p>
     ${me.role === 'admin' ? '<div class="row g-3 mb-3" id="bstat"></div>' : ''}<div class="row g-3">${items.filter(i => !i[4] || (i[4] === 'a') === (me.role === 'admin')).map(i => `<div class="col-sm-6 col-lg-4">
@@ -1146,17 +1428,17 @@ function pageBop() {
 async function bopStat(ep) {   // statistik ringkas SAKTI untuk admin (opsional: diam bila gagal)
   try {
     const now = new Date(), y = now.getFullYear(), b = now.getMonth() + 1;
-    const [m, v, s] = await Promise.all([master(), sb.from('metode_pembayaran').select('kua_id,pos_id,metode,mulai'),
-      fetchAll(() => sb.from('realisasi_sakti').select('kua_id,pos_id,bulan,nominal,status_bayar').eq('tahun', y).order('id'))]);
+    const [m, v, s] = await Promise.all([master(), sb.from('metode_pembayaran').select('kua_id,pos_id,metode'),
+      fetchAll(() => sb.from('realisasi_sakti').select('kua_id,pos_id,bulan,nominal').eq('tahun', y).order('kua_id').order('pos_id').order('bulan'))]);
     if (!live(ep) || !$('bstat') || v.error) return;
     const P = m.pos.filter(p => SAKTI_POS.includes(p.kode_pos)), cards = [];
     let belum = 0;
     P.forEach(p => {
-      const ks = m.kua.filter(k => metodeOf(v.data, k.id, p.id, y, b) === 'SAKTI');
-      belum += ks.filter(k => !s.some(x => x.kua_id === k.id && x.pos_id === p.id && x.bulan === b && x.status_bayar === 'SUDAH_DIBAYAR')).length;
+      const ks = m.kua.filter(k => metodeOf(v.data, k.id, p.id) === 'SAKTI');
+      belum += ks.filter(k => !s.some(x => x.kua_id === k.id && x.pos_id === p.id && x.bulan === b && x.nominal > 0)).length;
       cards.push([`KUA SAKTI · ${p.nama_pos.replace('Belanja Langganan ', '')}`, `${ks.length} dari ${m.kua.length}`]);
     });
-    cards.push([`Total Realisasi SAKTI ${y}`, 'Rp ' + rp(s.reduce((a, x) => a + x.nominal, 0)), `Belum dibayar ${BULAN[b - 1]}: ${belum}`]);
+    cards.push([`Total Realisasi SAKTI ${y}`, 'Rp ' + rp(s.reduce((a, x) => a + x.nominal, 0)), `Belum diinput ${BULAN[b - 1]}: ${belum}`]);
     $('bstat').innerHTML = cards.map(c => `<div class="col-6 col-lg-3"><div class="card h-100"><div class="card-body"><small>${esc(c[0])}</small><h4 class="mb-0">${esc(c[1])}</h4>${c[2] ? `<small>${esc(c[2])}</small>` : ''}</div></div></div>`).join('');
   } catch { /* statistik hanya pelengkap */ }
 }
@@ -1166,7 +1448,7 @@ function openReset(r) {
   const d = $('dlg');
   d.innerHTML = `<form id="rf" class="p-4">
     <h5 class="mb-1">Reset password</h5>
-    <p class="mb-3">Akun: <b>${esc(r.nama)}</b>${r.kua ? ' (' + esc(r.kua) + ')' : ''}</p>
+    <p class="mb-3">Akun: <b>${esc(r.nama)}</b>${r.kua ? ' (' + esc(r.kua) + ')' : ''}${r.username ? ' · username <code>' + esc(r.username) + '</code>' : ''}</p>
     <div id="rmsg"></div>${pwPair('rp')}
     <button type="button" class="btn btn-sm btn-outline-secondary mb-3" id="gen"><i class="bx bx-refresh"></i> Buat password acak</button>
     <p class="small">Password lama langsung tidak berlaku. Sampaikan password baru ini ke operator yang bersangkutan.</p>
@@ -1200,7 +1482,7 @@ async function pagePengaturan() {
       <dl class="row mb-0">
         <dt class="col-4">Nama</dt><dd class="col-8">${esc(me.nama)}</dd>
         <dt class="col-4">Instansi</dt><dd class="col-8">${esc(me.kua || '-')}</dd>
-        <dt class="col-4">Email</dt><dd class="col-8">${esc(me.email)}</dd>
+        <dt class="col-4">Username</dt><dd class="col-8">${esc(me.username)}</dd>
         <dt class="col-4">Role</dt><dd class="col-8">${esc(me.role)}</dd>
       </dl></div></div></div>
     <div class="col-lg-6"><div class="card"><div class="card-body">
@@ -1222,10 +1504,10 @@ async function pagePengaturan() {
     if (!error) { $('pf').reset(); mask($('pf')); pairOk('np'); }
   };
   if (me.role === 'admin') {
-    const { data } = await sb.from('profiles').select('id,nama,kua,role').order('role').order('nama');
+    const { data } = await sb.rpc('akun_daftar');   // username = bagian email sebelum @ (auth.users tidak terbuka ke klien)
     const el = $('acc');
-    if (el) el.innerHTML = `<table class="table table-hover"><thead><tr><th>Nama</th><th>Instansi</th><th>Role</th><th class="text-end">Aksi</th></tr></thead><tbody>${
-      (data || []).map(r => `<tr><td>${esc(r.nama)}</td><td>${esc(r.kua || '-')}</td><td><span class="badge bg-label-primary">${esc(r.role)}</span></td><td class="text-end">${r.role === 'operator' ? `<button class="btn btn-sm btn-outline-primary" data-reset="${esc(r.id)}"><i class="bx bx-key"></i> Reset password</button>` : ''}</td></tr>`).join('')
+    if (el) el.innerHTML = `<table class="table table-hover"><thead><tr><th>Nama</th><th>Username</th><th>Instansi</th><th>Role</th><th class="text-end">Aksi</th></tr></thead><tbody>${
+      (data || []).map(r => `<tr><td>${esc(r.nama)}</td><td><code>${esc(r.username)}</code></td><td>${esc(r.kua || '-')}</td><td><span class="badge bg-label-primary">${esc(r.role)}</span></td><td class="text-end">${r.role === 'operator' ? `<button class="btn btn-sm btn-outline-primary" data-reset="${esc(r.id)}"><i class="bx bx-key"></i> Reset password</button>` : ''}</td></tr>`).join('')
     }</tbody></table>`;
     if (el) el.onclick = e => { const b = e.target.closest('[data-reset]'); if (b) openReset((data || []).find(r => r.id === b.dataset.reset)); };
   }
@@ -3283,10 +3565,7 @@ function bnDetail(r) {
       if (error) return jpToast(error.message, 'danger');
       B.ba = B.ba.filter(x => x.id !== r.id); bnRows(); jpToast('Berita Acara dihapus.');
     }, true));
-    on('view', async () => {
-      const w = window.open('', '_blank'); if (!w) return jpToast('Izinkan pop-up browser untuk melihat arsip.', 'warning');
-      try { w.location = URL.createObjectURL(await (await api({ action: 'bast-file', id: r.id })).blob()); } catch (e) { w.close(); jpToast(e.message, 'danger'); }
-    });
+    on('view', () => openViewer([{ name: `Berita Acara ${r.noSurat}/${r.tahun}` }], 0, () => api({ action: 'bast-file', id: r.id })));   // penampil yang sama dengan menu BOP (dialog tersendiri, detail BA tetap terbuka)
     on('adel', () => jpAsk('Hapus arsip?', 'File arsip dipindah ke Sampah Google Drive.', 'Hapus', async () => {
       try { await api({ action: 'bast-delete', id: r.id }, { method: 'POST' }); r.arsipId = r.arsipLink = ''; bnRows(); jpToast('Arsip dihapus.'); } catch (e) { jpToast(e.message, 'danger'); }
     }, true));
