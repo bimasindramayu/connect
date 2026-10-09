@@ -17,11 +17,11 @@ h4,h5{color:#566a7f;font-weight:600}
 .bg-label-primary{background:rgba(105,108,255,.16)!important;color:#696cff!important}
 #auth{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
 #auth .card{width:100%;max-width:400px}
-#side{position:fixed;inset:0 auto 0 0;width:260px;background:#fff;box-shadow:0 0 10px rgba(67,89,113,.12);z-index:1030;transition:transform .2s}
+#side{position:fixed;inset:0 auto 0 0;width:260px;background:#fff;box-shadow:0 0 10px rgba(67,89,113,.12);z-index:1030;transition:transform .2s,visibility 0s;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
 #side .nav-link{display:flex;gap:.6rem;align-items:center;margin:.15rem .8rem;padding:.55rem .9rem;border-radius:.375rem;color:#697a8d}
 #side .nav-link:hover{background:rgba(67,89,113,.06)}
 #side .nav-link.active{background:rgba(105,108,255,.16);color:#696cff}
-#main{margin-left:260px}
+#main{margin-left:260px;transition:margin-left .2s}
 #topbar{background:#fff;margin:1rem 1.5rem 0;padding:.6rem 1.2rem;border-radius:.5rem;box-shadow:0 0 .375rem .25rem rgba(161,172,184,.15)}
 .avatar{width:38px;height:38px;border-radius:50%;background:rgba(105,108,255,.16);color:#696cff;display:grid;place-items:center;font-weight:600}
 #side summary{list-style:none;cursor:pointer;user-select:none}#side summary::-webkit-details-marker{display:none}
@@ -40,8 +40,12 @@ dialog::backdrop{background:rgba(67,89,113,.5)}
 .ms-menu li:hover{background:rgba(105,108,255,.08)}.ms-menu li.on{color:#696cff;font-weight:600}
 .ms-menu li.hl{background:#696cff;color:#fff}.ms-menu li.empty{color:#a1acb8;cursor:default}
 dialog.wide{width:min(1100px,calc(100% - 1rem));height:calc(100% - 1rem);max-width:none;max-height:none;overflow:hidden}
+dialog.wide.xl{width:min(1400px,calc(100% - 1rem))}
+#vwa{width:300px;max-width:45%;flex:none;overflow:auto;background:#fff;border-right:1px solid #dee2e6}
+@media(max-width:767px){#vwa{position:absolute;z-index:5;left:0;top:0;bottom:0;width:min(320px,88%);max-width:none;box-shadow:0 0 1rem rgba(0,0,0,.25)}}
 @media(max-width:575px){dialog.wide{width:100%;height:100%;border-radius:0}}
-@media(max-width:991px){#side{transform:translateX(-100%)}#side.open{transform:none}#main{margin-left:0}#topbar{margin:.75rem}}
+@media(max-width:991px){#side{transform:translateX(-100%);visibility:hidden;transition:transform .2s,visibility 0s .2s}#side.open{transform:none;visibility:visible;transition:transform .2s,visibility 0s}#main{margin-left:0}#topbar{margin:.75rem}}
+@media(min-width:992px){body.side-off #side{transform:translateX(-100%);visibility:hidden;transition:transform .2s,visibility 0s .2s}body.side-off #main{margin-left:0}}   /* menu samping disembunyikan (layar lebar) */
 .bg-label-success{background:rgba(113,221,55,.16)!important;color:#71dd37!important}
 .bg-label-warning{background:rgba(255,171,0,.16)!important;color:#ffab00!important}
 .bg-label-danger{background:rgba(255,62,29,.16)!important;color:#ff3e1d!important}
@@ -91,7 +95,7 @@ dialog.wide{width:min(1100px,calc(100% - 1rem));height:calc(100% - 1rem);max-wid
 <div id="app" class="d-none">
   <aside id="side">
     <div class="p-4 pb-3"><a href="#bop" class="text-decoration-none"><span class="brand"><i class="bx bx-link-alt"></i> Jalin</span></a></div>
-    <nav class="nav flex-column">
+    <nav class="nav flex-column pb-4">
       <details open>
         <summary class="nav-link"><i class="bx bx-wallet"></i>BOP<i class="bx bx-chevron-down ms-auto"></i></summary>
         <a class="nav-link sub admin-only d-none" href="#anggaran"><i class="bx bx-coin-stack"></i>Anggaran</a>
@@ -117,7 +121,7 @@ dialog.wide{width:min(1100px,calc(100% - 1rem));height:calc(100% - 1rem);max-wid
   </aside>
   <div id="main">
     <div id="topbar" class="d-flex align-items-center gap-3">
-      <button class="btn btn-sm d-lg-none" id="burger" aria-label="Menu"><i class="bx bx-menu fs-4"></i></button>
+      <button class="btn btn-sm" id="burger" type="button" aria-label="Sembunyikan atau tampilkan menu" title="Sembunyikan/tampilkan menu" aria-controls="side" aria-expanded="true"><i class="bx bx-menu fs-4"></i></button>
       <div class="ms-auto d-flex align-items-center gap-3">
         <div class="text-end lh-sm"><div class="fw-semibold" id="uName"></div><small id="uRole"></small></div>
         <div class="avatar" id="uAv"></div>
@@ -138,8 +142,7 @@ const CFG = {
   url: 'https://lpfwkitppdnlcakkncov.supabase.co',
   key: 'sb_publishable_AfVmUT86ttPMaiO3iUmJew_u3l3IBPF',
   turnstile: '0x4AAAAAAFKG36vwdFMGZBiz',           // test key; ganti dengan Site Key Turnstile Anda
-  domain: 'domainanda.com'                           // domain email di balik username (pengguna tidak pernah mengetiknya); SAMAKAN dengan EMAIL_DOMAIN di .env
-  //https://script.google.com/macros/s/AKfycbwQZiSPbvdnz-814dlNsdI6seG4SQG43JAqbX23RuYaGZR2_-V8i1BlkONATP6ZbeSi/exec
+  domain: 'contoh.go.id'                           // domain email di balik username (pengguna tidak pernah mengetiknya); SAMAKAN dengan EMAIL_DOMAIN di .env
 };
 /* =================================================== */
 document.title = `${CFG.nama} · Bimas Islam Indramayu`;   // judul tab dan logo mengikuti CFG.nama (mengganti nama cukup di sini)
@@ -236,7 +239,17 @@ async function boot(session) {
 sb.auth.onAuthStateChange((ev, s) => { if (ev !== 'TOKEN_REFRESHED') setTimeout(() => boot(s), 0); });
 
 $('out').onclick = () => sb.auth.signOut();
-$('burger').onclick = () => $('side').classList.toggle('open');
+// Menu samping: layar lebar = sembunyikan/tampilkan (pilihan diingat di browser ini); layar sempit = geser masuk/keluar.
+// Daftar menu dapat digulir bila submenu yang dibuka lebih panjang daripada layar (CSS #side overflow-y).
+const SIDE_KEY = 'jalin.side', wideScreen = () => innerWidth >= 992;
+const syncSide = () => $('burger').setAttribute('aria-expanded', String(wideScreen() ? !document.body.classList.contains('side-off') : $('side').classList.contains('open')));
+if (LS.getItem(SIDE_KEY) === 'off') document.body.classList.add('side-off');
+$('burger').onclick = () => {
+  if (wideScreen()) LS.setItem(SIDE_KEY, document.body.classList.toggle('side-off') ? 'off' : 'on');
+  else $('side').classList.toggle('open');
+  syncSide();
+};
+addEventListener('resize', syncSide); syncSide();
 
 const pages = { bop: pageBop, rpd: pageRpd, laporan: pageLaporan, realisasi: pageRealisasi, anggaran: pageAnggaran, verifikasi: pageVerifikasi, metode: pageMetode, sakti: pageSakti, config: pageConfig, impor: pageImpor, pengaturan: pagePengaturan, jaspro: pageJaspro, bast: pageBast, 'bast-buat': pageBastBuat, 'bast-pegawai': pageBastPegawai, 'bast-setting': pageBastSetting };
 function route() {
@@ -342,7 +355,7 @@ async function api(q, opt = {}) {
   }
   return r;
 }
-async function showDocs(el, ctx, opt = {}) {   // ctx = { kua, tahun, bulan }; opt = { del, onCount }
+async function showDocs(el, ctx, opt = {}) {   // ctx = { kua, tahun, bulan }; opt = { del, onCount, side } (side = rincian Realisasi di kiri penampil)
   el.textContent = 'Memuat dokumen…';
   try {
     const { files } = await (await api({ action: 'list', ...ctx })).json();
@@ -350,13 +363,27 @@ async function showDocs(el, ctx, opt = {}) {   // ctx = { kua, tahun, bulan }; o
     el.innerHTML = files.length ? `<ul class="list-unstyled mb-0">${files.map((f, i) => `<li class="d-flex align-items-center gap-2 mb-1"><i class="bx bx-file"></i><span class="me-auto text-break">${esc(f.name)}</span><button class="btn btn-sm btn-outline-primary" data-f="${i}">Lihat</button>${opt.del ? `<button class="btn btn-sm btn-outline-danger" data-x="${i}" aria-label="Hapus"><i class="bx bx-trash"></i></button>` : ''}</li>`).join('')}</ul>` : '<span class="small">Belum ada dokumen.</span>';
     el.onclick = async e => {
       const v = e.target.closest('[data-f]'), x = e.target.closest('[data-x]');
-      if (v) return openViewer(files, +v.dataset.f, f => api({ action: 'file', ...ctx, id: f.id }));
+      if (v) return openViewer(files, +v.dataset.f, f => api({ action: 'file', ...ctx, id: f.id }), opt.side);
       if (!x || !confirm(`Hapus file "${files[+x.dataset.x].name}" dari Google Drive?`)) return;
       x.disabled = true;
       try { await api({ action: 'delete', ...ctx, id: files[+x.dataset.x].id }, { method: 'POST' }); showDocs(el, ctx, opt); }
       catch (er) { x.disabled = false; el.insertAdjacentHTML('beforeend', note(er.message)); }
     };
   } catch (e) { el.innerHTML = note(e.message); if (opt.onCount) opt.onCount(null); }
+}
+
+// Rincian Realisasi per POS untuk panel kiri penampil dokumen, pembanding dengan isi dokumen LPJ.
+// man = {id POS: nominal manual}, sak = {id POS: nominal SAKTI}, flagged = Set id POS yang dibayar lewat SAKTI (baris diwarnai biru).
+function realisasiSide(judul, sub, pos, man, sak, flagged, rpdTotal) {
+  const rows = pos.filter(p => man[p.id] > 0 || sak[p.id] > 0 || flagged.has(p.id)), tm = isum(man), ts = isum(sak);
+  return `<div class="fw-semibold">${esc(judul)}</div><div class="small mb-2">${esc(sub)}</div>
+    <table class="table table-sm align-middle mb-2"><thead><tr><th>POS</th><th class="text-end">Realisasi (Rp)</th></tr></thead><tbody>${rows.length ? rows.map(p => {
+      const s = flagged.has(p.id), v = (man[p.id] || 0) + (sak[p.id] || 0);
+      return `<tr${s ? ' class="table-info"' : ''}><td>${esc(posLabel(p))}${s ? ' <span class="badge bg-label-primary">SAKTI</span>' : ''}</td><td class="text-end">${v ? rp(v) : '-'}</td></tr>`; }).join('')
+      : '<tr><td colspan="2" class="small">Belum ada nominal.</td></tr>'}</tbody>
+      <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end">${rp(tm + ts)}</td></tr></tfoot></table>
+    <div class="small">Manual: <b>Rp ${rp(tm)}</b>${flagged.size || ts ? `<br>SAKTI: <b>Rp ${rp(ts)}</b>` : ''}${rpdTotal != null ? `<br>RPD bulan ini: <b>Rp ${rp(rpdTotal)}</b>` : ''}</div>
+    ${rows.some(p => flagged.has(p.id)) ? '<div class="small mt-2">Baris biru: dibayar lewat SAKTI.</div>' : ''}`;
 }
 
 /* ====== Pratinjau dokumen, SATU penampil untuk semua menu (Realisasi, Verifikasi, BAST NR): zoom (mouse/trackpad/sentuh), geser,
@@ -366,29 +393,35 @@ const PDF_WK = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worke
 let vOff = null;
 // files = [{ name }]; load(file) = fungsi yang mengembalikan Response isi file (PDF/gambar dikenali dari Content-Type).
 // Dialog tersendiri (#vdlg) sehingga dapat dibuka di atas dialog lain (mis. detail BAST NR) tanpa menutupnya.
-async function openViewer(files, idx, load) {
-  const d = $('vdlg'), btn = (k, ic, lb) => `<button type="button" class="btn btn-outline-secondary" data-v="${k}" aria-label="${lb}" title="${lb}"><i class="bx ${ic}"></i></button>`;
-  d.className = 'wide';
+// side (opsional) = HTML atau fungsi yang mengembalikan HTML: rincian Realisasi per POS di kiri dokumen sebagai pembanding.
+// PENTING: id elemen di penampil berawalan "vw" dan harus unik di seluruh dokumen. getElementById mengambil yang PERTAMA di halaman,
+// jadi id yang sama dengan halaman di belakangnya (dulu "vst" = status Verifikasi) membuat zoom/geser mengenai elemen yang salah.
+async function openViewer(files, idx, load, side) {
+  const d = $('vdlg'), sideHtml = typeof side === 'function' ? side() : (side || ''), btn = (k, ic, lb) => `<button type="button" class="btn btn-outline-secondary" data-v="${k}" aria-label="${lb}" title="${lb}"><i class="bx ${ic}"></i></button>`;
+  d.className = sideHtml ? 'wide xl' : 'wide';
   d.innerHTML = `<div class="d-flex flex-column h-100">
     <div class="d-flex align-items-center flex-wrap gap-2 p-2 border-bottom">
       ${files.length > 1
-        ? `<select id="vf" class="form-select form-select-sm" style="flex:1 1 140px;width:auto;min-width:0">${files.map((f, i) => `<option value="${i}"${i === idx ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}</select>`
+        ? `<select id="vwf" class="form-select form-select-sm" style="flex:1 1 140px;width:auto;min-width:0">${files.map((f, i) => `<option value="${i}"${i === idx ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}</select>`
         : `<div class="fw-semibold text-truncate" style="flex:1 1 140px;min-width:0" title="${esc(files[idx].name)}">${esc(files[idx].name)}</div>`}
-      <span id="vpg" class="badge bg-label-primary text-nowrap d-none" aria-live="polite"></span>
+      <span id="vwg" class="badge bg-label-primary text-nowrap d-none" aria-live="polite"></span>
+      ${sideHtml ? '<button type="button" class="btn btn-sm btn-outline-secondary" data-v="side" aria-label="Tampilkan atau sembunyikan rincian Realisasi" title="Rincian Realisasi per POS"><i class="bx bx-list-ul"></i> Rincian</button>' : ''}
       <div class="btn-group btn-group-sm">${btn('out', 'bx-zoom-out', 'Perkecil')}${btn('in', 'bx-zoom-in', 'Perbesar')}${btn('fit', 'bx-fullscreen', 'Pas layar')}${btn('ccw', 'bx-rotate-left', 'Putar kiri')}${btn('cw', 'bx-rotate-right', 'Putar kanan')}</div>
-      <button type="button" class="btn btn-sm btn-primary" id="vx">Tutup</button></div>
-    <div id="vp" style="flex:1;min-height:0;position:relative;overflow:hidden;touch-action:none;background:#e9ecef;user-select:none;-webkit-user-select:none">
-      <div id="vst" style="position:absolute;left:0;top:0;transform-origin:0 0"><div id="vin" style="position:absolute;left:0;top:0;transform-origin:0 0"></div></div>
-      <div id="vm" class="position-absolute top-50 start-50 translate-middle text-center px-3" style="z-index:2"></div></div>
+      <button type="button" class="btn btn-sm btn-primary" id="vwx">Tutup</button></div>
+    <div class="d-flex flex-grow-1 position-relative" style="min-height:0">
+      ${sideHtml ? `<aside id="vwa" class="p-3${innerWidth >= 768 ? '' : ' d-none'}" aria-label="Rincian Realisasi">${sideHtml}</aside>` : ''}
+      <div id="vwp" style="flex:1;min-width:0;min-height:0;position:relative;overflow:hidden;touch-action:none;background:#e9ecef;user-select:none;-webkit-user-select:none">
+        <div id="vws" style="position:absolute;left:0;top:0;transform-origin:0 0"><div id="vwi" style="position:absolute;left:0;top:0;transform-origin:0 0"></div></div>
+        <div id="vwm" class="position-absolute top-50 start-50 translate-middle text-center px-3" style="z-index:2"></div></div></div>
     <div class="small px-2 py-1 border-top d-none d-md-block">Geser dengan klik-tahan atau scroll. Ctrl + scroll, pinch, atau dua kali klik untuk zoom.</div></div>`;
   d.showModal();
-  const vp = $('vp'), st = $('vst'), inn = $('vin'), P = new Map();
+  const vp = $('vwp'), st = $('vws'), inn = $('vwi'), P = new Map();
   let W = 0, H = 0, rot = 0, s = 1, x = 0, y = 0, gen = 0, pdf = null, url = null, io = null;
   let pTop = [], pH = [], cur = -1;   // posisi atas dan tinggi tiap halaman PDF di ruang dokumen (sebelum diputar)
   const dim = () => rot % 180 ? [H, W] : [W, H];
   const lim = () => { const [bw, bh] = dim(), base = vp.clientWidth / bw; return [Math.max(Math.min(base, vp.clientHeight / bh) * 0.9, base * 0.15), base * 6]; };
   const pageInd = () => {   // halaman yang paling banyak terlihat. Dihitung di ruang dokumen, jadi benar untuk semua rotasi
-    const el = $('vpg'), n = pTop.length;
+    const el = $('vwg'), n = pTop.length;
     if (!el) return;
     if (!n || !W) { el.classList.add('d-none'); cur = -1; return; }
     const vw = vp.clientWidth, vh = vp.clientHeight;
@@ -416,7 +449,9 @@ async function openViewer(files, idx, load) {
     x = cx - (cx - x) * f; y = cy - (cy - y) * f; s = n;
   };
   d.onclick = e => {
-    const b = e.target.closest('[data-v]'); if (!b || !W) return;
+    const b = e.target.closest('[data-v]'); if (!b) return;
+    if (b.dataset.v === 'side') { $('vwa').classList.toggle('d-none'); return fit(); }   // panel rincian: tampil/sembunyi lalu pas-kan dokumen ke lebar baru
+    if (!W) return;
     const k = b.dataset.v, c = [vp.clientWidth / 2, vp.clientHeight / 2];
     if (k === 'fit') return fit();
     if (k === 'cw' || k === 'ccw') { rot = (rot + (k === 'cw' ? 90 : 270)) % 360; return fit(); }
@@ -465,7 +500,7 @@ async function openViewer(files, idx, load) {
     await pg.render({ canvasContext: c.getContext('2d'), viewport: v }).promise;
   };
   const show = async i => {
-    const my = ++gen; clean(); $('vm').textContent = 'Memuat dokumen…';
+    const my = ++gen; clean(); $('vwm').textContent = 'Memuat dokumen…';
     try {
       const blob = await (await load(files[i])).blob();
       if (my !== gen) return;
@@ -497,11 +532,11 @@ async function openViewer(files, idx, load) {
         inn.append(img);
       }
       inn.style.width = W + 'px'; inn.style.height = H + 'px';
-      $('vm').textContent = ''; fit();
-    } catch (e) { if (my === gen) $('vm').innerHTML = note(e.message); }
+      $('vwm').textContent = ''; fit();
+    } catch (e) { if (my === gen) $('vwm').innerHTML = note(e.message); }
   };
-  if ($('vf')) $('vf').onchange = () => show(+$('vf').value);
-  $('vx').onclick = () => d.close();
+  if ($('vwf')) $('vwf').onchange = () => show(+$('vwf').value);
+  $('vwx').onclick = () => d.close();
   vOff = () => { gen++; clean(); ro.disconnect(); d.onclick = null; };
   show(idx);
 }
@@ -610,7 +645,7 @@ async function pageRealisasi() {
   };
   const detail = b => {
     const r = rec(b), au = saktiOf(rs, b), mt = Object.fromEntries(m.pos.map(p => [p.id, metodeOf(vers, me.kua_id, p.id)])), cur = r ? r.items : {}, ri = rpdOf(b)?.items || {}, lpj = r?.file_lpj_url || '';
-    const open = m.cfg.realisasi_enabled === true, okDate = now >= new Date(t, b - 1, 10), edit = open && (!r || r.status === 'rejected');
+    const open = m.cfg.realisasi_enabled === true, okDate = now >= new Date(t, b - 1, 10), canRec = !r || r.status === 'rejected', edit = open && canRec, send = edit && okDate;   // send = boleh unggah dokumen dan mengirim
     let nDocs = lpj ? null : 0, upl = '';   // jumlah dokumen LPJ di Drive; upl = folder yang baru diunggah pada sesi ini
     $('lbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="lback"><i class="bx bx-arrow-back"></i> Kembali</button>
       <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">Realisasi ${BULAN[b - 1]} ${t}</h5>${r ? `<span class="badge ${ST[r.status][0]}">${ST[r.status][1]}</span>` : ''}${r?.status === 'paid' && r.nominal_dibayar ? `<span class="small">Dibayar admin <b>Rp ${rp(r.nominal_dibayar)}</b></span>` : ''}</div>
@@ -628,11 +663,17 @@ async function pageRealisasi() {
           <td class="text-end"><b id="sisa${p.id}"></b></td></tr>`; }).join('')}</tbody>
         <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end" id="trpd"></td><td class="text-end" id="treal"></td><td></td></tr></tfoot></table></div>
       <div class="mb-3"><div class="fw-semibold mb-1">Dokumen LPJ</div><div id="ldocs"><span class="small">Belum ada dokumen.</span></div></div>
-      ${edit ? `<label class="form-label" for="lfile">${lpj ? 'Tambah file LPJ' : 'Unggah file LPJ <span class="text-danger">(wajib)</span>'}</label>
-        <input id="lfile" type="file" class="form-control mb-1" multiple accept=".pdf,.jpg,.jpeg,.png">
+      ${canRec ? `<label class="form-label" for="lfile">${lpj ? 'Tambah file LPJ' : 'Unggah file LPJ <span class="text-danger">(wajib)</span>'}</label>
+        <input id="lfile" type="file" class="form-control mb-1" multiple accept=".pdf,.jpg,.jpeg,.png"${send ? '' : ' disabled'}>
         <div class="form-text mb-3">PDF, JPG, atau PNG. Maksimal ${m.cfg.max_file_count ?? 3} file per bulan, masing-masing ${m.cfg.max_file_size_mb ?? 5} MB.</div>
-        <button class="btn btn-primary" id="lsave">Kirim Realisasi ${BULAN[b - 1]}</button>` : ''}`;
-    if (lpj) showDocs($('ldocs'), { kua: me.kua_id, tahun: t, bulan: b }, { del: edit, onCount: n => nDocs = n });
+        <button class="btn btn-primary" id="lsave"${send ? '' : ' disabled'}>Kirim Realisasi ${BULAN[b - 1]}</button>` : ''}`;
+    const side = () => {   // pembanding di samping dokumen: nilai yang SEDANG diisi di form (belum tentu tersimpan) + nominal SAKTI
+      const man = {}, sak = {}, flagged = new Set();
+      m.pos.forEach(p => { if (mt[p.id] === 'SAKTI') { flagged.add(p.id); if (au[p.id]) sak[p.id] = au[p.id]; if (cur[p.id]) man[p.id] = cur[p.id]; } });
+      $('lbody').querySelectorAll('[data-p]').forEach(i => { const pid = +i.dataset.p, v = num(i.value); if (mt[pid] !== 'SAKTI' && v > 0) man[pid] = v; });
+      return realisasiSide(`Realisasi ${BULAN[b - 1]} ${t}`, me.kua || '', m.pos, man, sak, flagged, rpdOf(b)?.total || 0);
+    };
+    if (lpj) showDocs($('ldocs'), { kua: me.kua_id, tahun: t, bulan: b }, { del: edit, onCount: n => nDocs = n, side });
     const calc = () => {
       const inp = [...$('lbody').querySelectorAll('[data-p]')], errs = [], aTot = isum(au), rpdBln = rpdOf(b)?.total || 0;
       let man = 0;
@@ -646,7 +687,7 @@ async function pageRealisasi() {
       $('trpd').textContent = rp(rpdBln); $('treal').textContent = rp(man + aTot);
       $('lsum').innerHTML = `RPD ${BULAN[b - 1]}: <b>Rp ${rp(rpdBln)}</b> · Realisasi: <b>Rp ${rp(man + aTot)}</b> · Sisa RPD bulan ini: <b>Rp ${rp(rpdBln - man - aTot)}</b>`;
       $('lerr').innerHTML = errs.length ? `<div class="alert alert-danger py-2">${errs.map(esc).join('<br>')}</div>` : '';
-      if ($('lsave')) $('lsave').disabled = errs.length > 0 || !okDate || !inp.some(i => !i.disabled);
+      if ($('lsave')) $('lsave').disabled = errs.length > 0 || !send || !inp.some(i => !i.disabled);
       return errs.length > 0;
     };
     $('lback').onclick = list;
@@ -710,28 +751,39 @@ async function pageVerifikasi() {
       <select id="vb" class="form-select" style="width:auto" aria-label="Bulan"><option value="0">Semua bulan</option>${BULAN.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('')}</select>
       <select id="vs" class="form-select" style="width:auto" aria-label="Status"><option value="">Semua status</option>${Object.entries(ST).map(([k, v]) => `<option value="${k}"${k === 'waiting' ? ' selected' : ''}>${v[1]}</option>`).join('')}</select></div>
     <div id="vmsg"></div><div id="vbody">Memuat…</div></div></div>`;
-  let G = [];
+  let G = [], sortK = '', sortD = 1;   // pengurutan: klik judul kolom (naik), klik lagi (turun), klik lagi (urutan awal)
   const kn = id => m.kua.find(k => k.id === id)?.nama_kua || id;
+  const SK = { kua: f => kn(f.kua_id), periode: f => f.tahun * 100 + f.bulan, total: f => f.total, status: f => Object.keys(ST).indexOf(f.status) };
+  const cmp = (a, c) => { const x = SK[sortK](G[a]), y = SK[sortK](G[c]), d = typeof x === 'string' ? x.localeCompare(y, 'id') : x - y; return d * sortD || a - c; };
+  const th = (k, label, cls = '') => `<th class="${cls}" role="button" tabindex="0" data-s="${k}" style="cursor:pointer;white-space:nowrap;user-select:none" aria-sort="${sortK === k ? (sortD > 0 ? 'ascending' : 'descending') : 'none'}">${label} <i class="bx ${sortK === k ? (sortD > 0 ? 'bx-sort-up' : 'bx-sort-down') : 'bx-sort-alt-2 text-muted'}"></i></th>`;
+  const sortBy = k => { if (sortK === k && sortD < 0) { sortK = ''; sortD = 1; } else { sortD = sortK === k ? -1 : 1; sortK = k; } list(); };
   const list = () => {
-    $('vbody').innerHTML = G.length ? `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Kecamatan</th><th>Periode</th><th class="text-end">Total (Rp)</th><th>Status</th><th></th></tr></thead><tbody>${G.map((f, i) =>
-        `<tr><td>${esc(kn(f.kua_id))}</td><td>${BULAN[f.bulan - 1]} ${f.tahun}</td><td class="text-end">${rp(f.total)}</td><td><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span>${f.status === 'paid' ? `<div class="small">${f.nominal_dibayar ? 'Rp ' + rp(f.nominal_dibayar) : 'nominal belum dicatat'}</div>` : ''}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-i="${i}">Detail</button></td></tr>`).join('')}</tbody></table></div>`
+    const ord = G.map((_, i) => i); if (sortK) ord.sort(cmp);   // data-i tetap menunjuk indeks asli, jadi Detail selalu membuka baris yang benar
+    $('vbody').innerHTML = G.length ? `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr>${th('kua', 'Kecamatan')}${th('periode', 'Periode')}${th('total', 'Total (Rp)', 'text-end')}${th('status', 'Status')}<th></th></tr></thead><tbody>${ord.map(i => { const f = G[i]; return `<tr><td>${esc(kn(f.kua_id))}</td><td>${BULAN[f.bulan - 1]} ${f.tahun}</td><td class="text-end">${rp(f.total)}</td><td><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span>${f.status === 'paid' ? `<div class="small">${f.nominal_dibayar ? 'Rp ' + rp(f.nominal_dibayar) : 'nominal belum dicatat'}</div>` : ''}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-i="${i}">Detail</button></td></tr>`; }).join('')}</tbody></table></div>`
       : '<p class="mb-0">Tidak ada Realisasi untuk filter ini.</p>';
-    $('vbody').onclick = e => { const b = e.target.closest('[data-i]'); if (b) detail(+b.dataset.i); };
+    $('vbody').onclick = e => { const s = e.target.closest('[data-s]'); if (s) return sortBy(s.dataset.s); const b = e.target.closest('[data-i]'); if (b) detail(+b.dataset.i); };
+    $('vbody').onkeydown = e => { const s = e.target.closest('[data-s]'); if (s && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); sortBy(s.dataset.s); } };
   };
   const detail = async i => {
     const f = G[i];
-    $('vbody').onclick = null; $('vbody').textContent = 'Memuat…';
-    const [rr, rk] = await Promise.all([
+    $('vbody').onclick = null; $('vbody').onkeydown = null; $('vbody').textContent = 'Memuat…';
+    const [rr, rk, rm] = await Promise.all([
       sb.from('rpd').select('items').eq('kua_id', f.kua_id).eq('tahun', f.tahun).eq('bulan', f.bulan).maybeSingle(),
-      sb.from('realisasi_sakti').select('nominal').eq('kua_id', f.kua_id).eq('tahun', f.tahun).eq('bulan', f.bulan).gt('nominal', 0)]);
+      sb.from('realisasi_sakti').select('pos_id,nominal').eq('kua_id', f.kua_id).eq('tahun', f.tahun).eq('bulan', f.bulan).gt('nominal', 0),
+      sb.from('metode_pembayaran').select('pos_id,metode').eq('kua_id', f.kua_id)]);
     if (!live(ep)) return;
-    const ri = rr.data?.items || {}, sakti = (rk.data || []).reduce((a, x) => a + x.nominal, 0);
+    const ri = rr.data?.items || {}, sk = Object.fromEntries((rk.data || []).map(x => [x.pos_id, x.nominal])), sakti = isum(sk);   // sk = Realisasi SAKTI bulan ini per POS (diinput Admin)
+    const flagged = new Set((rm.data || []).filter(x => x.metode === 'SAKTI').map(x => x.pos_id));   // POS yang dibayar lewat SAKTI
+    Object.keys(sk).forEach(k => flagged.add(+k));
+    const rowsPos = m.pos.filter(p => f.items[p.id] || ri[p.id] || sk[p.id]), anySak = rowsPos.some(p => flagged.has(p.id));
     $('vbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="vback"><i class="bx bx-arrow-back"></i> Kembali</button>
       <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">${esc(kn(f.kua_id))} · ${BULAN[f.bulan - 1]} ${f.tahun}</h5><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span>${f.status === 'paid' ? `<span class="small">Dibayar <b>${f.nominal_dibayar ? 'Rp ' + rp(f.nominal_dibayar) : '(nominal belum dicatat)'}</b></span>` : ''}</div>
       ${f.status === 'rejected' && f.catatan_admin ? note('Alasan penolakan: ' + f.catatan_admin, 'danger') : ''}
-      <div class="table-responsive"><table class="table align-middle"><thead><tr><th>POS</th><th class="text-end">RPD bulan ini (Rp)</th><th class="text-end">Realisasi (Rp)</th></tr></thead><tbody>${m.pos.filter(p => f.items[p.id] || ri[p.id]).map(p => `<tr><td>${esc(posLabel(p))}</td><td class="text-end">${rp(ri[p.id])}</td><td class="text-end">${rp(f.items[p.id])}</td></tr>`).join('')}</tbody>
-        <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end">${rp(isum(ri))}</td><td class="text-end">${rp(f.total)}</td></tr></tfoot></table></div>
-      <p class="small mb-3">Realisasi SAKTI bulan ini (diinput Admin): <b>Rp ${rp(sakti)}</b> · Total Realisasi (Manual + SAKTI): <b>Rp ${rp(f.total + sakti)}</b> · RPD bulan ini: <b>Rp ${rp(isum(ri))}</b></p>
+      <div class="table-responsive"><table class="table align-middle mb-2"><thead><tr><th>POS</th><th class="text-end">RPD bulan ini (Rp)</th><th class="text-end">Realisasi (Rp)</th></tr></thead><tbody>${rowsPos.map(p => { const s = flagged.has(p.id);
+          return `<tr${s ? ' class="table-info"' : ''}><td>${esc(posLabel(p))}${s ? ' <span class="badge bg-label-primary">SAKTI</span>' : ''}</td><td class="text-end">${rp(ri[p.id])}</td><td class="text-end">${rp((f.items[p.id] || 0) + (sk[p.id] || 0))}</td></tr>`; }).join('')}</tbody>
+        <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end">${rp(isum(ri))}</td><td class="text-end">${rp(f.total + sakti)}</td></tr></tfoot></table></div>
+      ${anySak ? '<div class="small mb-2"><span class="badge" style="background:#cff4fc;color:#055160;border:1px solid #9eeaf9">Biru</span> = POS dibayar lewat SAKTI (nominal diinput Admin, bukan diajukan operator).</div>' : ''}
+      <p class="small mb-3">Realisasi Manual (operator): <b>Rp ${rp(f.total)}</b> · Realisasi SAKTI (diinput Admin): <b>Rp ${rp(sakti)}</b> · Total Realisasi (Manual + SAKTI): <b>Rp ${rp(f.total + sakti)}</b> · RPD bulan ini: <b>Rp ${rp(isum(ri))}</b></p>
       <div class="fw-semibold mb-1">Dokumen LPJ</div><div id="vdocs" class="mb-3"></div>
       <div class="border rounded p-3"><div class="fw-semibold mb-2">Ubah status</div>
         <select id="vst" class="form-select mb-2" style="max-width:260px">${Object.entries(ST).map(([k, v]) => `<option value="${k}"${k === f.status ? ' selected' : ''}>${v[1]}</option>`).join('')}</select>
@@ -742,7 +794,7 @@ async function pageVerifikasi() {
         <div id="vperr"></div>
         <button class="btn btn-primary" id="vsave">Simpan status</button>
         <div class="form-text mt-2">Admin dapat mengubah status kapan saja, tetapi tidak dapat mengubah nominal atau dokumen LPJ.</div></div>`;
-    showDocs($('vdocs'), { kua: f.kua_id, tahun: f.tahun, bulan: f.bulan });
+    showDocs($('vdocs'), { kua: f.kua_id, tahun: f.tahun, bulan: f.bulan }, { side: () => realisasiSide(kn(f.kua_id), `${BULAN[f.bulan - 1]} ${f.tahun}`, m.pos, f.items, sk, flagged, isum(ri)) });
     $('vback').onclick = list;
     $('vst').onchange = () => { $('vnote').classList.toggle('d-none', $('vst').value !== 'rejected'); $('vpaidbox').classList.toggle('d-none', $('vst').value !== 'paid'); };
     $('vpaid').oninput = () => fmtIn($('vpaid'));
