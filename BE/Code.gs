@@ -2,7 +2,7 @@
  * =====================================================================
  *  BIMASATU API - Google Apps Script (Spreadsheet sebagai database)
  *  Melayani menu Sertifikat Masjid/Musala, Sertifikat Arah Kiblat, dan
- *  Pengaturan Sertifikat. BAST NR menyusul di Tahap 4 lewat Bast.gs.
+ *  Pengaturan Sertifikat, serta BAST NR (Bast.gs).
  * =====================================================================
  *
  *  Website BIMASATU memanggil Web App ini lewat fetch(). Login TIDAK dikelola
@@ -39,7 +39,7 @@ const DRIVE_MASTER_FOLDER_ID = '1bxlFSEzZbNdiea9Fhnpvl9uscbyeJyrk';
 
 /* ========================================================================== */
 
-const VERSI_ = '1.0 (Tahap 1: login Supabase + sertifikat)';
+const VERSI_ = '1.1 (login Supabase lewat profiles; sertifikat + BAST NR)';
 
 const SHEET_MASJID = 'DataMasjid';
 const SHEET_PENGATURAN = 'Pengaturan';
@@ -54,7 +54,7 @@ const PESAN_SESI_ = 'Sesi tidak valid atau sudah berakhir. Silakan login ulang.'
 /**
  * Tabel aksi. Tiap aksi: run(payload, user) -> objek hasil. write:true = menulis
  * data, dijalankan dengan kunci agar dua admin tidak menulis bersamaan.
- * Modul tambahan (Bast.gs, Tahap 4) mendaftarkan aksinya lewat fungsi
+ * Modul tambahan (Bast.gs) mendaftarkan aksinya lewat fungsi
  * bastActions_() dengan bentuk yang sama, jadi Code.gs tidak perlu diubah.
  */
 function actions_() {
@@ -203,48 +203,54 @@ function requireAdmin_(token) {
 }
 
 /**
- * Memeriksa token login Supabase: (1) token sah dan belum kedaluwarsa menurut
- * Supabase Auth, (2) nama dan role akun dari tabel profiles (hanya bisa dibaca
- * dengan token akun itu sendiri). Hasilnya di-cache sebesar sisa umur token
- * (maks. CACHE_LOGIN_DETIK_), token yang ditolak di-cache singkat.
+ * Memeriksa token login Supabase dengan SATU permintaan ke tabel profiles memakai token itu sendiri, jalur yang
+ * sama dengan yang dipakai menu BOP: Supabase menolak token palsu/kedaluwarsa (HTTP 401) dan aturan RLS hanya
+ * menyerahkan profil milik pemegang token (id diambil dari isi token yang sudah diverifikasi Supabase itu).
+ * Hasil di-cache sebesar sisa umur token (maks. CACHE_LOGIN_DETIK_); token yang ditolak di-cache singkat.
+ * Alasan penolakan dari Supabase ikut dilaporkan di pesan galat agar mudah ditelusuri.
  */
 function periksaToken_(token) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     throw galat_('CONFIG', 'SUPABASE_URL dan SUPABASE_KEY di bagian atas Code.gs belum diisi.');
   }
   if (typeof token !== 'string' || token.length > 4096 || !/^[\w-]+\.[\w-]+\.[\w-]+$/.test(token)) {
-    throw galat_('AUTH', PESAN_SESI_);
+    throw galat_('AUTH', PESAN_SESI_ + ' (token tidak terkirim atau rusak)');
   }
+  const isi = jwtIsi_(token), sekarang = Math.floor(Date.now() / 1000);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(isi.sub || ''))) {
+    throw galat_('AUTH', PESAN_SESI_ + ' (isi token tidak dikenali)');
+  }
+  if (isi.exp && Number(isi.exp) <= sekarang) throw galat_('AUTH', PESAN_SESI_ + ' (token kedaluwarsa)');
 
   const cache = CacheService.getScriptCache();
   const kunci = 'sb_' + sha256Hex_(token);
   const ada = cache.get(kunci);
-  if (ada === 'x') throw galat_('AUTH', PESAN_SESI_);
+  if (ada === 'x') throw galat_('AUTH', PESAN_SESI_ + ' (token ditolak Supabase beberapa saat lalu)');
   if (ada) return JSON.parse(ada);
 
-  const r1 = tanyaSupabase_('/auth/v1/user', token);
-  const kode1 = r1.getResponseCode();
-  if (kode1 === 401 || kode1 === 403) {
+  const resp = tanyaSupabase_('/rest/v1/profiles?select=nama,role&id=eq.' + encodeURIComponent(isi.sub), token);
+  const kode = resp.getResponseCode(), badan = bacaJson_(resp), alasan = alasanSupabase_(badan, kode);
+  if (kode === 401) {
+    if (/api key|apikey/i.test(alasan)) {
+      throw galat_('CONFIG', 'Supabase menolak SUPABASE_KEY di Code.gs (' + alasan + '). Samakan SUPABASE_URL dan SUPABASE_KEY dengan CFG.url dan CFG.key di index.html yang dipakai di produksi.');
+    }
     cache.put(kunci, 'x', CACHE_GAGAL_DETIK_);
-    throw galat_('AUTH', PESAN_SESI_);
+    throw galat_('AUTH', PESAN_SESI_ + ' (' + alasan + ')');
   }
-  const akun = bacaJson_(r1);
-  if (kode1 !== 200 || !akun || !akun.id) {
-    throw galat_('SUPABASE', 'Server login (Supabase) tidak merespons dengan benar (HTTP ' + kode1 + '). Coba lagi sebentar lagi.');
+  if (kode !== 200 || !Array.isArray(badan)) {
+    throw galat_('SUPABASE', 'Server login (Supabase) tidak merespons dengan benar (' + alasan + '). Coba lagi sebentar lagi.');
   }
+  if (!badan.length) throw galat_('FORBIDDEN', 'Profil akun tidak ditemukan.');
 
-  const r2 = tanyaSupabase_('/rest/v1/profiles?select=nama,role&id=eq.' + encodeURIComponent(akun.id), token);
-  const baris = bacaJson_(r2);
-  if (r2.getResponseCode() !== 200 || !Array.isArray(baris)) {
-    throw galat_('SUPABASE', 'Gagal memeriksa peran akun di server login (HTTP ' + r2.getResponseCode() + '). Coba lagi sebentar lagi.');
-  }
-  if (!baris.length) throw galat_('FORBIDDEN', 'Profil akun tidak ditemukan.');
-
-  const info = { id: akun.id, nama: String(baris[0].nama || ''), role: String(baris[0].role || '') };
-  const sisa = jwtExp_(token) - Math.floor(Date.now() / 1000) - 5;
-  const ttl = Math.min(CACHE_LOGIN_DETIK_, sisa);
+  const info = { id: isi.sub, nama: String(badan[0].nama || ''), role: String(badan[0].role || '') };
+  const ttl = Math.min(CACHE_LOGIN_DETIK_, (Number(isi.exp) || 0) - sekarang - 5);
   if (ttl >= 5) cache.put(kunci, JSON.stringify(info), ttl);
   return info;
+}
+
+function alasanSupabase_(badan, kode) {
+  const t = badan && !Array.isArray(badan) ? badan.message || badan.msg || badan.error_description || badan.error || '' : '';
+  return 'HTTP ' + kode + (t ? ': ' + String(t).substring(0, 100) : '');
 }
 
 function tanyaSupabase_(path, token) {
@@ -267,15 +273,14 @@ function bacaJson_(resp) {
   }
 }
 
-/** Waktu kedaluwarsa token (detik epoch) dari isi JWT; hanya untuk membatasi umur cache, bukan pengganti pemeriksaan Supabase. */
-function jwtExp_(token) {
+/** Isi (payload) JWT sebagai objek, {} bila tidak terbaca. Hanya untuk membaca sub dan exp; keabsahan token diperiksa Supabase. */
+function jwtIsi_(token) {
   try {
     const bagian = token.split('.')[1];
     const rata = bagian + '='.repeat((4 - (bagian.length % 4)) % 4);
-    const teks = Utilities.newBlob(Utilities.base64DecodeWebSafe(rata)).getDataAsString();
-    return Number(JSON.parse(teks).exp) || 0;
+    return JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(rata)).getDataAsString()) || {};
   } catch (err) {
-    return 0;
+    return {};
   }
 }
 
@@ -325,7 +330,7 @@ function setupDatabase() {
   }
   Logger.log('Pengaturan: ' + (setelanBaru ? 'dibuat. Isi lewat menu Pengaturan Sertifikat di BIMASATU.' : 'sudah ada, baris baru dilengkapi bila perlu.'));
 
-  // Modul tambahan (Bast.gs, Tahap 4) menyiapkan sheet-nya sendiri bila ada.
+  // Modul tambahan (Bast.gs) menyiapkan sheet-nya sendiri bila ada.
   if (typeof ensureBastSchemas_ === 'function') ensureBastSchemas_(ss);
 
   if (ss.getSheetByName('Users')) {
@@ -363,7 +368,7 @@ function authorizeAccess() {
     );
     Logger.log('Folder master Drive: HTTP ' + folder.getResponseCode() + ' ' + folder.getContentText());
   } else {
-    Logger.log('DRIVE_MASTER_FOLDER_ID belum diisi (baru diperlukan pada Tahap 4).');
+    Logger.log('DRIVE_MASTER_FOLDER_ID belum diisi (diperlukan untuk arsip BAST NR).');
   }
 
   const info = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(token), { muteHttpExceptions: true });

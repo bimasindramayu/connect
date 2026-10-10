@@ -115,6 +115,7 @@ dialog.wide.xl{width:min(1400px,calc(100% - 1rem))}
         <a class="nav-link sub" href="#bast-buat"><i class="bx bx-edit-alt"></i>Buat BA</a>
         <a class="nav-link sub" href="#bast-pegawai"><i class="bx bx-group"></i>Pegawai</a>
         <a class="nav-link sub" href="#bast-setting"><i class="bx bx-slider-alt"></i>Pengaturan BAST</a>
+        <a class="nav-link sub" href="#bast-migrasi"><i class="bx bx-transfer"></i>Pindahkan dari Supabase</a>
       </details>
       <details class="admin-only d-none">
         <summary class="nav-link"><i class="bx bx-badge-check"></i>Sertifikat<i class="bx bx-chevron-down ms-auto"></i></summary>
@@ -4481,11 +4482,11 @@ $('burger').onclick = () => {
 };
 addEventListener('resize', syncSide); syncSide();
 
-const pages = { bop: pageBop, rpd: pageRpd, laporan: pageLaporan, realisasi: pageRealisasi, anggaran: pageAnggaran, verifikasi: pageVerifikasi, metode: pageMetode, sakti: pageSakti, config: pageConfig, impor: pageImpor, pengaturan: pagePengaturan, jaspro: pageJaspro, bast: pageBast, 'bast-buat': pageBastBuat, 'bast-pegawai': pageBastPegawai, 'bast-setting': pageBastSetting, 'sert-status': pageSertStatus, 'sert-masjid': () => window.sertPage('masjid'), 'sert-kiblat': () => window.sertPage('kiblat'), 'sert-pengaturan': () => window.sertPage('pengaturan') };
+const pages = { bop: pageBop, rpd: pageRpd, laporan: pageLaporan, realisasi: pageRealisasi, anggaran: pageAnggaran, verifikasi: pageVerifikasi, metode: pageMetode, sakti: pageSakti, config: pageConfig, impor: pageImpor, pengaturan: pagePengaturan, jaspro: pageJaspro, bast: pageBast, 'bast-buat': pageBastBuat, 'bast-pegawai': pageBastPegawai, 'bast-setting': pageBastSetting, 'bast-migrasi': pageBastMigrasi, 'sert-status': pageSertStatus, 'sert-masjid': () => window.sertPage('masjid'), 'sert-kiblat': () => window.sertPage('kiblat'), 'sert-pengaturan': () => window.sertPage('pengaturan') };
 function route() {
   if (!me) return;
   let k = location.hash.slice(1) in pages ? location.hash.slice(1) : 'bop';
-  if ((['anggaran', 'verifikasi', 'metode', 'sakti', 'config', 'impor', 'jaspro', 'bast', 'bast-buat', 'bast-pegawai', 'bast-setting'].includes(k) || k.startsWith('sert-')) && me.role !== 'admin') k = 'bop'; // dijaga juga oleh RLS
+  if ((['anggaran', 'verifikasi', 'metode', 'sakti', 'config', 'impor', 'jaspro', 'bast', 'bast-buat', 'bast-pegawai', 'bast-setting', 'bast-migrasi'].includes(k) || k.startsWith('sert-')) && me.role !== 'admin') k = 'bop'; // dijaga juga oleh RLS
   if (k === 'realisasi' && me.role === 'admin') k = 'bop';
   document.querySelectorAll('#side .nav-link').forEach(a => a.classList.toggle('active', a.hash === '#' + k));
   $('side').classList.remove('open');
@@ -7224,7 +7225,7 @@ function jpInput(e) {
 }
 
 /* ====== BAST NR: Berita Acara Serah Terima Sarana Administrasi NR (khusus admin) ======
-   Data: tabel bast_pegawai, bast_ba, bast_setting (bop.sql bagian 13). Arsip dokumen: Google Drive lewat Edge Function bop (aksi bast-*).
+   Data: Spreadsheet + Apps Script (Bast.gs; sheet BastPegawai, BastBA, BastSetting). Arsip dokumen: Google Drive lewat Apps Script.
    BX = kode lama (script.js + pdf.js) yang disalin apa adanya: format nomor surat, alamat lengkap, dan PDF resmi. */
 const BX = (() => {
   let _settingsCache = {}, _pegawaiCache = [];
@@ -7791,6 +7792,9 @@ const bnOut = r => {   // baris database (snake_case) -> bentuk lama (camelCase)
 const bnReset = () => Object.assign(B, { on: false, peg: [], ba: [], set: {} });
 const bnHead = (t, s, btn = '') => `<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4"><div><h4 class="mb-1">${t}</h4><p class="mb-0">${s}</p></div>${btn}</div><div id="bmsg"></div>`;
 const bnById = id => B.ba.find(r => r.id == id);
+const bnB64Blob = (b64, mime) => { const t = atob(b64), u = new Uint8Array(t.length); for (let i = 0; i < t.length; i++) u[i] = t.charCodeAt(i); return new Blob([u], { type: mime }); };
+const bnFileB64 = f => new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1] || ''); fr.onerror = () => no(new Error('File tidak dapat dibaca.')); fr.readAsDataURL(f); });
+const bnArsipLoad = async id => { const j = await gas('bastArsipFile', { id }), blob = bnB64Blob(j.base64, j.mime); return { blob: async () => blob }; };   // bentuk yang diminta openViewer
 const bnSim = r => `<span class="badge bg-label-${r.statusSimkah === 'Sudah' ? 'success' : 'warning'}">${esc(r.statusSimkah)}</span>`;
 const bnRange = t => { const m = /(\d+)\s*-\s*(\d+)/.exec(t || ''); return m ? [+m[1], +m[2]] : null; };
 const bnNext = y => B.set.LAST_NUMBER_YEAR === y ? (parseInt(B.set.LAST_NUMBER, 10) || 0) + 1 : (parseInt(B.set.NOMOR_AWAL_SURAT, 10) || 1);
@@ -7801,13 +7805,10 @@ const bnDlg = (h, wire, w) => {
 };
 async function bnLoad(force) {   // dimuat sekali per sesi (3 permintaan), selanjutnya dari memori
   if (B.on && !force) return true;
-  const [p, b, s] = await Promise.all([
-    sb.from('bast_pegawai').select('*').order('nama'),
-    sb.from('bast_ba').select(BCOL).order('tahun', { ascending: false }).order('nomor_urut', { ascending: false }),
-    sb.from('bast_setting').select('key,value')]);
-  const err = p.error || b.error || s.error;
-  if (err) { $('view').insertAdjacentHTML('afterbegin', note('Gagal memuat data BAST NR: ' + err.message + ' (jalankan bop.sql terbaru di Supabase bila tabel bast_* belum ada).')); return false; }
-  Object.assign(B, { peg: p.data, ba: b.data.map(bnOut), set: { ...BDEF, ...Object.fromEntries(s.data.map(x => [x.key, x.value])) }, on: true });
+  let j;
+  try { j = await gas('bastInit'); }
+  catch (e) { $('view').insertAdjacentHTML('afterbegin', note('Gagal memuat data BAST NR: ' + e.message)); return false; }
+  Object.assign(B, { peg: j.pegawai, ba: j.ba.map(bnOut), set: { ...BDEF, ...Object.fromEntries(j.setting.map(x => [x.key, x.value])) }, on: true });
   BX.set(B.set, B.peg); return true;
 }
 async function bnPdf(r) {
@@ -7876,23 +7877,22 @@ function bnDetail(r) {
     d.querySelector('[data-x]').onclick = () => d.close();
     on('pdf', () => bnPdf(r));
     on('sim', () => jpAsk('Ubah status SIMKAH?', `Status BA ${r.noSurat}/${r.tahun} diubah menjadi "${nx}".`, 'Ubah', async () => {
-      const { error } = await sb.from('bast_ba').update({ status_simkah: nx }).eq('id', r.id);
-      if (error) return jpToast(error.message, 'danger');
+      try { await gas('bastStatus', { id: r.id, status: nx }); } catch (e) { return jpToast(e.message, 'danger'); }
       r.statusSimkah = nx; bnRows(); jpToast('Status SIMKAH diperbarui.');
     }));
     on('del', () => jpAsk('Hapus Berita Acara?', `BA ${r.noSurat}/${r.tahun} dihapus permanen. File arsip di Google Drive (bila ada) tidak ikut terhapus.`, 'Hapus', async () => {
-      const { error } = await sb.from('bast_ba').delete().eq('id', r.id);
-      if (error) return jpToast(error.message, 'danger');
+      try { await gas('bastDeleteBA', { id: r.id }); } catch (e) { return jpToast(e.message, 'danger'); }
       B.ba = B.ba.filter(x => x.id !== r.id); bnRows(); jpToast('Berita Acara dihapus.');
     }, true));
-    on('view', () => openViewer([{ name: `Berita Acara ${r.noSurat}/${r.tahun}` }], 0, () => api({ action: 'bast-file', id: r.id })));   // penampil yang sama dengan menu BOP (dialog tersendiri, detail BA tetap terbuka)
+    on('view', () => openViewer([{ name: `Berita Acara ${r.noSurat}/${r.tahun}` }], 0, () => bnArsipLoad(r.id)));   // penampil yang sama dengan menu BOP (dialog tersendiri, detail BA tetap terbuka)
     on('adel', () => jpAsk('Hapus arsip?', 'File arsip dipindah ke Sampah Google Drive.', 'Hapus', async () => {
-      try { await api({ action: 'bast-delete', id: r.id }, { method: 'POST' }); r.arsipId = r.arsipLink = ''; bnRows(); jpToast('Arsip dihapus.'); } catch (e) { jpToast(e.message, 'danger'); }
+      try { await gas('bastArsipHapus', { id: r.id }); r.arsipId = r.arsipLink = ''; bnRows(); jpToast('Arsip dihapus.'); } catch (e) { jpToast(e.message, 'danger'); }
     }, true));
     $('bfa').onchange = async e => {
       const f = e.target.files[0]; if (!f) return;
-      const fd = new FormData(); fd.append('id', r.id); fd.append('file', f);
-      try { const j = await (await api({ action: 'bast-upload' }, { method: 'POST', body: fd })).json(); r.arsipId = j.fileId; r.arsipLink = j.link; d.close(); bnRows(); jpToast('Arsip diunggah.'); }
+      if (f.size > 5 * 1024 * 1024) return jpToast('Ukuran file melebihi 5 MB.', 'danger');
+      jpToast('Mengunggah arsip…', 'warning');
+      try { const j = await gas('bastArsipUnggah', { id: r.id, name: f.name, base64: await bnFileB64(f) }); r.arsipId = j.fileId; r.arsipLink = j.link; d.close(); bnRows(); jpToast('Arsip diunggah.'); }
       catch (x) { jpToast(x.message, 'danger'); }
     };
   }, 'min(760px,95vw)');
@@ -7977,9 +7977,10 @@ async function bbSave() {
     banyak_na_buku: n('bb-na'), banyak_n: n('bb-n'), banyak_nb: n('bb-nb'), no_seri: v('bb-seri'), porporasi: `${a}- ${b}`,
     kasi_nama: B.set.KASI_NAMA, kasi_nip: B.set.KASI_NIP, status_simkah: v('bb-sim') };
   btn.disabled = true;
-  const { data, error } = await sb.from('bast_ba').insert(row).select(BCOL).single();
+  let data;
+  try { data = (await gas('bastSaveBA', { row })).data; }
+  catch (e) { btn.disabled = false; return jpToast(e.message, 'danger'); }
   btn.disabled = false;
-  if (error) return jpToast(error.message, 'danger');
   B.ba.unshift(bnOut(data));
   if (String(y) !== B.set.LAST_NUMBER_YEAR || row.nomor_urut > (+B.set.LAST_NUMBER || 0)) Object.assign(B.set, { LAST_NUMBER: String(row.nomor_urut), LAST_NUMBER_YEAR: String(y) });
   jpToast(`Berita Acara Nomor ${BX.pad3(row.nomor_urut)}/${y} disimpan.`); pageBastBuat();
@@ -8026,8 +8027,7 @@ function bnPegForm(nip) {
       const v = { nip: $('pf-nip').value.trim(), nama: $('pf-nama').value.trim(), kategori: kat(), jabatan: $('pf-jab').value.trim(), kua: kat() === 'KUA' ? $('pf-kua').value : '', alamat: $('pf-al').value.trim() };
       const err = v.nip.replace(/\D/g, '').length < 18 ? 'NIP minimal 18 digit.' : !v.nama || !v.jabatan || !v.alamat ? 'Nama, Jabatan, dan Alamat wajib diisi.' : v.kategori === 'KUA' && !v.kua ? 'KUA Kecamatan wajib dipilih untuk kategori KUA.' : '';
       if (err) return $('bfe').innerHTML = note(err, 'warning');
-      const { error } = await (nip ? sb.from('bast_pegawai').update(v).eq('nip', nip) : sb.from('bast_pegawai').insert(v));
-      if (error) return $('bfe').innerHTML = note(error.code === '23505' ? `NIP ${v.nip} sudah terdaftar.` : error.message);
+      try { await gas('bastSavePegawai', { nip: nip || '', data: v }); } catch (e) { return $('bfe').innerHTML = note(e.message); }
       B.peg = (nip ? B.peg.map(x => x.nip === nip ? v : x) : [...B.peg, v]).sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
       BX.set(B.set, B.peg); d.close(); bpRows(); jpToast('Pegawai disimpan.');
     };
@@ -8036,10 +8036,52 @@ function bnPegForm(nip) {
 function bnPegDel(nip) {
   const p = B.peg.find(x => x.nip === nip); if (!p) return;
   jpAsk('Hapus pegawai?', `${p.nama} (${p.nip}) dihapus dari daftar. Berita Acara lama tetap menyimpan datanya.`, 'Hapus', async () => {
-    const { error } = await sb.from('bast_pegawai').delete().eq('nip', nip);
-    if (error) return jpToast(error.message, 'danger');
+    try { await gas('bastDeletePegawai', { nip }); } catch (e) { return jpToast(e.message, 'danger'); }
     B.peg = B.peg.filter(x => x.nip !== nip); BX.set(B.set, B.peg); bpRows(); jpToast('Pegawai dihapus.');
   }, true);
+}
+
+/* ---- Pindahkan BAST NR dari Supabase ke Spreadsheet (sekali jalan; halaman ini dihapus pada pembersihan akhir) ---- */
+async function pageBastMigrasi() {
+  const ep = EP;
+  $('view').innerHTML = `<div class="jp" id="broot">${bnHead('Pindahkan BAST NR dari Supabase', 'Menyalin pegawai, Berita Acara, dan pengaturan ke Spreadsheet. Aman diulang: data yang sudah ada tidak ditimpa. Arsip di Google Drive tidak dipindahkan, hanya rujukannya.')}
+    <div class="card"><div class="card-body"><div id="bmg">Memeriksa…</div>
+      <div class="d-flex flex-wrap gap-2 mt-3"><button class="btn btn-primary" id="bmgo"><i class="bx bx-transfer"></i> Pindahkan sekarang</button>
+        <button class="btn btn-outline-secondary" id="bmgdl"><i class="bx bx-download"></i> Unduh cadangan (JSON)</button>
+        <button class="btn btn-outline-secondary" id="bmgcek"><i class="bx bx-refresh"></i> Periksa ulang</button></div></div></div></div>`;
+  const dariSb = async () => {
+    const [p, b, t] = await Promise.all([sb.from('bast_pegawai').select('*').order('nama'), sb.from('bast_ba').select(BCOL).order('id'), sb.from('bast_setting').select('key,value')]);
+    const err = p.error || b.error || t.error; if (err) throw new Error(err.message);
+    return { pegawai: p.data, ba: b.data, setting: t.data };
+  };
+  const cek = async () => {
+    $('bmg').textContent = 'Memeriksa…';
+    try {
+      const [a, g] = await Promise.all([dariSb(), gas('bastInit')]);
+      if (!live(ep)) return;
+      const baris = (nama, x, y) => `<tr><td>${nama}</td><td class="text-end">${x}</td><td class="text-end">${y}</td><td>${y === x ? '<span class="badge bg-label-success">Cocok</span>' : y < x ? '<span class="badge bg-label-warning">Belum lengkap</span>' : '<span class="badge bg-label-info">Spreadsheet lebih banyak</span>'}</td></tr>`;
+      $('bmg').innerHTML = `<table class="table table-sm mb-2"><thead><tr><th></th><th class="text-end">Supabase</th><th class="text-end">Spreadsheet</th><th></th></tr></thead><tbody>${baris('Pegawai', a.pegawai.length, g.pegawai.length)}${baris('Berita Acara', a.ba.length, g.ba.length)}${baris('Pengaturan', a.setting.length, g.setting.length)}</tbody></table>
+        <p class="small mb-0">Bila ketiganya <b>Cocok</b>, datanya sudah lengkap di Spreadsheet dan Supabase siap dibersihkan dari BAST NR.</p>`;
+    } catch (e) { if (live(ep)) $('bmg').innerHTML = note(e.message); }
+  };
+  $('bmgcek').onclick = cek;
+  $('bmgdl').onclick = async () => {
+    try {
+      const a = await dariSb(), u = URL.createObjectURL(new Blob([JSON.stringify(a, null, 1)], { type: 'application/json' })), l = document.createElement('a');
+      l.href = u; l.download = `cadangan-bast-nr-${new Date().toISOString().slice(0, 10)}.json`; l.click(); setTimeout(() => URL.revokeObjectURL(u), 1000);
+    } catch (e) { jpToast(e.message, 'danger'); }
+  };
+  $('bmgo').onclick = async () => {
+    const btn = $('bmgo'); btn.disabled = true; jpToast('Memindahkan data…', 'warning');
+    try {
+      const a = await dariSb();
+      await gas('bastImpor', { pegawai: a.pegawai, setting: a.setting });
+      for (let i = 0; i < a.ba.length; i += 100) await gas('bastImpor', { ba: a.ba.slice(i, i + 100) });
+      bnReset(); jpToast('Data dipindahkan. Periksa hasilnya di tabel.');
+    } catch (e) { jpToast(e.message, 'danger'); }
+    btn.disabled = false; cek();
+  };
+  cek();
 }
 
 /* ---- Pengaturan BAST ---- */
@@ -8054,8 +8096,7 @@ async function pageBastSetting() {
     <div class="d-flex justify-content-end"><button class="btn btn-primary" id="bs-save"><i class="bx bx-save"></i> Simpan Pengaturan</button></div></div></div>`;
   $('bs-save').onclick = async () => {
     const rows = [...document.querySelectorAll('#bsf [data-k]')].map(i => ({ key: i.dataset.k, value: i.value.trim() }));
-    const { error } = await sb.from('bast_setting').upsert(rows, { onConflict: 'key' });
-    if (error) return jpToast(error.message, 'danger');
+    try { await gas('bastSaveSetting', { rows }); } catch (e) { return jpToast(e.message, 'danger'); }
     rows.forEach(x => { B.set[x.key] = x.value; }); BX.set(B.set, B.peg); jpToast('Pengaturan disimpan.');
   };
 }
