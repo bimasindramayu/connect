@@ -1,0 +1,164 @@
+<!-- Tampilan menu Sertifikat Masjid / Musala (dimuat sertifikat.js, logika: js/sertifikat-masjid.js)
+     Berisi tabel data, form tambah/ubah, dan dialog cetak (dialog cetak juga dipakai Arah Kiblat).
+-->
+<div id="view-masjid" class="app-view">
+                <div class="d-flex flex-wrap justify-content-between align-items-start mb-6 gap-3">
+                  <div>
+                    <h4 class="mb-1">Sertifikat Masjid / Musala</h4>
+                    <p class="text-body-secondary mb-0">
+                      Data masjid &amp; musala, riwayat, dan cetak Piagam / Surat Keterangan / Surat Rekomendasi.
+                    </p>
+                  </div>
+                  <button type="button" class="btn btn-primary" id="btnTambahMasjid">
+                    <i class="icon-base bx bx-plus me-1"></i> Tambah Data
+                  </button>
+                </div>
+
+                <div id="masjidAlert" class="alert alert-danger d-none" role="alert"></div>
+
+                <div class="card">
+                  <div class="table-responsive text-nowrap">
+                    <table class="table">
+                      <thead>
+                        <tr>
+                          <th>No</th>
+                          <th>Jenis</th>
+                          <th>Nama</th>
+                          <th>No. ID Nasional</th>
+                          <th>Kecamatan</th>
+                          <th>Thn Berdiri</th>
+                          <th>Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody id="masjidTableBody" class="table-border-bottom-0"></tbody>
+                    </table>
+                  </div>
+                  <div id="masjidLoadingState" class="text-center text-body-secondary py-6">
+                    <span class="spinner-border spinner-border-sm me-2"></span>Memuat data...
+                  </div>
+                  <div id="masjidEmptyState" class="text-center text-body-secondary py-6 d-none">
+                    Belum ada data masjid/musala. Klik &quot;Tambah Data&quot; untuk mulai menambahkan.
+                  </div>
+                </div>
+              </div>
+<div class="modal fade" id="modalMasjid" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable modal-simple">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modalMasjidTitle">Tambah Data Masjid</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div id="modalMasjidAlert" class="alert alert-danger d-none" role="alert"></div>
+            <form id="formMasjid" onsubmit="return false;">
+              <input type="hidden" id="masjidId" />
+              <div class="row g-4">
+                <div class="col-12">
+                  <label class="form-label d-block">Jenis *</label>
+                  <div class="btn-group" role="group" aria-label="Jenis">
+                    <input type="radio" class="btn-check" name="masjidJenis" id="jenisMasjid" value="masjid" checked />
+                    <label class="btn btn-outline-primary" for="jenisMasjid">Masjid</label>
+                    <input type="radio" class="btn-check" name="masjidJenis" id="jenisMusola" value="musola" />
+                    <label class="btn btn-outline-primary" for="jenisMusola">Musala</label>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label" for="masjidNoId">No. ID Nasional *</label>
+                  <input type="text" class="form-control" id="masjidNoId" placeholder="mis. 01.4.13.12.11.000031" />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label" for="masjidNama" id="labelMasjidNama">Nama Masjid *</label>
+                  <input type="text" class="form-control" id="masjidNama" />
+                </div>
+                <!-- Isi pilihan kedua dropdown tipologi dibuat lewat JS dari konstanta
+                     TIPOLOGI_MASJID / TIPOLOGI_MUSOLA (satu sumber, dipakai juga untuk validasi). -->
+                <div class="col-md-6" id="tipologiMasjidWrapper">
+                  <label class="form-label" for="masjidTipologi">Jenis Tipologi</label>
+                  <select class="form-select" id="masjidTipologi">
+                    <option value="">- Pilih Tipologi -</option>
+                  </select>
+                </div>
+                <div class="col-md-6 d-none" id="tipologiMusolaWrapper">
+                  <label class="form-label" for="masjidTipologiMusola">Jenis Tipologi *</label>
+                  <select class="form-select" id="masjidTipologiMusola">
+                    <option value="">- Pilih Tipologi -</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label" for="masjidTahunBerdiri">Tahun Berdiri</label>
+                  <input type="number" class="form-control" id="masjidTahunBerdiri" min="1800" max="2100" />
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="masjidAlamat">Alamat *</label>
+                  <input type="text" class="form-control" id="masjidAlamat" placeholder="Blok/Jalan, RT/RW" />
+                </div>
+                <!-- Kecamatan dipilih dulu; daftar Desa menyesuaikan (data: DesaIndramayu.js). -->
+                <div class="col-md-6">
+                  <label class="form-label" for="masjidKecamatan">Kecamatan *</label>
+                  <select class="form-select" id="masjidKecamatan">
+                    <option value="">- Pilih Kecamatan -</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label" for="masjidDesa">Desa *</label>
+                  <select class="form-select" id="masjidDesa" disabled>
+                    <option value="">- Pilih Kecamatan dulu -</option>
+                  </select>
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="masjidLembaga">Lembaga/Organisasi/Masyarakat Pendiri</label>
+                  <input type="text" class="form-control" id="masjidLembaga" />
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="masjidUrl">URL Profil SIMAS (opsional, dipakai untuk QR code)</label>
+                  <input
+                    type="url"
+                    class="form-control"
+                    id="masjidUrl"
+                    placeholder="https://simas.kemenag.go.id/profil/masjid/..." />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label" for="masjidTanggalTerbit">Tanggal Diterbitkan di Simas</label>
+                  <input type="date" class="form-control" id="masjidTanggalTerbit" />
+                  <!-- Hanya muncul kalau data lama masih punya Bulan/Tahun terbit yang belum diganti tanggal lengkap. -->
+                  <div class="form-text d-none" id="masjidTanggalTerbitHint"></div>
+                </div>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-label-secondary" data-bs-dismiss="modal">Batal</button>
+            <button type="button" class="btn btn-primary" id="btnSimpanMasjid">
+              <span id="btnSimpanMasjidText">Simpan</span>
+              <span id="btnSimpanMasjidSpinner" class="spinner-border spinner-border-sm d-none"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+<div class="modal fade" id="modalCetak" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-simple">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modalCetakTitle">Cetak Dokumen</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div id="modalCetakAlert" class="alert alert-danger d-none" role="alert"></div>
+            <p class="mb-0"><span id="modalCetakJenisLabel">Masjid</span>: <strong id="modalCetakNamaMasjid">-</strong></p>
+            <p id="modalCetakCatatan" class="small text-body-secondary mt-3 mb-0"></p>
+            <input type="hidden" id="cetakMasjidId" />
+            <input type="hidden" id="cetakJenis" />
+            <!-- 'masjid' = Sertifikat Masjid/Musala, 'kiblat' = Sertifikat Arah Kiblat -->
+            <input type="hidden" id="cetakModul" value="masjid" />
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-label-secondary" data-bs-dismiss="modal">Batal</button>
+            <button type="button" class="btn btn-primary" id="btnProsesCetak">
+              <span id="btnProsesCetakText">Buat &amp; Unduh PDF</span>
+              <span id="btnProsesCetakSpinner" class="spinner-border spinner-border-sm d-none"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>

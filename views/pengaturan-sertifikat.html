@@ -1,0 +1,114 @@
+<!-- Tampilan menu Pengaturan Sertifikat (dimuat sertifikat.js, logika: js/pengaturan-sertifikat.js)
+     Kepala Kantor, Kasi Bimas, Petugas Ukur, dan tanda tangan.
+-->
+<div id="view-pengaturan" class="app-view d-none">
+                <div class="mb-6">
+                  <h4 class="mb-1">Pengaturan</h4>
+                  <p class="text-body-secondary mb-0">
+                    Nama, NIP, dan tanda tangan pejabat yang dipakai otomatis saat mencetak dokumen (Piagam / Surat
+                    Keterangan / Surat Rekomendasi dan dokumen Arah Kiblat).
+                  </p>
+                </div>
+
+                <div class="card" style="max-width: 640px;">
+                  <div class="card-body">
+                    <div id="pengaturanAlert" class="alert alert-danger d-none" role="alert"></div>
+                    <div id="pengaturanSuccessAlert" class="alert alert-success d-none" role="alert">
+                      Pengaturan berhasil disimpan.
+                    </div>
+                    <form id="formPengaturan">
+                      <h6 class="mb-1">Kepala Kantor</h6>
+                      <p class="text-body-secondary small mb-3">
+                        Dipakai pada Surat Keterangan &amp; Surat Rekomendasi Masjid/Musala.
+                      </p>
+                      <div class="mb-4">
+                        <label class="form-label" for="pengaturanNama">Nama Kepala Kantor</label>
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="pengaturanNama"
+                          maxlength="150"
+                          placeholder="mis. Dr. H. Nama Lengkap, S.Pd.I., M.Ag." />
+                      </div>
+                      <div class="mb-6">
+                        <label class="form-label" for="pengaturanNip">NIP Kepala Kantor</label>
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="pengaturanNip"
+                          maxlength="40"
+                          placeholder="mis. 19761122 200604 1 009" />
+                      </div>
+
+                      <h6 class="mb-1">Kepala Seksi Bimbingan Masyarakat Islam</h6>
+                      <p class="text-body-secondary small mb-3">
+                        Tercetak pada kolom &quot;Mengetahui&quot; di Berita Acara Kalibrasi Arah Kiblat.
+                      </p>
+                      <div class="mb-4">
+                        <label class="form-label" for="pengaturanKasiNama">Nama Kepala Seksi Bimas Islam</label>
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="pengaturanKasiNama"
+                          maxlength="150"
+                          placeholder="mis. H. Nama Lengkap, S.Ag., M.M" />
+                      </div>
+                      <div class="mb-6">
+                        <label class="form-label" for="pengaturanKasiNip">NIP Kepala Seksi Bimas Islam</label>
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="pengaturanKasiNip"
+                          maxlength="40"
+                          placeholder="mis. 19681230 199403 1 003" />
+                      </div>
+
+                      <h6 class="mb-1">Petugas Ukur Arah Kiblat</h6>
+                      <p class="text-body-secondary small mb-3">
+                        Tercetak pada Data Verifikasi Arah Kiblat (di bawah &quot;Petugas Ukur,&quot;), bersama tanda
+                        tangannya kalau gambar tanda tangan diunggah.
+                      </p>
+                      <div class="mb-4">
+                        <label class="form-label" for="pengaturanPetugasUkur">Nama Petugas Ukur</label>
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="pengaturanPetugasUkur"
+                          maxlength="150"
+                          placeholder="mis. H. Nama Lengkap, S.Ag., M.Pd." />
+                      </div>
+                      <div class="mb-6">
+                        <label class="form-label" for="pengaturanTtdFile">Tanda tangan Petugas Ukur (gambar)</label>
+                        <div class="border rounded p-3 mb-2 text-center bg-lighter" style="min-height: 84px">
+                          <img
+                            id="pengaturanTtdPreview"
+                            class="d-none"
+                            alt="Pratinjau tanda tangan"
+                            style="max-width: 100%; max-height: 120px" />
+                          <span id="pengaturanTtdKosong" class="text-body-secondary small">Belum ada tanda tangan.</span>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                          <input
+                            type="file"
+                            class="form-control"
+                            id="pengaturanTtdFile"
+                            accept="image/png,image/jpeg"
+                            style="max-width: 360px" />
+                          <button type="button" class="btn btn-label-danger d-none" id="btnHapusTtd">
+                            <i class="icon-base bx bx-trash me-1"></i> Hapus tanda tangan
+                          </button>
+                        </div>
+                        <div id="pengaturanTtdPesan" class="form-text">
+                          PNG berlatar transparan paling bagus (atau foto/pindaian di kertas putih, format JPEG/PNG).
+                          Gambar otomatis dikecilkan agar muat di Spreadsheet. Perubahan baru tersimpan setelah
+                          &quot;Simpan Pengaturan&quot; ditekan.
+                        </div>
+                      </div>
+                      <button type="submit" class="btn btn-primary" id="btnSimpanPengaturan">
+                        <span id="btnSimpanPengaturanText">Simpan Pengaturan</span>
+                        <span id="btnSimpanPengaturanSpinner" class="spinner-border spinner-border-sm d-none"></span>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>

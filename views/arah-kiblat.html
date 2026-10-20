@@ -1,0 +1,303 @@
+<!-- Tampilan menu Sertifikat Arah Kiblat (dimuat sertifikat.js, logika: js/arah-kiblat.js)
+     Berisi tabel data dan form pengukuran (peta, GPS, hasil perhitungan).
+-->
+<div id="view-kiblat" class="app-view d-none">
+                <div class="d-flex flex-wrap justify-content-between align-items-start mb-6 gap-3">
+                  <div>
+                    <h4 class="mb-1">Sertifikat Arah Kiblat</h4>
+                    <p class="text-body-secondary mb-0">
+                      Data kalibrasi arah kiblat masjid &amp; musala. Azimut kiblat, tabel posisi matahari, dan tanggal
+                      Hijriah dihitung otomatis; cetak Sertifikat, Data Verifikasi, dan Berita Acara.
+                    </p>
+                  </div>
+                  <button type="button" class="btn btn-primary" id="btnTambahKiblat">
+                    <i class="icon-base bx bx-plus me-1"></i> Tambah Data
+                  </button>
+                </div>
+
+                <div id="kiblatAlert" class="alert alert-danger d-none" role="alert"></div>
+
+                <div class="card">
+                  <div class="table-responsive text-nowrap">
+                    <table class="table">
+                      <thead>
+                        <tr>
+                          <th>No</th>
+                          <th>Jenis</th>
+                          <th>Nama</th>
+                          <th>Kecamatan / Desa</th>
+                          <th>Koordinat</th>
+                          <th>Azimut Kiblat</th>
+                          <th>Waktu Kalibrasi</th>
+                          <th>Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody id="kiblatTableBody" class="table-border-bottom-0"></tbody>
+                    </table>
+                  </div>
+                  <div id="kiblatLoadingState" class="text-center text-body-secondary py-6">
+                    <span class="spinner-border spinner-border-sm me-2"></span>Memuat data...
+                  </div>
+                  <div id="kiblatEmptyState" class="text-center text-body-secondary py-6 d-none">
+                    Belum ada data arah kiblat. Klik &quot;Tambah Data&quot; untuk mulai menambahkan.
+                  </div>
+                </div>
+              </div>
+<div class="modal fade" id="modalKiblat" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable modal-simple">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modalKiblatTitle">Tambah Data Arah Kiblat</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div id="modalKiblatAlert" class="alert alert-danger d-none" role="alert"></div>
+            <form id="formKiblat" onsubmit="return false;" autocomplete="off">
+              <input type="hidden" id="kiblatId" />
+
+              <!-- 1. Data masjid / musala -->
+              <h6 class="mb-3">1. Data Masjid / Musala</h6>
+              <div class="row g-4 mb-6">
+                <div class="col-12">
+                  <label class="form-label d-block">Jenis *</label>
+                  <div class="btn-group" role="group" aria-label="Jenis">
+                    <input type="radio" class="btn-check" name="kiblatJenis" id="kiblatJenisMasjid" value="masjid" checked />
+                    <label class="btn btn-outline-primary" for="kiblatJenisMasjid">Masjid</label>
+                    <input type="radio" class="btn-check" name="kiblatJenis" id="kiblatJenisMusola" value="musola" />
+                    <label class="btn btn-outline-primary" for="kiblatJenisMusola">Musala</label>
+                  </div>
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="kiblatNama" id="labelKiblatNama">Nama Masjid *</label>
+                  <input type="text" class="form-control" id="kiblatNama" maxlength="200" />
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="kiblatAlamat">Alamat Lengkap *</label>
+                  <input type="text" class="form-control" id="kiblatAlamat" maxlength="300" placeholder="Blok/Jalan, RT/RW" />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label" for="kiblatKecamatan">Kecamatan *</label>
+                  <select class="form-select" id="kiblatKecamatan">
+                    <option value="">- Pilih Kecamatan -</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label" for="kiblatDesa">Kelurahan/Desa *</label>
+                  <select class="form-select" id="kiblatDesa" disabled>
+                    <option value="">- Pilih Kecamatan dulu -</option>
+                  </select>
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="kiblatPenyelenggara">Penyelenggara/Pendiri</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="kiblatPenyelenggara"
+                    maxlength="200"
+                    placeholder="mis. Pengurus Takmir Masjid ..." />
+                </div>
+              </div>
+
+              <!-- 2. Titik koordinat -->
+              <h6 class="mb-1">2. Titik Koordinat Lokasi</h6>
+              <p class="text-body-secondary small mb-3">
+                Pilih salah satu cara: rekam dari GPS perangkat, tunjuk di peta, tempel koordinat dari Google Maps, atau
+                ketik manual (derajat, menit, detik).
+              </p>
+              <div class="d-flex flex-wrap gap-2 mb-3">
+                <button type="button" class="btn btn-primary" id="btnKiblatRekam">
+                  <i class="icon-base bx bx-current-location me-1"></i> Rekam lokasi &amp; waktu sekarang
+                </button>
+                <button type="button" class="btn btn-label-primary" id="btnKiblatGps">
+                  <i class="icon-base bx bx-target-lock me-1"></i> Lokasi saya (GPS)
+                </button>
+                <button type="button" class="btn btn-label-primary" id="btnKiblatPeta">
+                  <i class="icon-base bx bx-map me-1"></i> <span id="btnKiblatPetaTeks">Pilih di peta</span>
+                </button>
+              </div>
+              <div id="kiblatLokasiStatus" class="alert alert-info py-2 px-3 d-none" role="status"></div>
+
+              <div id="kiblatPetaPanel" class="d-none mb-4">
+                <div
+                  id="kiblatPeta"
+                  style="height: 340px; border-radius: 0.5rem; border: 1px solid var(--bs-border-color); z-index: 0"></div>
+                <div class="form-text">
+                  Klik pada peta (atau seret penanda) untuk menetapkan titik; perbesar sampai bangunan masjid terlihat
+                  supaya tepat. Garis merah = arah kiblat dari titik tersebut. Pilih lapisan Satelit/Jalan di pojok kanan
+                  atas peta.
+                </div>
+              </div>
+
+              <div class="row g-2 align-items-end mb-1">
+                <div class="col-md-9">
+                  <label class="form-label" for="kiblatTempel">Tempel koordinat (mis. dari Google Maps)</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="kiblatTempel"
+                    placeholder="-6.340247, 108.113883  atau  6°20'24.9&quot;S 108°06'49.9&quot;E  atau tautan Google Maps" />
+                </div>
+                <div class="col-md-3 d-grid">
+                  <button type="button" class="btn btn-label-secondary" id="btnKiblatTerapkan">Terapkan</button>
+                </div>
+              </div>
+              <div id="kiblatTempelPesan" class="form-text mb-3">
+                Di Google Maps: tekan lama pada titik masjid, lalu salin angka koordinat yang muncul.
+              </div>
+
+              <div class="row g-3 mb-2">
+                <div class="col-12 col-xl-6">
+                  <label class="form-label">Lintang Tempat (Ø) *</label>
+                  <div class="input-group">
+                    <input type="text" class="form-control" id="kiblatLintangD" inputmode="decimal" placeholder="derajat" aria-label="Derajat lintang" />
+                    <span class="input-group-text">°</span>
+                    <input type="text" class="form-control" id="kiblatLintangM" inputmode="decimal" placeholder="menit" aria-label="Menit lintang" />
+                    <span class="input-group-text">′</span>
+                    <input type="text" class="form-control" id="kiblatLintangS" inputmode="decimal" placeholder="detik" aria-label="Detik lintang" />
+                    <span class="input-group-text">″</span>
+                    <select class="form-select" id="kiblatLintangH" style="max-width: 6rem" aria-label="Hemisfer lintang">
+                      <option value="S">LS</option>
+                      <option value="U">LU</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="col-12 col-xl-6">
+                  <label class="form-label">Bujur Tempat (λ) *</label>
+                  <div class="input-group">
+                    <input type="text" class="form-control" id="kiblatBujurD" inputmode="decimal" placeholder="derajat" aria-label="Derajat bujur" />
+                    <span class="input-group-text">°</span>
+                    <input type="text" class="form-control" id="kiblatBujurM" inputmode="decimal" placeholder="menit" aria-label="Menit bujur" />
+                    <span class="input-group-text">′</span>
+                    <input type="text" class="form-control" id="kiblatBujurS" inputmode="decimal" placeholder="detik" aria-label="Detik bujur" />
+                    <span class="input-group-text">″</span>
+                    <select class="form-select" id="kiblatBujurH" style="max-width: 6rem" aria-label="Hemisfer bujur">
+                      <option value="T">BT</option>
+                      <option value="B">BB</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="small text-body-secondary mb-2">
+                <span id="kiblatDesimal">Desimal: -</span>
+                <a
+                  id="kiblatLinkMaps"
+                  class="ms-2 d-none"
+                  href="#"
+                  target="_blank"
+                  rel="noopener noreferrer">Buka di Google Maps</a>
+              </div>
+              <div id="kiblatLokasiPeringatan" class="alert alert-warning py-2 px-3 d-none" role="alert"></div>
+              <div class="mb-6"></div>
+
+              <!-- 3. Waktu -->
+              <h6 class="mb-3">3. Waktu Kalibrasi</h6>
+              <div class="row g-3 mb-6">
+                <div class="col-sm-6 col-md-4">
+                  <label class="form-label" for="kiblatTanggal">Tanggal (Masehi) *</label>
+                  <input type="date" class="form-control" id="kiblatTanggal" />
+                </div>
+                <div class="col-sm-6 col-md-3">
+                  <label class="form-label" for="kiblatJam">Jam (WIB) *</label>
+                  <input type="time" class="form-control" id="kiblatJam" step="60" />
+                </div>
+                <div class="col-md-5 d-flex align-items-end">
+                  <button type="button" class="btn btn-label-primary" id="btnKiblatSekarang">
+                    <i class="icon-base bx bx-time-five me-1"></i> Isi tanggal &amp; jam sekarang (WIB)
+                  </button>
+                </div>
+                <div class="col-12 col-md-8">
+                  <label class="form-label" for="kiblatHijriah">Tanggal Hijriah</label>
+                  <div class="input-group">
+                    <input
+                      type="text"
+                      class="form-control"
+                      id="kiblatHijriah"
+                      maxlength="40"
+                      placeholder="otomatis dari tanggal Masehi, mis. 15 Muharram 1448 H" />
+                    <button type="button" class="btn btn-outline-secondary" id="btnKiblatHijriahOtomatis">Otomatis</button>
+                  </div>
+                  <div class="form-text" id="kiblatHijriahInfo">
+                    Dihitung otomatis dengan kalender sipil tabular; bisa berbeda satu hari dari ketetapan resmi
+                    Kemenag, ubah manual kalau perlu.
+                  </div>
+                </div>
+              </div>
+
+              <!-- 4. Petugas & saksi -->
+              <h6 class="mb-1">4. Petugas &amp; Saksi (Berita Acara)</h6>
+              <p class="text-body-secondary small mb-3">
+                Boleh dikosongkan; kalau kosong, Berita Acara hanya memuat garis titik-titik untuk diisi tangan.
+              </p>
+              <div class="row g-3 mb-6">
+                <div class="col-md-4">
+                  <label class="form-label" for="kiblatPetugas">Petugas</label>
+                  <input type="text" class="form-control" id="kiblatPetugas" maxlength="120" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label" for="kiblatSaksi1">Saksi 1</label>
+                  <input type="text" class="form-control" id="kiblatSaksi1" maxlength="120" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label" for="kiblatSaksi2">Saksi 2</label>
+                  <input type="text" class="form-control" id="kiblatSaksi2" maxlength="120" />
+                </div>
+              </div>
+
+              <!-- 5. Hasil perhitungan -->
+              <h6 class="mb-3">5. Hasil Perhitungan</h6>
+              <div class="border rounded p-3 bg-lighter" id="kiblatHasil">
+                <div id="kiblatHasilKosong" class="text-body-secondary small">
+                  Lengkapi koordinat (dan tanggal &amp; jam) untuk melihat hasil perhitungan.
+                </div>
+                <div id="kiblatHasilGalat" class="text-danger small d-none"></div>
+                <div id="kiblatHasilIsi" class="d-none">
+                  <div class="row g-3 text-center">
+                    <div class="col-md-4">
+                      <div class="small text-body-secondary">Azimut Kiblat (UTSB)</div>
+                      <div class="fs-5 fw-semibold" id="kiblatHasilAzimut">-</div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="small text-body-secondary">Sudut Q (BU)</div>
+                      <div class="fs-5 fw-semibold" id="kiblatHasilSudutQ">-</div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="small text-body-secondary">B = 360° − Azimut</div>
+                      <div class="fs-5 fw-semibold" id="kiblatHasilB">-</div>
+                    </div>
+                  </div>
+                  <div id="kiblatHasilTabelWadah" class="mt-3 d-none">
+                    <details>
+                      <summary class="small fw-medium">Rekap data matahari (12 menit dari jam kalibrasi)</summary>
+                      <div class="table-responsive mt-2">
+                        <table class="table table-sm table-bordered text-center mb-0 small">
+                          <thead>
+                            <tr>
+                              <th>Jam</th>
+                              <th>RA</th>
+                              <th>Deklinasi</th>
+                              <th>EoT</th>
+                              <th>Irtifa'</th>
+                              <th>Azimut</th>
+                              <th>Mizwah</th>
+                              <th>Sel. AQ-A</th>
+                            </tr>
+                          </thead>
+                          <tbody id="kiblatHasilTabel"></tbody>
+                        </table>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-label-secondary" data-bs-dismiss="modal">Batal</button>
+            <button type="button" class="btn btn-primary" id="btnSimpanKiblat">
+              <span id="btnSimpanKiblatText">Simpan</span>
+              <span id="btnSimpanKiblatSpinner" class="spinner-border spinner-border-sm d-none"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>

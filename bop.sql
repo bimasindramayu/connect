@@ -818,12 +818,16 @@ drop table if exists public.anggaran_lama;
 
 -- AutoPayment lama (nominal tetap) sudah digantikan SAKTI: hapus fungsi, tabel arsip, dan penanda migrasinya.
 -- Pengaman: tabel arsip hanya dihapus bila migrasi ke SAKTI pernah berjalan (penanda ada) atau tabelnya tidak berisi nominal.
-drop trigger if exists autopayment_pos_guard on public.autopayment_pos;
-do $$ begin
+-- Semua yang menyebut tabel lama ini memakai SQL dinamis (execute) di dalam blok yang dijaga to_regclass, supaya pada database BARU
+-- (tabel tidak pernah ada) tidak ada satu pun pernyataan yang menyebut relasi yang tidak ada (galat 42P01).
+do $$
+declare berisi boolean;
+begin
   if to_regclass('public.autopayment_pos') is not null then
-    if exists (select 1 from public.config where key = 'sakti_migrasi_autopayment')
-       or not exists (select 1 from public.autopayment_pos where nominal > 0) then
-      drop table public.autopayment_pos;
+    execute 'drop trigger if exists autopayment_pos_guard on public.autopayment_pos';
+    execute 'select exists (select 1 from public.autopayment_pos where nominal > 0)' into berisi;
+    if exists (select 1 from public.config where key = 'sakti_migrasi_autopayment') or not berisi then
+      execute 'drop table public.autopayment_pos';
     else
       raise notice 'autopayment_pos masih berisi nominal dan belum pernah dimigrasikan ke SAKTI: tabel DIBIARKAN. Pindahkan datanya lewat menu Impor Data Lama atau Realisasi SAKTI, lalu jalankan ulang file ini.';
     end if;

@@ -1,0 +1,27 @@
+/* sertifikat.css: gaya khusus menu Sertifikat (animasi tampilan, penanda peta kiblat, tombol label) */
+      .app-view {
+        animation: appViewFade 0.2s ease;
+      }
+      /* Penanda titik pada peta (Sertifikat Arah Kiblat) */
+      .kiblat-pin span {
+        display: block;
+        width: 22px;
+        height: 22px;
+        margin: 3px;
+        border-radius: 50%;
+        background: #e11d48;
+        border: 3px solid #fff;
+        box-shadow: 0 0 0 2px #e11d48, 0 2px 6px rgba(0, 0, 0, 0.45);
+      }
+      @keyframes appViewFade {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    
+.btn-label-secondary{background:#ebeef0;border-color:transparent;color:#8592a3}.btn-label-secondary:hover{background:#dfe3e7;color:#8592a3}

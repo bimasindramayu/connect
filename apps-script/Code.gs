@@ -28,14 +28,13 @@
 
 /* ===================== KONFIGURASI (isi di sini saja) ===================== */
 
-// Sama dengan CFG.url dan CFG.key di index.html (kunci "publishable" memang publik).
+// Sama dengan CFG.url dan CFG.key di js/config.js (kunci "publishable" memang publik).
 const SUPABASE_URL = 'https://lpfwkitppdnlcakkncov.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_AfVmUT86ttPMaiO3iUmJew_u3l3IBPF';
 
 // ID folder master Google Drive BIMASATU (nilai DRIVE_ROOT_FOLDER_ID di Supabase Secrets,
-// atau bagian akhir URL folder tersebut di Drive). Dipakai arsip BAST NR (Tahap 4);
-// boleh dikosongkan sampai saat itu.
-const DRIVE_MASTER_FOLDER_ID = '1bxlFSEzZbNdiea9Fhnpvl9uscbyeJyrk';
+// atau bagian akhir URL folder tersebut di Drive). Dipakai arsip BAST NR (Bast.gs).
+const DRIVE_MASTER_FOLDER_ID = '';
 
 /* ========================================================================== */
 

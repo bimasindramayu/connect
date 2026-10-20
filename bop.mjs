@@ -11,7 +11,7 @@
 //   SUPABASE_URL=https://xxxx.supabase.co
 //   SERVICE_ROLE_KEY=...                 Secret key atau service_role (RAHASIA)      [akun, username]
 //   EMAIL_DOMAIN=contoh.go.id            domain di balik username; pengguna tidak pernah mengetiknya.
-//                                        HARUS sama dengan CFG.domain di index.html  [akun, username]
+//                                        HARUS sama dengan CFG.domain di js/config.js  [akun, username]
 //   ADMIN_USERNAME=admin                 opsional (bawaan: admin)                    [akun, username]
 //   ADMIN_EMAIL=admin@kantor.go.id       opsional: admin memakai email sendiri (login mengetik email lengkap)  [akun]
 //   ADMIN_PASSWORD=...                   minimal 8 karakter                          [akun]
@@ -27,7 +27,7 @@ import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 
-// Nama aplikasi = nama folder master di Google Drive. Samakan dengan CFG.nama di index.html dan APP_NAME di index.ts.
+// Nama aplikasi = nama folder master di Google Drive. Samakan dengan CFG.nama di js/config.js dan APP_NAME di index.ts.
 const APP_NAME = 'BIMASATU';
 const slug = s => s.toLowerCase().replace(/\s+/g, '');
 const usernameKua = kecamatan => `kua_${slug(kecamatan)}`;
@@ -128,6 +128,7 @@ async function username() {
 // ---------------------------------------------------------------------------------------------------------------
 async function drive() {
   const { GOOGLE_CLIENT_ID: id, GOOGLE_CLIENT_SECRET: secret, DRIVE_FOLDER_ID: ownFolder } = process.env;
+  console.log(`\nGOOGLE_CLIENT_ID=${id}\nGOOGLE_CLIENT_SECRET=${secret}\nDRIVE_FOLDER_ID=${ownFolder || '(buat folder baru)'}`);
   if (!id || !secret) throw new Error('Isi GOOGLE_CLIENT_ID dan GOOGLE_CLIENT_SECRET di .env');
 
   const redirect = 'http://localhost:53682';

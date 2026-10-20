@@ -1,4 +1,4 @@
-// Jalin: SATU Edge Function untuk semua pekerjaan yang harus berjalan di server
+// BIMASATU: SATU Edge Function untuk semua pekerjaan yang harus berjalan di server
 // (kunci rahasia tidak boleh ada di browser). Dipanggil dari index.html sebagai
 //   <SUPABASE_URL>/functions/v1/bop?action=<aksi>     dengan header Authorization: Bearer <token login>
 //
@@ -10,9 +10,6 @@
 //   action=impor-lpj       POST JSON {kua, tahun, bulan, url, nama}
 //                                                               Admin menyalin SATU file LPJ lama (Google Drive sistem lama)
 //                                                               ke struktur folder baru (menu Impor Data Lama)
-//   action=bast-upload     POST multipart (id, file)            Admin mengunggah/mengganti arsip Berita Acara BAST NR ke Google Drive
-//   action=bast-file       GET  ?id                             Isi arsip BAST NR (pratinjau)
-//   action=bast-delete     POST ?id                             Admin menghapus arsip BAST NR (ke Sampah Drive)
 //
 // Tanpa console.log/error sengaja (hemat kuota log Supabase); kesalahan dikembalikan ke klien sebagai JSON.
 //
@@ -22,15 +19,14 @@
 //
 // STRUKTUR GOOGLE DRIVE. Semua file berada di bawah SATU folder master (DRIVE_ROOT_FOLDER_ID) yang otomatis diberi nama APP_NAME:
 //   <APP_NAME> / BOP / LPJ / <tahun> / Kecamatan <nama> / <MM Bulan> - <nama file>
-//   <APP_NAME> / BAST NR / <tahun> / <MM Bulan> / BAST KUA <KUA> - <nnn>-<tahun>.<ext>
 // Aturannya: master -> nama menu -> (jenis dokumen) -> tahun -> ... File LPJ satu KUA satu tahun berada dalam satu folder;
 // bulannya dibedakan awalan nama file "MM Bulan - " (di Drive otomatis terurut menurut bulan).
 // Catatan: scope drive.file hanya bisa mengakses folder buatan aplikasinya, jadi DRIVE_ROOT_FOLDER_ID harus folder yang
 // dibuat 'node bop.mjs drive'. Bila memakai folder buatan sendiri, jalankan perintah itu dengan DRIVE_FOLDER_ID (scope drive).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-// Nama aplikasi = nama folder master di Google Drive. Samakan dengan CFG.nama di index.html dan APP_NAME di bop.mjs.
-const APP_NAME = 'Jalin';
+// Nama aplikasi = nama folder master di Google Drive. Samakan dengan CFG.nama di js/config.js dan APP_NAME di bop.mjs.
+const APP_NAME = 'BIMASATU';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -215,59 +211,12 @@ async function imporLpj(db: any, me: { role: string } | null, req: Request) {
   return json({ ok: true, id: up.id, folderUrl });
 }
 
-// ---- BAST NR: arsip dokumen tertandatangan (hanya admin) ---------------------------------------------------------
-// Folder: <master> / BAST NR / <tahun> / <MM Bulan> / BAST KUA <KUA> - <nnn>-<tahun>.<ext>. Satu arsip per Berita Acara (unggah baru = ganti).
-// deno-lint-ignore no-explicit-any
-async function bastArsip(db: any, me: { role: string } | null, action: string, req: Request, url: URL) {
-  if (me?.role !== 'admin') return json({ error: 'Hanya admin yang boleh mengelola arsip BAST NR.' }, 403);
-  const form = action === 'bast-upload' ? await req.formData() : null;
-  const id = Number(form ? form.get('id') : url.searchParams.get('id'));
-  if (!Number.isInteger(id)) return json({ error: 'ID Berita Acara tidak valid.' }, 400);
-  const { data: ba } = await db.from('bast_ba').select('nomor_urut, tahun, bln_srt, bln, pihak_kedua_nip, arsip_id').eq('id', id).maybeSingle();
-  if (!ba) return json({ error: 'Berita Acara tidak ditemukan.' }, 404);
-  const auth = { Authorization: `Bearer ${await googleToken()}` };
-
-  if (action === 'bast-file') {
-    if (!validId(ba.arsip_id)) return json({ error: 'Arsip belum ada.' }, 404);
-    const meta = await (await fetch(`${API}/${ba.arsip_id}?fields=mimeType,trashed`, { headers: auth })).json();
-    if (meta.trashed || !TYPES.includes(meta.mimeType)) return json({ error: 'Arsip tidak ditemukan di Google Drive.' }, 404);
-    const r = await fetch(`${API}/${ba.arsip_id}?alt=media`, { headers: auth });
-    if (!r.ok || !r.body) throw new Error('Gagal membaca arsip dari Google Drive.');
-    return new Response(r.body, { headers: { ...cors, 'Content-Type': meta.mimeType, 'Cache-Control': 'private, max-age=300' } });
-  }
-  if (action === 'bast-delete') {   // dipindah ke Sampah Google Drive
-    if (validId(ba.arsip_id)) await trash(auth, ba.arsip_id);
-    await db.from('bast_ba').update({ arsip_id: null, arsip_link: null }).eq('id', id);
-    return json({ ok: true });
-  }
-
-  const f = form!.get('file');
-  if (!(f instanceof File)) return json({ error: 'Pilih satu file arsip.' }, 400);
-  const { data: c } = await db.from('config').select('value').eq('key', 'max_file_size_mb').maybeSingle();
-  const maxMb = Number(c?.value ?? 5), ext = (f.name.split('.').pop() ?? '').toLowerCase(), type = EXT[ext];
-  if (!type) return json({ error: 'Hanya PDF, JPG, atau PNG.' }, 400);
-  if (f.size > maxMb * 1024 * 1024) return json({ error: `Ukuran file melebihi ${maxMb} MB.` }, 400);
-  const head = new Uint8Array(await f.slice(0, 4).arrayBuffer());
-  if (!MAGIC[type].every((b, i) => head[i] === b)) return json({ error: 'Isi file tidak sesuai ekstensinya.' }, 400);
-
-  const mi = BULAN.findIndex((b) => String(ba.bln ?? '').toLowerCase().startsWith(b.toLowerCase()));
-  const m = mi >= 0 ? mi + 1 : (ba.bln_srt >= 1 && ba.bln_srt <= 12 ? ba.bln_srt : 0);
-  const parent = (await drivePath(auth, ['BAST NR', String(ba.tahun), m ? `${String(m).padStart(2, '0')} ${BULAN[m - 1]}` : 'Lainnya'], true))!;
-  const { data: p } = await db.from('bast_pegawai').select('kua').eq('nip', ba.pihak_kedua_nip).maybeSingle();
-  const name = `BAST KUA ${String(p?.kua || 'KUA').replace(/[\\/:*?"<>|]/g, '_')} - ${String(ba.nomor_urut).padStart(3, '0')}-${ba.tahun}.${ext}`;
-  const up = await driveUpload(auth, parent, name, type, f);
-  if (validId(ba.arsip_id)) await trash(auth, ba.arsip_id);   // arsip lama diganti (dipindah ke Sampah Drive)
-  const link = up.webViewLink || `https://drive.google.com/file/d/${up.id}/view`;
-  await db.from('bast_ba').update({ arsip_id: up.id, arsip_link: link }).eq('id', id);
-  return json({ ok: true, fileId: up.id, link });
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   try {
     const url = new URL(req.url), action = url.searchParams.get('action') ?? '';
-    const POST = ['upload', 'delete', 'reset-password', 'impor-lpj', 'bast-upload', 'bast-delete'];
-    if (![...POST, 'list', 'file', 'bast-file'].includes(action)) return json({ error: 'Aksi tidak dikenal.' }, 400);
+    const POST = ['upload', 'delete', 'reset-password', 'impor-lpj'];
+    if (![...POST, 'list', 'file'].includes(action)) return json({ error: 'Aksi tidak dikenal.' }, 400);
     if (POST.includes(action) !== (req.method === 'POST')) return json({ error: 'Metode tidak didukung.' }, 405);
     const own = action === 'upload' || action === 'delete';   // mengubah dokumen: hanya operator, untuk KUA-nya sendiri
 
@@ -282,7 +231,6 @@ Deno.serve(async (req) => {
     const { data: me } = await db.from('profiles').select('role, kua_id').eq('id', user.id).maybeSingle();
     if (action === 'reset-password') return await resetPassword(db, me, req);
     if (action === 'impor-lpj') return await imporLpj(db, me, req);
-    if (action.startsWith('bast-')) return await bastArsip(db, me, action, req, url);
     if (!me) return json({ error: 'Profil tidak ditemukan.' }, 403);
 
     // 2) Target dokumen. Upload: selalu KUA milik operator. List/file: admin bebas, operator hanya KUA sendiri.
