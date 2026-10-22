@@ -15,4 +15,4 @@ const CFG = {
 };
 
 // Nomor versi untuk pembusukan cache. Naikkan setiap kali berkas diperbarui: jalankan  node bump-versi.mjs
-const APP_VERSI = '2026.10.17.10.45';
+const APP_VERSI = '2026.10.20.23.40';

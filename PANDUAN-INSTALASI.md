@@ -19,6 +19,20 @@ Yang perlu disiapkan:
 - Akun **Supabase**, **Cloudflare**, dan **GitHub**.
 - Komputer dengan **Node.js 22 atau lebih baru** dan Git.
 
+### Urutan pemasangan (ringkas): SQL, lalu MJS, lalu TS, lalu GS, lalu website
+
+| Urut | Berkas | Dijalankan di | Menghasilkan | Dibutuhkan oleh |
+|---|---|---|---|---|
+| 1 | `bop.sql` | Supabase > SQL Editor | tabel, aturan (trigger), hak akses, data awal | langkah 3: `bop.mjs akun` butuh tabel `profiles` dan trigger-nya |
+| 2 | (pengaturan dashboard) | Supabase dan Cloudflare | pendaftaran mandiri mati, captcha Turnstile | keamanan dan login |
+| 3 | `bop.mjs akun` | terminal | 1 admin + 31 operator (`akun.csv`) | login pertama |
+| 4 | `bop.mjs drive` | terminal | folder master Drive, `DRIVE_ROOT_FOLDER_ID`, token Google | langkah 5 (rahasia Edge Function) dan 6 (konstanta Apps Script) |
+| 5 | `supabase/functions/bop/index.ts` | terminal (`supabase functions deploy`) | Edge Function: LPJ di Drive dan reset password | menu BOP (LPJ) dan reset password |
+| 6 | `apps-script/*.gs` + `appsscript.json` | editor Apps Script | URL Web App | `CFG.gas` di `js/config.js` |
+| 7 | `js/config.js`, lalu push ke GitHub | GitHub Pages | situs hidup | pengguna |
+
+Urutan ini tidak boleh dibalik: `bop.mjs akun` sebelum `bop.sql` gagal (tabel belum ada); Edge Function sebelum `bop.mjs drive` tidak punya rahasia Google; Apps Script sebelum `bop.mjs drive` tidak punya `DRIVE_MASTER_FOLDER_ID`; website paling akhir karena butuh URL Web App. Bagian 2 sampai 8 di bawah mengikuti urutan yang sama.
+
 Isi folder proyek ini (lihat `README.md` bagian 2 untuk penjelasan tiap berkas): `index.html`, `css/`, `js/`, `views/`, `bop.sql`, `bop.mjs`, `supabase/functions/bop/`, `apps-script/`, `assets/`.
 
 ## 2. Supabase: proyek dan database
@@ -44,7 +58,8 @@ Isi folder proyek ini (lihat `README.md` bagian 2 untuk penjelasan tiap berkas):
 2. Salin `.env.example` menjadi `.env` lalu isi: `SUPABASE_URL`, `SERVICE_ROLE_KEY` (Secret key), `EMAIL_DOMAIN`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` (minimal 8 karakter).
    - `EMAIL_DOMAIN` (mis. `kemenag-indramayu.go.id`) hanya "domain bayangan" di balik username; pengguna tidak pernah mengetiknya. **Harus sama** dengan `CFG.domain` di `js/config.js`.
    - **Jangan unggah `.env`** ke GitHub (sudah masuk `.gitignore`).
-3. `node --env-file=.env bop.mjs akun` membuat 1 admin + 31 operator. Hasilnya **`akun.csv`** berisi username dan password awal. Username operator berpola `kua_<kecamatan>` (mis. `kua_anjatan`, `kua_kedokanbunder`). Bagikan password ke tiap KUA, lalu **hapus `akun.csv`** dari komputer (jangan diunggah). Operator dapat mengganti passwordnya sendiri di menu Pengaturan; admin dapat mereset password operator.
+   - Berkas harus bernama persis `.env` dan berada di folder yang sama dengan `bop.mjs`; `bop.mjs` membacanya otomatis (tidak perlu `--env-file`). Format tiap baris `NAMA=nilai`, tanpa spasi di sekitar `=`.
+3. `node bop.mjs akun` membuat 1 admin + 31 operator. Hasilnya **`akun.csv`** berisi username dan password awal. Username operator berpola `kua_<kecamatan>` (mis. `kua_anjatan`, `kua_kedokanbunder`). Bagikan password ke tiap KUA, lalu **hapus `akun.csv`** dari komputer (jangan diunggah). Operator dapat mengganti passwordnya sendiri di menu Pengaturan; admin dapat mereset password operator.
 
 ## 5. Google Drive (dokumen LPJ dan arsip BAST NR)
 
@@ -53,7 +68,7 @@ Gunakan **akun Google yang akan memiliki Spreadsheet dan Apps Script** (bagian 7
 1. console.cloud.google.com > buat **project** baru > **APIs & Services > Library** > aktifkan **Google Drive API**.
 2. **OAuth consent screen**: tipe External, isi nama aplikasi dan email. Tambahkan scope `.../auth/drive.file`. Lalu klik **Publish app** (status *In production*). Bila dibiarkan *Testing*, token Google kedaluwarsa tiap 7 hari dan unggah LPJ berhenti.
 3. **Credentials > Create credentials > OAuth client ID**, jenis **Desktop app**. Salin **Client ID** dan **Client secret** ke `.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`).
-4. `node --env-file=.env bop.mjs drive`. Buka URL yang dicetak, izinkan akses dengan akun Google tadi. Skrip membuat folder master bernama **BIMASATU** di Drive Anda dan mencetak satu baris perintah `npx supabase secrets set GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... GOOGLE_REFRESH_TOKEN=... DRIVE_ROOT_FOLDER_ID=...`.
+4. `node bop.mjs drive`. Buka URL yang dicetak, izinkan akses dengan akun Google tadi. Skrip membuat folder master bernama **BIMASATU** di Drive Anda dan mencetak satu baris perintah `npx supabase secrets set GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... GOOGLE_REFRESH_TOKEN=... DRIVE_ROOT_FOLDER_ID=...`.
    **Simpan nilai `DRIVE_ROOT_FOLDER_ID`**: dipakai lagi di Apps Script (bagian 7).
 
 ## 6. Edge Function `bop`
@@ -64,6 +79,8 @@ npx supabase link --project-ref <PROJECT-REF>
 <tempel baris "npx supabase secrets set ..." dari bagian 5>
 npx supabase functions deploy bop --no-verify-jwt
 ```
+Seluruh kode server Supabase ada di **satu berkas**, `supabase/functions/bop/index.ts` (aksi: `upload`, `delete`, `list`, `file`, `reset-password`, `impor-lpj`); hanya satu fungsi bernama `bop` yang perlu dideploy.
+Bila di proyek Supabase Anda masih ada fungsi lama bernama `upload-lpj`, `lpj`, atau `reset-password` (dari versi awal), semuanya sudah tergantikan dan boleh dihapus: `npx supabase functions delete <nama>`.
 `--no-verify-jwt` aman: fungsi memeriksa token login dan peran sendiri. Bila CLI meminta `config.toml`, jalankan `npx supabase init` sekali (jawab tidak untuk pertanyaan tambahan), lalu ulangi.
 
 ## 7. Apps Script dan Spreadsheet (Sertifikat dan BAST NR)
@@ -130,6 +147,7 @@ Login sebagai admin (username dan password dari `akun.csv`), lalu:
 | Gejala | Penyebab dan solusi |
 |---|---|
 | Pita merah "js/config.js belum lengkap" | Nilai `url`, `key`, atau `turnstile` masih contoh. Isi sesuai bagian 8. |
+| `bop.mjs`: "Isi GOOGLE_CLIENT_ID ..." (atau SUPABASE_URL ...) padahal sudah diisi | `.env` tidak terbaca: periksa namanya persis `.env` (bukan `.env.txt`; di Mac lihat dengan `ls -a`), letaknya satu folder dengan `bop.mjs`, format `NAMA=nilai`, dan jalankan dari folder proyek. Pada Node lama (di bawah 20.12) pakai `node --env-file=.env bop.mjs ...`. |
 | Login: "Invalid login credentials" | Username/password salah, atau `CFG.domain` berbeda dari `EMAIL_DOMAIN` saat `bop.mjs akun` dijalankan. |
 | Captcha tidak muncul atau login ditolak karena captcha | Hostname situs belum ada di widget Turnstile, Site Key salah, atau Secret Key belum dipasang di Supabase. |
 | Menu Sertifikat/BAST: "Sesi tidak valid ... (HTTP 401: ...)" | Token ditolak Supabase. Muat ulang halaman atau login ulang. Bila terus berulang, periksa `SUPABASE_URL` dan `SUPABASE_KEY` di Code.gs. |

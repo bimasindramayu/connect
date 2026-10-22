@@ -3,6 +3,8 @@
 Dokumen ini dibuat agar AI (atau developer baru) cepat paham proyek ini tanpa membaca seluruh kode. Urutan baca yang disarankan:
 `README.md` (ini) -> `bop.sql` (data BOP + aturan) -> `supabase/functions/bop/index.ts` (server Supabase) -> `apps-script/Code.gs` (server Apps Script) -> `js/core.js` lalu berkas menu di `js/` -> `PANDUAN-INSTALASI.md` (pemasangan dari nol).
 
+**Urutan pemasangan:** `bop.sql` (SQL Editor Supabase) -> `bop.mjs akun` -> `bop.mjs drive` -> `supabase/functions/bop/index.ts` (deploy; satu-satunya berkas TypeScript) -> `apps-script/*.gs` -> `js/config.js` dan push ke GitHub Pages. Alasan urutannya ada di PANDUAN-INSTALASI.md bagian 1.
+
 ## 1. Tujuan
 Aplikasi web layanan 31 KUA (Kantor Urusan Agama) se-Kabupaten Indramayu dan Seksi Bimas Islam. Modul: **BOP** (Biaya Operasional Perkantoran, inti), **Jaspro Transport**, **BAST NR**,
 **Sertifikat Masjid/Musala**, **Sertifikat Arah Kiblat**, dan manajemen akun. Satu website, **dua backend**: Supabase (BOP + Jaspro) dan Apps Script + Spreadsheet (Sertifikat + BAST NR), supaya kuota Supabase hemat.
@@ -33,7 +35,7 @@ Data dari sistem lama (Spreadsheet/Apps Script) dapat dibawa lewat menu **Impor 
 | `bop.sql` | **Sumber kebenaran** skema database Supabase (BOP + Jaspro; idempotent): tabel, fungsi, trigger, RLS, data awal (31 KUA, 11 POS, config). Aman dijalankan ulang; juga mengonversi struktur lama. |
 | `supabase/functions/bop/index.ts` | **Satu** Edge Function (Deno): `reset-password`, `upload`, `delete`, `list`, `file`, `impor-lpj` (LPJ BOP di Google Drive). |
 | `apps-script/Code.gs`, `Masjid.gs`, `Kiblat.gs`, `Pengaturan.gs`, `Bast.gs`, `appsscript.json` | Backend Apps Script (Spreadsheet): router + pemeriksaan login (`Code.gs`), Sertifikat, BAST NR. Lihat bagian 17. |
-| `bop.mjs` | Skrip pemasangan sekali jalan (Node): `akun` (32 akun), `username` (ubah akun lama), `drive` (token + folder master Google Drive). |
+| `bop.mjs` | Skrip pemasangan sekali jalan (Node): `akun` (32 akun), `username` (ubah akun lama), `drive` (token + folder master Google Drive). Membaca `.env` di foldernya otomatis (`node bop.mjs akun`). |
 | `bump-versi.mjs` | Menaikkan nomor versi (`?v=` di `index.html`, `APP_VERSI`) agar peramban memuat berkas terbaru. |
 | `.env.example`, `.gitignore`, `package.json` | Templat `.env` (rahasia, tidak diunggah), daftar yang tidak boleh diunggah, dependensi `bop.mjs`. |
 | `PANDUAN-INSTALASI.md` | Pemasangan dari nol, pembaruan, cadangan, dan pemecahan masalah untuk manusia. |
