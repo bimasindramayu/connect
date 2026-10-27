@@ -12,7 +12,7 @@ function buatDokumenGenerator(jspdf) {
         // Jarak vertikal (pt) antara token ${ttd_pengirim} dan ${nama_pengirim} di
         // blok tanda tangan. Sengaja lega: di antaranya nanti ditempati gambar/QR
         // tanda tangan elektronik (TTE).
-        var TTE_GAP = 90;
+        var TTE_GAP = 50;
 
         // Teks tipologi yang dicetak. Dropdown menyimpan nama lengkapnya (mis.
         // "Masjid Jami", "Mushalla Perumahan / Pemukiman") -> dicetak apa adanya.
@@ -99,7 +99,7 @@ function buatDokumenGenerator(jspdf) {
           doc.text('Kabupaten Indramayu,', colX, y + 30);
 
           // Ruang tanda tangan -- token placeholder, bukan gambar/garis kosong.
-          var ttdY = y + 30 + 34;
+          var ttdY = y + 30 + 50;
           doc.text('${ttd_pengirim}', colX, ttdY);
 
           // Nama + NIP digabung jadi satu token placeholder, dengan jarak lega
@@ -137,7 +137,7 @@ function buatDokumenGenerator(jspdf) {
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(11);
           // Permintaan eksplisit: ditulis literal "${nomor_naskah}", bukan nilai aslinya.
-          doc.text('Nomor : ${nomor_naskah}', 320, 172);
+          doc.text('Nomor : ${nomor_naskah}', 280, 172);
 
           var y = 212;
           doc.text(jenis === 'sk' ? 'Yang bertanda tangan di bawah ini :' : 'Yang bertanda tangan dibawah ini :', 85, y);
@@ -215,7 +215,7 @@ function buatDokumenGenerator(jspdf) {
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(10);
           // Permintaan eksplisit: ditulis literal "${nomor_naskah}", bukan nilai aslinya.
-          doc.text('Nomor : ${nomor_naskah}', SAFE_RIGHT, 70, { align: 'right' });
+          doc.text('Nomor : ${nomor_naskah}', SAFE_RIGHT - 40, 70, { align: 'right' });
 
           doc.addImage(LOGO_B64, 'PNG', 252.1, 40, 91, 88);
 
