@@ -598,7 +598,7 @@ function buatDokumenGenerator(jspdf) {
             p.yP3 = p.yP2 + (p2Baris.length - 1) * p.p2 + 19.0 * s;
             p.yTgl = p.yP3 + p.p3 + 18.5 * s;
             p.yKepala = p.yTgl + 18 * s;
-            p.yTtd = p.yKepala + 34 * s;
+            p.yTtd = p.yKepala + 50 * s;
             p.yNama = p.yTtd + TTE_GAP;
             return p;
           }
@@ -618,7 +618,7 @@ function buatDokumenGenerator(jspdf) {
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(12);
           // Permintaan eksplisit: ditulis literal "${nomor_naskah}", bukan nilai aslinya.
-          doc.text('Nomor: ${nomor_naskah}', 503.3, 74.4, { align: 'right' });
+          doc.text('Nomor: ${nomor_naskah}', 483.3, 74.4, { align: 'right' });
 
           kopTengah(doc, yP1 - 196.2, 68, yP1 - 112.2, yP1 - 95.5, yP1 - 81.1, yP1 - 65.0);
 
