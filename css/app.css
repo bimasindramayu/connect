@@ -52,9 +52,14 @@ dialog.wide.xl{width:min(1400px,calc(100% - 1rem))}
 .jp-step.done .n{background:rgba(113,221,55,.16);color:#71dd37}.jp-step.on{background:rgba(105,108,255,.12)}.jp-step.on .n{background:#696cff;color:#fff}
 .jp-drop{border:2px dashed #d9dee3;border-radius:.5rem;padding:2rem 1rem;text-align:center;cursor:pointer;transition:.15s}
 .jp-drop:hover{border-color:#696cff;background:rgba(105,108,255,.04)}
-#jtoast{position:fixed;right:1rem;bottom:1rem;z-index:1100;display:grid;gap:.5rem}
-.jp-toast{color:#fff;padding:.7rem 1rem;border-radius:.375rem;max-width:380px;box-shadow:0 .25rem 1rem rgba(67,89,113,.35)}
-.jp-toast.success{background:#71dd37}.jp-toast.danger{background:#ff3e1d}.jp-toast.warning{background:#ffab00}
+/* Pop-up (toast) selalu paling depan: wadahnya popover manual (top layer browser, di atas <dialog> modal). z-index hanya cadangan untuk
+   browser tanpa Popover API. UA stylesheet popover (inset/margin/border/background) ditimpa supaya wadah tidak berbingkai. */
+#jtoast{position:fixed;inset:auto 1rem 1rem auto;margin:0;padding:0;border:0;background:transparent;overflow:visible;z-index:2147483000;display:grid;gap:.5rem;width:min(380px,calc(100vw - 2rem));max-width:none;pointer-events:none;color:inherit}
+#jtoast[popover]:not(:popover-open){display:none}
+.jp-toast{pointer-events:auto;color:#fff;padding:.7rem 1rem;border-radius:.375rem;max-width:100%;overflow-wrap:anywhere;box-shadow:0 .25rem 1rem rgba(67,89,113,.35);animation:toastIn .18s ease-out}
+.jp-toast.success{background:#71dd37}.jp-toast.danger{background:#ff3e1d}.jp-toast.warning{background:#ffab00}.jp-toast.info{background:#03c3ec}
+@keyframes toastIn{from{opacity:0;transform:translateY(.5rem)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.jp-toast{animation:none}}
 
 /* ===================================================================================================
    Tampilan berwarna (BOP, akun, dan semua dialog). Hanya mengubah warna, bayangan, dan bentuk komponen Sneat;

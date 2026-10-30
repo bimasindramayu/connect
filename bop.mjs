@@ -1,11 +1,12 @@
 // BIMASATU: skrip pemasangan sekali-jalan (JANGAN diunggah ke GitHub). Tiga perintah dalam satu file:
 //
-//   node --env-file=.env bop.mjs akun      Buat akun admin + 31 operator dengan USERNAME (hasil: akun.csv).
+//   node bop.mjs akun      Buat akun admin + 31 operator dengan USERNAME (hasil: akun.csv). Akun peran lain (Bendahara BOP, Verifikator BOP,
+//                                          BAST NR, Kemasjidan, PNBP NR) dibuat admin di aplikasi: Pengaturan > Daftar akun.
 //                                          Butuh sekali:  npm install @supabase/supabase-js
-//   node --env-file=.env bop.mjs username  Ubah akun LAMA (kua.<nama>@domain) menjadi username kua_<nama>; password tidak berubah.
+//   node bop.mjs username  Ubah akun LAMA (kua.<nama>@domain) menjadi username kua_<nama>; password tidak berubah.
 //                                          Aman diulang. Hasil: username.csv (tanpa password).
-//   node --env-file=.env bop.mjs drive     Siapkan akses Google Drive untuk Edge Function "bop":
-//                                          ambil refresh token dan buat folder master "BIMASATU".
+//   node bop.mjs drive     Siapkan akses Google Drive untuk Edge Function "bop":
+//                                          ambil refresh token dan buat folder master "BIMASATU" (satu folder untuk LPJ BOP dan arsip BAST NR).
 //
 // Isi file .env (buat di folder yang sama; JANGAN diunggah ke GitHub):
 //   SUPABASE_URL=https://xxxx.supabase.co
@@ -20,12 +21,18 @@
 //   DRIVE_FOLDER_ID=...                  opsional: pakai folder buatan sendiri       [drive]
 //
 // Username operator: kua_<nama kecamatan huruf kecil tanpa spasi>, mis. kua_anjatan, kua_indramayu, kua_kedokanbunder.
+// File .env di folder ini dibaca otomatis; perintah lama "node --env-file=.env bop.mjs ..." tetap berfungsi.
 // Persiapan Google (untuk "drive"): aktifkan Google Drive API; OAuth consent screen dengan scope .../auth/drive.file
 // lalu "Publish app" (jika tetap Testing, token kedaluwarsa 7 hari); buat OAuth client ID jenis "Desktop app".
 // Login dengan akun Google yang akan menjadi pemilik folder LPJ: kuota Drive akun itu yang terpakai.
 import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
+
+// Berkas .env di folder yang sama dengan bop.mjs dibaca otomatis (Node 20.12+), jadi tidak wajib memakai --env-file=.env.
+// Nilai yang sudah ada di terminal tidak ditimpa. Tanpa .env, skrip memakai nilai dari lingkungan (cara lama --env-file tetap berfungsi).
+try { process.loadEnvFile(new URL('.env', import.meta.url)); } catch { /* tidak ada .env di folder ini */ }
+const DI_ENV = ' di berkas .env (satu folder dengan bop.mjs; salin dari .env.example)';
 
 // Nama aplikasi = nama folder master di Google Drive. Samakan dengan CFG.nama di js/config.js dan APP_NAME di index.ts.
 const APP_NAME = 'BIMASATU';
@@ -37,7 +44,7 @@ if (cmd === 'akun') await akun();
 else if (cmd === 'username') await username();
 else if (cmd === 'drive') await drive();
 else {
-  console.log('Pemakaian:\n  node --env-file=.env bop.mjs akun      (buat akun admin + 31 operator dengan username)\n  node --env-file=.env bop.mjs username  (ubah akun lama menjadi username kua_<nama>)\n  node --env-file=.env bop.mjs drive     (siapkan Google Drive untuk LPJ)');
+  console.log('Pemakaian:\n  node bop.mjs akun      (buat akun admin + 31 operator dengan username)\n  node bop.mjs username  (ubah akun lama menjadi username kua_<nama>)\n  node bop.mjs drive     (siapkan Google Drive untuk LPJ dan arsip BAST NR)');
   process.exit(1);
 }
 
@@ -45,7 +52,7 @@ else {
 async function akun() {
   const { SUPABASE_URL, SERVICE_ROLE_KEY, ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_PASSWORD, EMAIL_DOMAIN } = process.env;
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !ADMIN_PASSWORD || !EMAIL_DOMAIN) {
-    throw new Error('Isi SUPABASE_URL, SERVICE_ROLE_KEY, ADMIN_PASSWORD, dan EMAIL_DOMAIN di .env');
+    throw new Error('Isi SUPABASE_URL, SERVICE_ROLE_KEY, ADMIN_PASSWORD, dan EMAIL_DOMAIN' + DI_ENV);
   }
   const { createClient } = await import('@supabase/supabase-js');   // dimuat hanya bila perlu
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
@@ -87,7 +94,7 @@ async function akun() {
 // Admin ikut diubah hanya bila ADMIN_USERNAME diisi. Aman diulang: akun yang sudah sesuai dilewati.
 async function username() {
   const { SUPABASE_URL, SERVICE_ROLE_KEY, EMAIL_DOMAIN, ADMIN_USERNAME } = process.env;
-  if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !EMAIL_DOMAIN) throw new Error('Isi SUPABASE_URL, SERVICE_ROLE_KEY, dan EMAIL_DOMAIN di .env');
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !EMAIL_DOMAIN) throw new Error('Isi SUPABASE_URL, SERVICE_ROLE_KEY, dan EMAIL_DOMAIN' + DI_ENV);
   const { createClient } = await import('@supabase/supabase-js');
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
@@ -128,8 +135,7 @@ async function username() {
 // ---------------------------------------------------------------------------------------------------------------
 async function drive() {
   const { GOOGLE_CLIENT_ID: id, GOOGLE_CLIENT_SECRET: secret, DRIVE_FOLDER_ID: ownFolder } = process.env;
-  console.log(`\nGOOGLE_CLIENT_ID=${id}\nGOOGLE_CLIENT_SECRET=${secret}\nDRIVE_FOLDER_ID=${ownFolder || '(buat folder baru)'}`);
-  if (!id || !secret) throw new Error('Isi GOOGLE_CLIENT_ID dan GOOGLE_CLIENT_SECRET di .env');
+  if (!id || !secret) throw new Error('Isi GOOGLE_CLIENT_ID dan GOOGLE_CLIENT_SECRET' + DI_ENV);
 
   const redirect = 'http://localhost:53682';
   // drive.file = hanya file/folder buatan aplikasi ini (paling aman). drive = diperlukan bila memakai folder buatan sendiri.
@@ -163,7 +169,7 @@ async function drive() {
     })).json();
     if (!folder.id) throw new Error('Gagal membuat folder: ' + JSON.stringify(folder));
     folderId = folder.id;
-    console.log(`\nFolder master "${APP_NAME}" dibuat di Drive Anda. Di dalamnya Edge Function membuat BOP / LPJ / tahun / Kecamatan ...`);
+    console.log(`\nFolder master "${APP_NAME}" dibuat di Drive Anda. Di dalamnya Edge Function membuat BOP / LPJ / tahun / Kecamatan ... dan BAST NR / tahun / bulan ...`);
   }
 
   console.log('\nSekarang jalankan (satu baris):\n');

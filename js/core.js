@@ -1,7 +1,8 @@
 /* =====================================================================================
    core.js: inti aplikasi
-   Sambungan Supabase, penyimpanan sesi, fungsi bantu ($, esc, note), router (route, pages), boot, klien Edge Function (api)
-   dan Apps Script (gas), pemuat pustaka (loadJs), penampil dokumen (openViewer), dan komponen antarmuka bersama (jpToast, jpDlg, jpAsk, jpCard).
+   Sambungan Supabase, penyimpanan sesi, fungsi bantu ($, esc, note), peran dan hak akses menu (PERAN, can), router (route, pages),
+   boot, klien Edge Function (api) dan Apps Script (gas), pemuat pustaka (loadJs), penampil dokumen (openViewer), dan komponen
+   antarmuka bersama (jpToast, jpDlg, jpAsk, jpCard).
    Berkas menu mendaftarkan halamannya ke objek pages di akhir berkasnya masing-masing.
    ===================================================================================== */
 
@@ -20,6 +21,25 @@ const note = (t, type = 'danger') => `<div class="alert alert-${type} py-2">${es
 let me = null, token = null, wid = null;
 let EP = 0;   // nomor halaman aktif: naik tiap pindah menu. Hasil await dari halaman lama diabaikan (cek live) agar tidak menulis ke layar yang sudah diganti
 const live = ep => ep === EP;
+
+/* ====== Peran dan hak akses menu ======
+   Peran akun: daftar yang sama ada di bop.sql (check profiles.role, handle_new_user, set_hak_akses, peran_label) dan
+   supabase/functions/bop/index.ts (PERAN): ubah semuanya bersama. Menu apa yang boleh dibuka tiap peran diatur admin di halaman
+   "Hak Akses Menu" (tabel hak_akses) dan dibaca lewat akses_saya(). Tampilan hanya mengikuti; yang menentukan tetap server
+   (RLS/trigger database, Apps Script, Edge Function), jadi menyembunyikan menu di sini bukan satu-satunya pengaman. */
+const PERAN = { admin: 'Admin', operator: 'Operator KUA', bendahara_bop: 'Bendahara BOP', verifikator_bop: 'Verifikator BOP', bast_nr: 'BAST NR', kemasjidan: 'Kemasjidan', pnbp_nr: 'PNBP NR' };
+const peranLabel = r => PERAN[r] || r;
+const can = menu => !!me && Array.isArray(me.menus) && me.menus.includes(menu);   // menu = kunci menu (sama dengan hash halaman, mis. 'rpd', 'bast-buat')
+// Urutan mencari halaman awal bila alamat kosong atau menunya tidak boleh dibuka akun ini.
+const HOME_ORDER = ['bop', 'rpd', 'realisasi', 'verifikasi', 'sakti', 'metode', 'anggaran', 'laporan', 'config', 'impor',
+  'bast', 'bast-buat', 'bast-pegawai', 'bast-setting', 'sert-masjid', 'sert-kiblat', 'sert-pengaturan', 'sert-status', 'jaspro', 'akses'];
+const homeMenu = () => HOME_ORDER.find(can) || 'pengaturan';
+// Hanya dipakai bila database belum diperbarui (fungsi akses_saya belum ada): perilaku lama, admin semua menu dan operator 4 menu.
+const MENU_LAMA = {
+  admin: HOME_ORDER.filter(k => k !== 'realisasi' && k !== 'akses'),
+  operator: ['bop', 'rpd', 'realisasi', 'laporan']
+};
+let menuLama = false;   // true = database belum diperbarui (jalankan bop.sql versi terbaru)
 const resetCaptcha = () => { token = null; if (window.turnstile && wid != null) turnstile.reset(wid); };
 
 const loadRemember = () => {
@@ -38,22 +58,49 @@ const mask = root => root.querySelectorAll('[data-eye]').forEach(b => setEye(b, 
 
 const show = v => { $('auth').classList.toggle('d-none', v !== 'auth'); $('app').classList.toggle('d-none', v !== 'app'); };
 
+// Daftar menu akun ini dari database (akses_saya). Database lama (fungsi belum ada): pakai MENU_LAMA agar aplikasi tetap jalan.
+async function loadMenus(profil) {
+  const { data, error } = await sb.rpc('akses_saya');
+  if (!error && data && Array.isArray(data.menus)) { menuLama = false; return data.menus; }
+  const hilang = error && (error.code === 'PGRST202' || error.code === '42883' || /akses_saya/i.test(error.message || ''));
+  if (hilang && MENU_LAMA[profil.role]) { menuLama = true; return MENU_LAMA[profil.role]; }
+  throw new Error(error ? error.message : 'Hak akses menu akun ini tidak ditemukan.');
+}
+// Tampilkan hanya menu yang boleh dibuka; kelompok (BOP, BAST NR, Sertifikat) disembunyikan bila semua isinya tersembunyi.
+function applyMenus() {
+  const side = $('side');
+  side.querySelectorAll('[data-menu]').forEach(a => a.classList.toggle('d-none', !can(a.dataset.menu)));
+  side.querySelectorAll('details').forEach(g => g.classList.toggle('d-none', !g.querySelector('[data-menu]:not(.d-none)')));
+  $('dbWarn').classList.toggle('d-none', !(menuLama && me.role === 'admin'));
+}
+
+// Akun yang sedang dimuat. Supabase bisa memberi dua peristiwa login hampir bersamaan (INITIAL_SESSION dan SIGNED_IN) saat halaman dibuka
+// dengan sesi tersimpan; tanpa penjaga ini profil dan hak akses diambil dua kali dan halaman dirender dua kali (dua permintaan ke server).
+let booting = null;
 async function boot(session) {
-  if (!session) { me = null; jpReset(); bnReset(); $('f').reset(); mask($('f')); resetCaptcha(); show('auth'); return loadRemember(); }
-  if (me && me.id === session.user.id) return;
-  const { data, error } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
-  if (error || !data) {
-    await sb.auth.signOut();
-    $('msg').innerHTML = note('Profil akun tidak ditemukan. Hubungi admin.');
-    return;
-  }
-  me = { ...data, email: session.user.email, username: (session.user.email || '').split('@')[0] };
-  $('uName').textContent = me.nama;
-  $('uRole').textContent = me.role === 'admin' ? 'Admin' : (me.kua || 'Operator');
-  $('uAv').textContent = me.nama.charAt(0).toUpperCase();
-  document.querySelectorAll('.admin-only').forEach(a => a.classList.toggle('d-none', me.role !== 'admin'));
-  document.querySelectorAll('.op-only').forEach(a => a.classList.toggle('d-none', me.role === 'admin'));
-  $('pw').value = ''; show('app'); route();
+  if (!session) { booting = null; me = null; jpReset(); bnReset(); $('f').reset(); mask($('f')); resetCaptcha(); show('auth'); return loadRemember(); }
+  const uid = session.user.id;
+  if ((me && me.id === uid) || booting === uid) return;
+  booting = uid;
+  try {
+    const { data, error } = await sb.from('profiles').select('*').eq('id', uid).single();
+    if (booting !== uid) return;   // keluar (logout) selagi profil dimuat
+    if (error || !data) {
+      await sb.auth.signOut();
+      $('msg').innerHTML = note('Profil akun tidak ditemukan. Hubungi admin.');
+      return;
+    }
+    let menus;
+    try { menus = await loadMenus(data); }
+    catch (e) { await sb.auth.signOut(); $('msg').innerHTML = note('Gagal memuat hak akses menu: ' + e.message); return; }
+    if (booting !== uid) return;
+    me = { ...data, email: session.user.email, username: (session.user.email || '').split('@')[0], menus };
+    $('uName').textContent = me.nama;
+    $('uRole').textContent = me.role === 'operator' ? (me.kua || peranLabel(me.role)) : peranLabel(me.role);
+    $('uAv').textContent = me.nama.charAt(0).toUpperCase();
+    applyMenus();
+    $('pw').value = ''; show('app'); route();
+  } finally { if (booting === uid) booting = null; }
 }
 // Menu samping: layar lebar = sembunyikan/tampilkan (pilihan diingat di browser ini); layar sempit = geser masuk/keluar.
 // Daftar menu dapat digulir bila submenu yang dibuka lebih panjang daripada layar (CSS #side overflow-y).
@@ -63,12 +110,15 @@ const syncSide = () => $('burger').setAttribute('aria-expanded', String(wideScre
 const pages = {};
 function route() {
   if (!me) return;
-  let k = location.hash.slice(1) in pages ? location.hash.slice(1) : 'bop';
-  if ((['anggaran', 'verifikasi', 'metode', 'sakti', 'config', 'impor', 'jaspro', 'bast', 'bast-buat', 'bast-pegawai', 'bast-setting'].includes(k) || k.startsWith('sert-')) && me.role !== 'admin') k = 'bop'; // dijaga juga oleh RLS
-  if (k === 'realisasi' && me.role === 'admin') k = 'bop';
+  const h = location.hash.slice(1);
+  let k = h in pages ? h : homeMenu();
+  if (k !== 'pengaturan' && !can(k)) {   // menu ini tidak diberikan ke peran akun ini: ke halaman awal. Server tetap menolak bila diakali lewat alamat.
+    k = homeMenu();
+    if (h && location.hash !== '#' + k) history.replaceState(null, '', '#' + k);
+  }
   document.querySelectorAll('#side .nav-link').forEach(a => a.classList.toggle('active', a.hash === '#' + k));
   $('side').classList.remove('open');
-  const grp = $('side').querySelector('a.active')?.closest('details') || (k === 'bop' ? $('side').querySelector('details') : null);
+  const grp = $('side').querySelector('a.active')?.closest('details') || (k === 'bop' ? $('side').querySelector('details[data-grup="bop"]') : null);
   if (grp) grp.open = true;
   EP++;
   const sv = k === 'sert-masjid' || k === 'sert-kiblat' || k === 'sert-pengaturan';   // modul Sertifikat punya wadah sendiri (#sertView), tidak ditimpa innerHTML #view
@@ -275,11 +325,47 @@ const loadJs = src => libs[src] ||= new Promise((ok, no) => {   // library ekspo
   el.onerror = () => { delete libs[src]; no(new Error('Gagal memuat library ekspor. Periksa koneksi internet lalu coba lagi.')); };
   document.head.append(el);
 });
+/* ====== Pemberitahuan pop-up (toast): SELALU paling depan ======
+   <dialog>.showModal() menaruh dialog di "top layer" browser, lapisan yang tidak dapat dikalahkan z-index berapa pun, jadi toast biasa
+   (position:fixed + z-index) tertutup dialog yang sedang terbuka. Wadah toast dijadikan popover manual: popover juga masuk top layer
+   dan yang masuk PALING AKHIR tampil paling depan. Karena itu wadah dinaikkan lagi (hide lalu show) tiap ada toast baru dan tiap kali
+   dialog modal dibuka (showModal di bawah). Browser tanpa Popover API memakai z-index biasa (modal Bootstrap Sertifikat di bawahnya). */
+const TOAST_POP = typeof HTMLElement !== 'undefined' && 'showPopover' in HTMLElement.prototype;
+function toastHost() {
+  let h = document.getElementById('jtoast');
+  if (!h) {
+    h = document.createElement('div'); h.id = 'jtoast'; h.setAttribute('aria-live', 'polite');
+    if (TOAST_POP) h.setAttribute('popover', 'manual');
+    document.body.append(h);
+  }
+  return h;
+}
+function toastUp() {   // naikkan wadah ke paling depan (bila ada toast yang tampil)
+  const h = document.getElementById('jtoast');
+  if (!h || !TOAST_POP || !h.children.length) return;
+  try { if (h.matches(':popover-open')) h.hidePopover(); h.showPopover(); } catch { /* abaikan: toast tetap tampil dengan z-index biasa */ }
+}
+if (typeof HTMLDialogElement !== 'undefined') {
+  const showModal = HTMLDialogElement.prototype.showModal;
+  HTMLDialogElement.prototype.showModal = function (...a) { const r = showModal.apply(this, a); toastUp(); return r; };
+}
+// c: success | danger | warning | info. Pesan panjang dan galat dibaca lebih lama (4,5 detik sampai 12 detik).
 const jpToast = (m, c = 'success') => {
-  const h = $('jtoast') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'jtoast' }));
-  const e = Object.assign(document.createElement('div'), { className: 'jp-toast ' + c, textContent: m });
-  h.append(e); setTimeout(() => e.remove(), 4500);
+  const h = toastHost(), teks = String(m ?? '');
+  const e = Object.assign(document.createElement('div'), { className: 'jp-toast ' + c, textContent: teks });
+  e.setAttribute('role', c === 'danger' ? 'alert' : 'status');
+  h.append(e); toastUp();
+  setTimeout(() => {
+    e.remove();
+    if (!h.children.length && TOAST_POP) { try { h.hidePopover(); } catch { /* sudah tertutup */ } }
+  }, Math.min(12000, Math.max(4500, 2500 + teks.length * 60)));
 };
+// Hasil sebuah aksi (simpan, kirim, ubah status): catatan di tempatnya DAN pop-up paling depan, supaya tidak terlewat walau layar
+// sedang menggulir jauh dari catatan itu atau dialog sedang terbuka. type: success | danger | warning | info.
+function lapor(el, teks, type = 'danger') {
+  if (el) el.innerHTML = note(teks, type);
+  jpToast(teks, type);
+}
 const jpDlg = (h, wire) => { const d = $('dlg'); d.innerHTML = `<div class="p-4">${h}</div>`; wire?.(d); if (!d.open) d.showModal(); };
 const jpAsk = (title, msg, label, ok, danger) => jpDlg(
   `<h5 class="mb-2">${esc(title)}</h5><p>${esc(msg)}</p><div class="d-flex justify-content-end gap-2"><button class="btn btn-outline-secondary" data-x>Batal</button><button class="btn btn-${danger ? 'danger' : 'primary'}" data-ok>${esc(label)}</button></div>`,

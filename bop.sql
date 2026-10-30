@@ -8,8 +8,8 @@
 --       RPD/Realisasi per-POS -> 1 record per bulan (JSON); Anggaran per KUA -> 1 baris per tahun;
 --       Pengaturan SAKTI berversi per bulan -> ceklis global; Realisasi SAKTI tanpa status/tanggal/keterangan.
 --
--- Isi: 0 Persiapan | 1 Profil dan hak akses | 2 KUA | 3 Fungsi bantu | 4 POS | 5 Config | 6 Anggaran |
---      7 (kosong) | 8 RPD | 9 Realisasi | 9b Pembayaran SAKTI | 9c Impor data lama | 10 Salin data lama |
+-- Isi: 0 Persiapan | 1 Profil dan peran | 2 KUA | 2b Hak akses menu per peran | 3 Fungsi bantu | 4 POS | 5 Config |
+--      6 Anggaran | 7 (kosong) | 8 RPD | 9 Realisasi | 9b Pembayaran SAKTI | 9c Impor data lama | 10 Salin data lama |
 --      11 Pembersihan | 12 Jaspro Transport
 --
 -- BAST NR, Sertifikat Masjid/Musala, dan Arah Kiblat tidak memakai database ini (Spreadsheet + Apps Script).
@@ -18,7 +18,11 @@
 --   rincian POS disimpan di kolom JSON items = {"<id POS>": nominal, ...}. Total dihitung otomatis oleh trigger.
 --   Pembayaran SAKTI hanya Listrik dan Telepon/Internet: ceklis global per KUA + POS (metode_pembayaran) dan nominal bulanan
 --   yang diinput admin (realisasi_sakti); dijumlahkan dengan Realisasi manual pada validasi dan laporan.
+--   Realisasi SAKTI SUDAH DIBAYAR, jadi input admin tidak dibatasi RPD (boleh melebihi). Sebaliknya, Operator KUA tidak dapat
+--   mengirim Realisasi selama Realisasi tahunan sebuah POS (manual + SAKTI) masih melebihi RPD setahun.
 --   Semua input nominal dibatasi 10 digit (Rp 9.999.999.999), ditegakkan di database (nominal_max) dan di index.html.
+-- Peran: admin | operator (Operator KUA) | bendahara_bop | verifikator_bop | bast_nr | kemasjidan | pnbp_nr. Menu yang boleh dibuka
+--   tiap peran diatur admin (tabel hak_akses, halaman Hak Akses Menu) dan ditegakkan di sini lewat can_menu() pada RLS/trigger.
 -- Keamanan: RLS membatasi operator ke KUA-nya; trigger SECURITY DEFINER menegakkan semua aturan di sisi server.
 -- =====================================================================================
 
@@ -54,15 +58,34 @@ do $$ begin
   end if;
 end $$;
 
--- 1) PROFIL AKUN DAN HAK AKSES -----------------------------------------------------------
+-- 1) PROFIL AKUN DAN PERAN -------------------------------------------------------------
+-- Peran: admin | operator (= Operator KUA, terikat ke satu KUA lewat kua_id) | bendahara_bop | verifikator_bop | bast_nr |
+-- kemasjidan | pnbp_nr (peran selain operator tidak terikat KUA). Daftar ini juga ada di handle_new_user(), set_hak_akses(),
+-- supabase/functions/bop/index.ts (PERAN) dan js/core.js (PERAN): ubah semuanya bersama.
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   nama text not null,
   kua text,
-  role text not null default 'operator' check (role in ('admin','operator')),
+  role text not null default 'operator'
+    check (role in ('admin','operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr')),
   created_at timestamptz not null default now()
 );
 alter table public.profiles enable row level security;
+
+-- (database lama) batas peran semula hanya admin/operator: ganti dengan tujuh peran. Aman diulang (tidak menyentuh yang sudah baru).
+do $$
+declare c record; sudah boolean := false;
+begin
+  for c in select conname, pg_get_constraintdef(oid) as def from pg_constraint
+            where conrelid = 'public.profiles'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%role%' loop
+    if c.def like '%pnbp_nr%' then sudah := true;
+    else execute format('alter table public.profiles drop constraint %I', c.conname); end if;
+  end loop;
+  if not sudah then
+    alter table public.profiles add constraint profiles_role_check
+      check (role in ('admin','operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr'));
+  end if;
+end $$;
 
 create or replace function public.is_admin() returns boolean
 language sql security definer stable set search_path = public as $$
@@ -75,14 +98,18 @@ create policy "baca profil sendiri atau admin" on public.profiles
   for select to authenticated
   using (id = auth.uid() or public.is_admin());
 
--- profil dibuat otomatis saat akun dibuat (data dari user_metadata); kua_id dicari dari nama KUA
+-- profil dibuat otomatis saat akun dibuat (data dari user_metadata); kua_id dicari dari nama KUA (hanya untuk operator).
+-- Peran tidak dikenal = operator. PENTING: pendaftaran mandiri Supabase harus dimatikan, karena trigger ini memercayai metadata.
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
+declare r text := case when new.raw_user_meta_data->>'role' in ('admin','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr')
+                       then new.raw_user_meta_data->>'role' else 'operator' end;
 begin
   insert into public.profiles (id, nama, kua, kua_id, role)
-  values (new.id, coalesce(new.raw_user_meta_data->>'nama', new.email), new.raw_user_meta_data->>'kua',
-    (select id from public.kua where nama_kua = new.raw_user_meta_data->>'kua'),
-    case when new.raw_user_meta_data->>'role' = 'admin' then 'admin' else 'operator' end);
+  values (new.id, coalesce(new.raw_user_meta_data->>'nama', new.email),
+    case when r = 'operator' then new.raw_user_meta_data->>'kua' end,
+    case when r = 'operator' then (select id from public.kua where nama_kua = new.raw_user_meta_data->>'kua') end,
+    r);
   return new;
 end $$;
 drop trigger if exists on_auth_user_created on auth.users;
@@ -124,6 +151,112 @@ language sql security definer stable set search_path = public as $$
 $$;
 revoke execute on function public.akun_daftar() from public, anon;
 grant execute on function public.akun_daftar() to authenticated;
+
+-- Pengaman: peran admin terakhir tidak boleh diturunkan (mencegah semua admin terkunci). Hanya UPDATE peran.
+create or replace function public.profiles_admin_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if old.role = 'admin' and new.role <> 'admin' and not exists (select 1 from public.profiles where role = 'admin' and id <> old.id) then
+    raise exception 'Admin terakhir tidak dapat diturunkan. Jadikan akun lain Admin lebih dulu.'; end if;
+  return new;
+end $$;
+drop trigger if exists profiles_admin_guard on public.profiles;
+create trigger profiles_admin_guard before update of role on public.profiles
+  for each row execute function public.profiles_admin_guard();
+
+-- 2b) HAK AKSES MENU PER PERAN -------------------------------------------------------------
+-- Admin memilih menu mana yang boleh dibuka tiap peran (halaman "Hak Akses Menu"). Satu baris = satu peran boleh membuka satu menu.
+-- Admin tidak disimpan: selalu boleh semua menu. Menu "Pengaturan" (ganti password sendiri) terbuka untuk semua akun.
+-- Hak ini dibaca tiga tempat: (1) tampilan (sidebar dan router), (2) RLS/trigger di database ini lewat can_menu(),
+-- (3) Apps Script dan Edge Function (membaca tabel yang sama). Yang menentukan tetap server, bukan tampilan.
+-- Menu khusus Admin (tidak dapat diberikan): akses (Hak Akses Menu) dan impor (Impor Data Lama).
+-- Operator KUA hanya mengakses data KUA-nya sendiri, jadi menu lintas KUA (anggaran, verifikasi, metode, sakti, config) tidak dapat
+-- diberikan ke peran ini; menu realisasi (mengisi Realisasi per KUA) hanya untuk Operator KUA.
+create or replace function public.menu_keys() returns text[] language sql immutable as $$
+  select array['bop','anggaran','rpd','realisasi','verifikasi','metode','sakti','config','impor','laporan',
+               'bast','bast-buat','bast-pegawai','bast-setting','sert-masjid','sert-kiblat','sert-pengaturan','sert-status','jaspro','akses'];
+$$;
+
+create or replace function public.peran_label(p_role text) returns text language sql immutable as $$
+  select case p_role when 'admin' then 'Admin' when 'operator' then 'Operator KUA' when 'bendahara_bop' then 'Bendahara BOP'
+    when 'verifikator_bop' then 'Verifikator BOP' when 'bast_nr' then 'BAST NR' when 'kemasjidan' then 'Kemasjidan'
+    when 'pnbp_nr' then 'PNBP NR' else p_role end;
+$$;
+
+create table if not exists public.hak_akses (
+  role text not null check (role in ('operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr')),
+  menu text not null,
+  updated_by uuid references auth.users(id), updated_at timestamptz not null default now(),
+  primary key (role, menu)
+);
+alter table public.hak_akses enable row level security;
+drop policy if exists ha_read on public.hak_akses;
+create policy ha_read on public.hak_akses for select to authenticated using (true);   -- bukan rahasia; tulis hanya lewat set_hak_akses()
+revoke all on public.hak_akses from anon;
+revoke insert, update, delete, truncate on public.hak_akses from authenticated;
+
+-- Apakah akun yang sedang masuk boleh membuka menu ini? Admin: selalu.
+create or replace function public.can_menu(p_menu text) returns boolean
+language sql security definer stable set search_path = public as $$
+  select exists (select 1 from public.profiles p where p.id = auth.uid()
+    and (p.role = 'admin' or exists (select 1 from public.hak_akses h where h.role = p.role and h.menu = p_menu)));
+$$;
+
+-- Boleh membaca data BOP SEMUA KUA? Admin, atau peran selain Operator KUA yang punya salah satu menu BOP yang memerlukannya.
+-- (Operator KUA selalu terbatas pada KUA-nya sendiri, apa pun menunya.)
+create or replace function public.bop_baca_semua() returns boolean
+language sql security definer stable set search_path = public as $$
+  select exists (select 1 from public.profiles p where p.id = auth.uid()
+    and (p.role = 'admin' or (p.role <> 'operator' and exists (select 1 from public.hak_akses h where h.role = p.role
+         and h.menu in ('anggaran','rpd','verifikasi','metode','sakti','laporan')))));
+$$;
+
+-- Profil + daftar menu akun yang sedang masuk (satu panggilan; dipakai tampilan dan Apps Script). Admin: semua menu.
+create or replace function public.akses_saya() returns jsonb
+language sql security definer stable set search_path = public as $$
+  select jsonb_build_object('id', p.id, 'nama', p.nama, 'kua', p.kua, 'kua_id', p.kua_id, 'role', p.role,
+           'menus', case when p.role = 'admin' then to_jsonb(array_remove(public.menu_keys(), 'realisasi'))   -- Admin tidak mengisi Realisasi (khusus Operator KUA)
+                         else coalesce((select jsonb_agg(h.menu order by h.menu) from public.hak_akses h where h.role = p.role), '[]'::jsonb) end)
+    from public.profiles p where p.id = auth.uid();
+$$;
+
+-- Atur hak akses banyak peran sekaligus (satu transaksi: gagal satu = batal semua). p_data = {"<peran>": ["<menu>", ...], ...};
+-- hanya peran yang disebut yang diganti. Hanya admin.
+create or replace function public.set_hak_akses(p_data jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+declare r text; m text; menus text[];
+begin
+  if not public.is_admin() then raise exception 'Hanya admin yang dapat mengatur hak akses menu.'; end if;
+  if p_data is null or jsonb_typeof(p_data) <> 'object' then raise exception 'Format hak akses tidak valid.'; end if;
+  for r in select key from jsonb_each(p_data) loop
+    if r not in ('operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr') then
+      raise exception 'Peran % tidak dikenal atau tidak dapat diubah (Admin selalu memiliki semua menu).', r; end if;
+    if jsonb_typeof(p_data -> r) <> 'array' then raise exception 'Daftar menu untuk % tidak valid.', peran_label(r); end if;
+    select coalesce(array_agg(distinct x), '{}'::text[]) into menus from jsonb_array_elements_text(p_data -> r) x;
+    foreach m in array menus loop
+      if not (m = any (menu_keys())) then raise exception 'Menu % tidak dikenal.', m; end if;
+      if m in ('akses','impor') then
+        raise exception 'Menu % khusus Admin dan tidak dapat diberikan ke peran lain.', m; end if;
+      if r = 'operator' and m in ('anggaran','verifikasi','metode','sakti','config') then
+        raise exception 'Menu % tidak dapat diberikan ke Operator KUA: operator hanya boleh mengakses data KUA-nya sendiri.', m; end if;
+      if r <> 'operator' and m = 'realisasi' then
+        raise exception 'Menu realisasi hanya untuk Operator KUA (mengisi Realisasi KUA sendiri).'; end if;
+    end loop;
+    delete from public.hak_akses where role = r;
+    insert into public.hak_akses (role, menu, updated_by) select r, x, auth.uid() from unnest(menus) x;
+  end loop;
+end $$;
+
+revoke execute on function public.can_menu(text) from public, anon;
+grant execute on function public.can_menu(text) to authenticated;
+revoke execute on function public.bop_baca_semua() from public, anon;
+grant execute on function public.bop_baca_semua() to authenticated;
+revoke execute on function public.akses_saya() from public, anon;
+grant execute on function public.akses_saya() to authenticated;
+revoke execute on function public.set_hak_akses(jsonb) from public, anon;
+grant execute on function public.set_hak_akses(jsonb) to authenticated;
+
+-- (Isi awal hak_akses ada di bagian 5, sesudah tabel config dibuat.)
 
 -- 3) FUNGSI BANTU ------------------------------------------------------------------------
 create or replace function public.rp(n bigint) returns text
@@ -208,7 +341,26 @@ alter table public.config enable row level security;
 drop policy if exists cfg_read on public.config;
 create policy cfg_read on public.config for select to authenticated using (true);
 drop policy if exists cfg_admin on public.config;
-create policy cfg_admin on public.config for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy cfg_admin on public.config for all to authenticated
+  using ((select public.can_menu('config'))) with check ((select public.can_menu('config')));
+
+-- Isi awal hak akses menu (bagian 2b): HANYA SEKALI, ditandai config.hak_akses_awal. Menjalankan ulang file ini tidak mengembalikan
+-- menu yang sudah dicabut admin. Operator KUA sama dengan perilaku sebelumnya. Hak yang mengubah struktur anggaran (anggaran,
+-- metode, config) sengaja tidak diberikan ke peran lain secara bawaan; admin dapat menambahkannya di halaman Hak Akses Menu.
+do $$
+begin
+  if not exists (select 1 from public.config where key = 'hak_akses_awal') then
+    insert into public.hak_akses (role, menu) values
+      ('operator','bop'),('operator','rpd'),('operator','realisasi'),('operator','laporan'),
+      ('bendahara_bop','bop'),('bendahara_bop','rpd'),('bendahara_bop','verifikasi'),('bendahara_bop','sakti'),('bendahara_bop','laporan'),
+      ('verifikator_bop','bop'),('verifikator_bop','rpd'),('verifikator_bop','verifikasi'),('verifikator_bop','laporan'),
+      ('bast_nr','bast'),('bast_nr','bast-buat'),('bast_nr','bast-pegawai'),('bast_nr','bast-setting'),
+      ('kemasjidan','sert-masjid'),('kemasjidan','sert-kiblat'),('kemasjidan','sert-pengaturan'),('kemasjidan','sert-status'),
+      ('pnbp_nr','jaspro')
+    on conflict do nothing;
+    insert into public.config (key, value) values ('hak_akses_awal', 'true') on conflict (key) do nothing;
+  end if;
+end $$;
 
 -- 6) ANGGARAN TAHUNAN: 1 baris = 1 TAHUN ----------------------------------------------------------
 -- items = {"<id KUA>": nominal} untuk semua KUA; total dihitung trigger. Operator tidak membaca tabel ini langsung
@@ -255,22 +407,22 @@ drop trigger if exists anggaran_guard on public.anggaran;
 create trigger anggaran_guard before insert or update on public.anggaran
   for each row execute function public.anggaran_guard();
 
--- Anggaran satu tahun: {"<id KUA>": nominal}. Admin: semua KUA. Operator: hanya KUA-nya sendiri.
+-- Anggaran satu tahun: {"<id KUA>": nominal}. Admin dan peran pusat yang berhak (bop_baca_semua): semua KUA. Operator: hanya KUA-nya sendiri.
 create or replace function public.anggaran_tahun(p_tahun int) returns jsonb
 language sql security definer stable set search_path = public as $$
   select coalesce((select case
-           when public.is_admin() then a.items
+           when public.bop_baca_semua() then a.items
            when public.my_kua() is not null and a.items ? public.my_kua()::text
              then jsonb_build_object(public.my_kua()::text, a.items -> public.my_kua()::text)
            else '{}'::jsonb end
          from public.anggaran a where a.tahun = p_tahun), '{}'::jsonb);
 $$;
 
--- Atur anggaran: hanya KUA yang dikirim yang berubah (digabung ke baris tahun itu; nilai 0 = hapus). Hanya admin.
+-- Atur anggaran: hanya KUA yang dikirim yang berubah (digabung ke baris tahun itu; nilai 0 = hapus). Hanya yang punya menu anggaran.
 create or replace function public.set_anggaran(p_tahun int, p_items jsonb) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not public.is_admin() then raise exception 'Hanya admin yang dapat mengatur anggaran.'; end if;
+  if not public.can_menu('anggaran') then raise exception 'Anda tidak berhak mengatur anggaran.'; end if;
   if p_items is null or jsonb_typeof(p_items) <> 'object' then raise exception 'Format anggaran tidak valid.'; end if;
   perform 1 from anggaran where tahun = p_tahun for update;
   if found then update anggaran set items = items || p_items where tahun = p_tahun;
@@ -284,7 +436,8 @@ grant execute on function public.set_anggaran(int, jsonb) to authenticated;
 alter table public.anggaran enable row level security;
 drop policy if exists ang_read on public.anggaran;
 drop policy if exists ang_admin on public.anggaran;
-create policy ang_admin on public.anggaran for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy ang_admin on public.anggaran for all to authenticated
+  using ((select public.can_menu('anggaran'))) with check ((select public.can_menu('anggaran')));
 revoke all on public.anggaran from anon;
 revoke delete, truncate on public.anggaran from authenticated;
 
@@ -325,12 +478,14 @@ drop trigger if exists rpd_guard on public.rpd;
 create trigger rpd_guard before insert or update on public.rpd for each row execute function public.rpd_guard();
 
 alter table public.rpd enable row level security;
+-- Baca: KUA sendiri, atau semua KUA bagi admin/peran pusat yang berhak (bop_baca_semua). Tulis: admin (semua bulan) dan Operator KUA
+-- (KUA-nya, selama menu rpd dimilikinya dan bulannya dibuka). Peran pusat selain admin hanya membaca RPD.
 drop policy if exists rpd_read on public.rpd;
-create policy rpd_read on public.rpd for select to authenticated using (public.is_admin() or kua_id = public.my_kua());
+create policy rpd_read on public.rpd for select to authenticated using ((select public.bop_baca_semua()) or kua_id = (select public.my_kua()));
 drop policy if exists rpd_write on public.rpd;
 create policy rpd_write on public.rpd for all to authenticated
-  using (public.is_admin() or (kua_id = public.my_kua() and public.rpd_open(bulan)))
-  with check (public.is_admin() or (kua_id = public.my_kua() and public.rpd_open(bulan)));
+  using ((select public.is_admin()) or (kua_id = (select public.my_kua()) and (select public.can_menu('rpd')) and public.rpd_open(bulan)))
+  with check ((select public.is_admin()) or (kua_id = (select public.my_kua()) and (select public.can_menu('rpd')) and public.rpd_open(bulan)));
 
 -- 9) REALISASI: 1 record = 1 KUA x 1 bulan ------------------------------------------------------
 create table if not exists public.realisasi (
@@ -354,17 +509,20 @@ alter table public.realisasi add column if not exists nominal_dibayar bigint che
 create index if not exists realisasi_filter on public.realisasi (tahun, status, kua_id);
 
 -- Operator: hanya boleh membuat (belum ada) atau memperbaiki yang berstatus rejected; setelah dikirim jadi waiting dan terkunci.
--- Admin: boleh mengubah status apa pun kapan pun, tetapi TIDAK boleh mengubah nominal / dokumen LPJ. Status Dibayar wajib
--- menyertakan nominal yang dibayarkan (1 .. total Realisasi, maks 10 digit).
+-- Admin dan peran yang punya menu verifikasi (Verifikator/Bendahara BOP): boleh mengubah status apa pun kapan pun, tetapi TIDAK boleh
+-- mengubah nominal / dokumen LPJ. Status Dibayar wajib menyertakan nominal yang dibayarkan (1 .. total Realisasi, maks 10 digit).
 -- Impor data lama: hanya impor_baris() (admin) yang menyalakan penanda bop.impor. Aturan PROSES operator (kepemilikan, status,
 -- jadwal tanggal 10, LPJ wajib, POS SAKTI) dilewati karena ini data historis; aturan HITUNGAN (RPD) tetap berlaku.
+-- Batas RPD untuk operator: (1) total sebulan (manual + SAKTI) <= RPD bulan itu; (2) per POS setahun (manual + SAKTI) <= RPD POS itu
+-- setahun, diperiksa untuk SEMUA POS. Realisasi SAKTI sudah dibayar dan boleh melampaui RPD (lihat realisasi_sakti_guard); bila itu
+-- terjadi, operator tidak dapat mengirim Realisasi sampai admin menyesuaikan RPD, dan pesannya menyebut kelebihannya.
 create or replace function public.realisasi_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare impor boolean := coalesce(current_setting('bop.impor', true), '') = 'on';
-        sk jsonb; rpd_m bigint; sk_m bigint; ctx text; k text; v bigint; lama bigint; cap bigint; used bigint; pid int;
+        sk jsonb; rpd_m bigint; sk_m bigint; ctx text; k text; v bigint; lama bigint; cap bigint; used bigint; pid int; sk_y bigint;
 begin
   if not impor then
-    if tg_op = 'UPDATE' and public.is_admin() then
+    if tg_op = 'UPDATE' and public.can_menu('verifikasi') then
       if (new.kua_id, new.tahun, new.bulan, new.items, new.total, new.file_lpj_url)
          is distinct from (old.kua_id, old.tahun, old.bulan, old.items, old.total, old.file_lpj_url) then
         raise exception 'Admin hanya dapat mengubah status dan catatan, bukan nominal atau dokumen LPJ.'; end if;
@@ -439,13 +597,21 @@ begin
     raise exception '%: total Realisasi bulan ini melebihi RPD bulan ini. Batas: %, SAKTI: %, dimasukkan: %, kelebihan: %.',
       ctx, rp(rpd_m), rp(sk_m), rp(new.total), rp(new.total + sk_m - rpd_m); end if;
 
-  for k, v in select key, value::bigint from jsonb_each_text(new.items) loop
+  -- Batas setahun per POS. Operator: SEMUA POS diperiksa, juga yang tidak ada di isian ini (sama dengan calc() di tampilan), supaya
+  -- POS yang sudah melebihi RPD setahun karena Realisasi SAKTI menutup pengiriman. Impor data lama: hanya POS yang ada di isian.
+  for pid in select p.id from pos p order by p.urutan loop
+    k := pid::text;
+    v := coalesce((new.items ->> k)::bigint, 0);
+    continue when impor and v = 0;
     select coalesce(sum((items ->> k)::bigint), 0) into cap from rpd where kua_id = new.kua_id and tahun = new.tahun;
-    select coalesce(sum((items ->> k)::bigint), 0) + sakti_year(new.kua_id, k::int, new.tahun) into used
+    sk_y := sakti_year(new.kua_id, pid, new.tahun);
+    select coalesce(sum((items ->> k)::bigint), 0) + sk_y into used
       from realisasi where kua_id = new.kua_id and tahun = new.tahun and bulan <> new.bulan;
     if used + v > cap then
-      raise exception '%: Realisasi POS % melebihi total RPD setahun. Batas: %, terpakai (bulan lain + SAKTI): %, dimasukkan: %, kelebihan: %.',
-        ctx, pos_label(k::int), rp(cap), rp(used), rp(v), rp(used + v - cap); end if;
+      raise exception '%: Realisasi POS % melebihi total RPD setahun. Batas: %, terpakai (bulan lain + SAKTI): %, dimasukkan: %, kelebihan: %.%',
+        ctx, pos_label(pid), rp(cap), rp(used), rp(v), rp(used + v - cap),
+        case when sk_y > 0 then ' Realisasi SAKTI sudah dibayar dan tidak dapat diubah operator; minta admin menyesuaikan RPD.' else '' end;
+    end if;
   end loop;
   return new;
 end $$;
@@ -454,15 +620,17 @@ create trigger realisasi_guard before insert or update on public.realisasi
   for each row execute function public.realisasi_guard();
 
 -- aturan status dijaga trigger realisasi_guard agar pesan errornya jelas
+-- Baca: KUA sendiri atau semua KUA (bop_baca_semua). Buat/perbaiki: Operator KUA bermenu realisasi untuk KUA-nya. Ubah status: menu verifikasi.
 alter table public.realisasi enable row level security;
 drop policy if exists rl_read on public.realisasi;
-create policy rl_read on public.realisasi for select to authenticated using (public.is_admin() or kua_id = public.my_kua());
+create policy rl_read on public.realisasi for select to authenticated using ((select public.bop_baca_semua()) or kua_id = (select public.my_kua()));
 drop policy if exists rl_ins on public.realisasi;
-create policy rl_ins on public.realisasi for insert to authenticated with check (kua_id = public.my_kua());
+create policy rl_ins on public.realisasi for insert to authenticated
+  with check (kua_id = (select public.my_kua()) and (select public.can_menu('realisasi')));
 drop policy if exists rl_upd on public.realisasi;
 create policy rl_upd on public.realisasi for update to authenticated
-  using (public.is_admin() or kua_id = public.my_kua())
-  with check (public.is_admin() or kua_id = public.my_kua());
+  using ((select public.can_menu('verifikasi')) or (kua_id = (select public.my_kua()) and (select public.can_menu('realisasi'))))
+  with check ((select public.can_menu('verifikasi')) or (kua_id = (select public.my_kua()) and (select public.can_menu('realisasi'))));
 
 -- 9b) PEMBAYARAN SAKTI --------------------------------------------------------------------------------------
 -- Hanya Listrik (522111) dan Telepon/Internet (522112) yang dibayar lewat SAKTI (autopayment). Pengaturannya GLOBAL: satu
@@ -561,13 +729,13 @@ language sql stable set search_path = public as $$
   select coalesce(sum(nominal), 0)::bigint from realisasi_sakti where kua_id = p_kua and pos_id = p_pos and tahun = p_tahun;
 $$;
 
--- Hanya admin. Pengaturan global: mencentang SAKTI selalu boleh; mengembalikan ke MANUAL ditolak selama KUA + POS itu
--- masih punya Realisasi SAKTI bernominal (kosongkan dulu nominalnya di Realisasi SAKTI).
+-- Hanya yang punya menu metode (admin; dapat didelegasikan). Pengaturan global: mencentang SAKTI selalu boleh; mengembalikan ke
+-- MANUAL ditolak selama KUA + POS itu masih punya Realisasi SAKTI bernominal (kosongkan dulu nominalnya di Realisasi SAKTI).
 create or replace function public.metode_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare bad text; ctx text; y int;
 begin
-  if not public.is_admin() then raise exception 'Hanya admin yang dapat mengubah pengaturan SAKTI.'; end if;
+  if not public.can_menu('metode') then raise exception 'Anda tidak berhak mengubah pengaturan SAKTI.'; end if;
   if new.kua_id is null or new.pos_id is null or new.metode is null then
     raise exception 'Data pengaturan SAKTI tidak lengkap.'; end if;
   if tg_op = 'UPDATE' and (new.kua_id, new.pos_id) is distinct from (old.kua_id, old.pos_id) then
@@ -594,13 +762,16 @@ drop trigger if exists metode_guard on public.metode_pembayaran;
 create trigger metode_guard before insert or update on public.metode_pembayaran
   for each row execute function public.metode_guard();
 
--- Hanya admin; POS harus tercentang SAKTI; periode sudah berjalan (WIB); nominal 0..9.999.999.999.
--- Jumlahnya ikut aturan yang sama dengan Realisasi manual: (manual + SAKTI) sebulan <= RPD bulan itu, dan POS setahun <= RPD POS setahun.
+-- Hanya yang punya menu sakti (admin; dapat didelegasikan); POS harus tercentang SAKTI; periode sudah berjalan (WIB); nominal
+-- 0..9.999.999.999. TIDAK dibatasi RPD: pembayaran SAKTI (autopayment) sudah terjadi, jadi harus tetap dapat dicatat walau melebihi
+-- RPD bulan itu atau RPD setahun. Dampaknya ada di sisi operator (realisasi_guard): selama Realisasi sebuah POS melebihi RPD setahun,
+-- operator tidak dapat mengirim Realisasi sampai admin menyesuaikan RPD. Yang tetap dijaga: satu sumber per POS per bulan
+-- (SAKTI ditolak bila Realisasi manual bulan itu sudah memuat POS yang sama), supaya tidak terhitung ganda.
 create or replace function public.realisasi_sakti_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare ctx text; rpd_m bigint; man_m bigint; sak_m bigint; cap bigint; used bigint; man_pos bigint;
+declare ctx text; man_pos bigint;
 begin
-  if not public.is_admin() then raise exception 'Realisasi SAKTI hanya dapat diinput oleh Admin.'; end if;
+  if not public.can_menu('sakti') then raise exception 'Anda tidak berhak menginput Realisasi SAKTI.'; end if;
   if new.kua_id is null or new.pos_id is null then raise exception 'KUA dan POS wajib diisi.'; end if;
   if tg_op = 'UPDATE' and (new.kua_id, new.pos_id, new.tahun, new.bulan) is distinct from (old.kua_id, old.pos_id, old.tahun, old.bulan) then
     raise exception 'KUA, POS, tahun, dan bulan tidak dapat diubah. Input data baru untuk periode lain.'; end if;
@@ -624,20 +795,6 @@ begin
     if coalesce(man_pos, 0) > 0 then
       raise exception '%: POS % sudah punya Realisasi manual pada % %. Realisasi SAKTI tidak dapat diinput untuk bulan yang sudah diisi manual.',
         ctx, pos_label(new.pos_id), nama_bulan(new.bulan), new.tahun; end if;
-    select coalesce(sum(total), 0) into rpd_m from rpd where kua_id = new.kua_id and tahun = new.tahun and bulan = new.bulan;
-    select coalesce(sum(total), 0) into man_m from realisasi where kua_id = new.kua_id and tahun = new.tahun and bulan = new.bulan;
-    select coalesce(sum(nominal), 0) into sak_m from realisasi_sakti
-     where kua_id = new.kua_id and tahun = new.tahun and bulan = new.bulan and pos_id <> new.pos_id;
-    if man_m + sak_m + new.nominal > rpd_m then
-      raise exception '%: total Realisasi % melebihi RPD bulan ini. Batas: %, Manual: %, SAKTI POS lain: %, dimasukkan: %, kelebihan: %.',
-        ctx, nama_bulan(new.bulan), rp(rpd_m), rp(man_m), rp(sak_m), rp(new.nominal), rp(man_m + sak_m + new.nominal - rpd_m); end if;
-    select coalesce(sum((items ->> new.pos_id::text)::bigint), 0) into cap from rpd where kua_id = new.kua_id and tahun = new.tahun;
-    select coalesce(sum((items ->> new.pos_id::text)::bigint), 0) into used from realisasi where kua_id = new.kua_id and tahun = new.tahun;
-    select used + coalesce(sum(nominal), 0) into used from realisasi_sakti
-     where kua_id = new.kua_id and pos_id = new.pos_id and tahun = new.tahun and bulan <> new.bulan;
-    if used + new.nominal > cap then
-      raise exception '%: Realisasi POS % melebihi total RPD setahun. Batas: %, terpakai (bulan lain): %, dimasukkan: %, kelebihan: %.',
-        ctx, pos_label(new.pos_id), rp(cap), rp(used), rp(new.nominal), rp(used + new.nominal - cap); end if;
   end if;
   new.updated_by := auth.uid(); new.updated_at := now();
   return new;
@@ -646,22 +803,25 @@ drop trigger if exists realisasi_sakti_guard on public.realisasi_sakti;
 create trigger realisasi_sakti_guard before insert or update on public.realisasi_sakti
   for each row execute function public.realisasi_sakti_guard();
 
--- RLS: admin membaca dan menulis semua; operator hanya MEMBACA milik KUA-nya. Tanpa policy DELETE.
+-- RLS: baca = KUA sendiri atau semua KUA (admin/peran pusat yang berhak, bop_baca_semua); tulis = menu metode / menu sakti
+-- (admin; dapat didelegasikan). Operator hanya MEMBACA milik KUA-nya. Tanpa policy DELETE.
 alter table public.metode_pembayaran enable row level security;
 drop policy if exists mp_read on public.metode_pembayaran;
-create policy mp_read on public.metode_pembayaran for select to authenticated using (public.is_admin() or kua_id = public.my_kua());
+create policy mp_read on public.metode_pembayaran for select to authenticated using ((select public.bop_baca_semua()) or kua_id = (select public.my_kua()));
 drop policy if exists mp_ins on public.metode_pembayaran;
-create policy mp_ins on public.metode_pembayaran for insert to authenticated with check (public.is_admin());
+create policy mp_ins on public.metode_pembayaran for insert to authenticated with check ((select public.can_menu('metode')));
 drop policy if exists mp_upd on public.metode_pembayaran;
-create policy mp_upd on public.metode_pembayaran for update to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy mp_upd on public.metode_pembayaran for update to authenticated
+  using ((select public.can_menu('metode'))) with check ((select public.can_menu('metode')));
 
 alter table public.realisasi_sakti enable row level security;
 drop policy if exists rs_read on public.realisasi_sakti;
-create policy rs_read on public.realisasi_sakti for select to authenticated using (public.is_admin() or kua_id = public.my_kua());
+create policy rs_read on public.realisasi_sakti for select to authenticated using ((select public.bop_baca_semua()) or kua_id = (select public.my_kua()));
 drop policy if exists rs_ins on public.realisasi_sakti;
-create policy rs_ins on public.realisasi_sakti for insert to authenticated with check (public.is_admin());
+create policy rs_ins on public.realisasi_sakti for insert to authenticated with check ((select public.can_menu('sakti')));
 drop policy if exists rs_upd on public.realisasi_sakti;
-create policy rs_upd on public.realisasi_sakti for update to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy rs_upd on public.realisasi_sakti for update to authenticated
+  using ((select public.can_menu('sakti'))) with check ((select public.can_menu('sakti')));
 
 -- Lapisan tambahan di atas RLS: tanpa DELETE/TRUNCATE untuk klien, dan anon tidak punya akses sama sekali
 revoke all on public.metode_pembayaran, public.realisasi_sakti from anon;
@@ -841,7 +1001,12 @@ delete from public.config where key in ('sakti_migrasi_autopayment', 'wajib_lpj'
 -- 12) JASPRO TRANSPORT (alat sekali pakai: Laporan Nominatif PNBP NR) ---------------------------------------
 -- Hemat kuota: HANYA SATU baris (id = 1). Setiap simpan menimpa kolom yang dikirim; tanpa riwayat, log, atau tabel per bulan.
 -- master = Master Rekening [{id,nama,namaPemilik,noRekening}] | laporan = {fileName, rows:[...]} terakhir (null = belum ada)
--- settings = periode, tarif, PPh, blok tanda tangan. Hanya admin yang boleh membaca dan menulis (RLS).
+-- settings = periode, tarif, PPh, blok tanda tangan. Hanya yang punya menu jaspro (admin dan, bawaan, PNBP NR) yang boleh membaca
+-- dan menulis (RLS).
+-- Tarif berubah menurut tanggal: settings.tarifJaspro / tarifTransport = tarif dasar (berlaku sejak awal) dan
+-- settings.tarifRiwayat = [{"mulai":"YYYY-MM-DD","jaspro":<angka|null>,"transport":<angka|null>}]: mulai tanggal itu tarif berubah
+-- (null = tidak berubah). Jaspro dan Transport berubah sendiri-sendiri. settings.tanggalAcuan ("" = akhir bulan periode) dipakai
+-- untuk baris laporan yang tidak membawa tanggal. Perhitungannya di js/jaspro.js (JX.tarifPada).
 create table if not exists public.jaspro_data (
   id         int primary key default 1 check (id = 1),
   master     jsonb not null default '[]'::jsonb,
@@ -852,6 +1017,7 @@ create table if not exists public.jaspro_data (
 );
 create or replace function public.jaspro_guard() returns trigger
 language plpgsql set search_path = public as $$
+declare e jsonb; tg text; d date; k text; seen text[] := '{}'::text[];
 begin
   if jsonb_typeof(new.master) is distinct from 'array' then raise exception 'Master Rekening harus berupa daftar.'; end if;
   if jsonb_array_length(new.master) > 2000 then raise exception 'Master Rekening maksimal 2000 data.'; end if;
@@ -861,6 +1027,31 @@ begin
     if jsonb_array_length(new.laporan->'rows') > 5000 then raise exception 'Laporan Nominatif maksimal 5000 baris.'; end if;
   end if;
   if jsonb_typeof(new.settings) is distinct from 'object' then raise exception 'Pengaturan Jaspro tidak valid.'; end if;
+  -- riwayat tarif: tanggal sah dan tidak kembar, nominal null atau 0..1.000.000.000
+  if new.settings ? 'tarifRiwayat' then
+    if jsonb_typeof(new.settings -> 'tarifRiwayat') is distinct from 'array' then
+      raise exception 'Riwayat tarif harus berupa daftar.'; end if;
+    if jsonb_array_length(new.settings -> 'tarifRiwayat') > 100 then
+      raise exception 'Riwayat tarif maksimal 100 perubahan.'; end if;
+    for e in select value from jsonb_array_elements(new.settings -> 'tarifRiwayat') loop
+      if jsonb_typeof(e) is distinct from 'object' then raise exception 'Perubahan tarif tidak valid.'; end if;
+      tg := e ->> 'mulai';
+      if tg is null or tg !~ '^\d{4}-\d{2}-\d{2}$' then
+        raise exception 'Tanggal mulai tarif harus berformat YYYY-MM-DD (diterima: %).', coalesce(tg, 'kosong'); end if;
+      begin d := tg::date;
+      exception when others then raise exception 'Tanggal mulai tarif % bukan tanggal yang sah.', tg; end;
+      if tg = any (seen) then raise exception 'Tanggal mulai tarif % dipakai lebih dari sekali.', tg; end if;
+      seen := seen || tg;
+      foreach k in array array['jaspro', 'transport'] loop
+        if e ? k and jsonb_typeof(e -> k) is distinct from 'null' then
+          if jsonb_typeof(e -> k) is distinct from 'number' or (e ->> k)::numeric < 0 or (e ->> k)::numeric > 1000000000 then
+            raise exception 'Tarif % mulai % harus berupa angka 0 sampai 1.000.000.000.', k, tg; end if;
+        end if;
+      end loop;
+    end loop;
+  end if;
+  if coalesce(new.settings ->> 'tanggalAcuan', '') <> '' and (new.settings ->> 'tanggalAcuan') !~ '^\d{4}-\d{2}-\d{2}$' then
+    raise exception 'Tanggal acuan tarif harus berformat YYYY-MM-DD.'; end if;
   new.updated_by := auth.uid(); new.updated_at := now();
   return new;
 end $$;
@@ -869,7 +1060,9 @@ create trigger jaspro_guard before insert or update on public.jaspro_data for ea
 
 alter table public.jaspro_data enable row level security;
 drop policy if exists jaspro_admin on public.jaspro_data;
-create policy jaspro_admin on public.jaspro_data for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists jaspro_menu on public.jaspro_data;
+create policy jaspro_menu on public.jaspro_data for all to authenticated
+  using ((select public.can_menu('jaspro'))) with check ((select public.can_menu('jaspro')));
 revoke all on public.jaspro_data from anon;
 grant select, insert, update on public.jaspro_data to authenticated;
 insert into public.jaspro_data (id) values (1) on conflict (id) do nothing;

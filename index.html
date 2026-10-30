@@ -8,8 +8,8 @@
 <!-- Tema Sneat (sama dengan portal sertifikat, versi dikunci). Kembali ke Bootstrap polos: ganti href dengan https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css -->
 <link href="https://cdn.jsdelivr.net/gh/themeselection/sneat-bootstrap-html-admin-template-free@de094c2bf89e602054b7c14f46c9a3a5b9f6cac9/assets/vendor/css/core.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
-<link href="css/app.css?v=2026.10.20.23.40" rel="stylesheet">
-<link href="css/sertifikat.css?v=2026.10.20.23.40" rel="stylesheet">
+<link href="css/app.css?v=2026.10.29.23.54" rel="stylesheet">
+<link href="css/sertifikat.css?v=2026.10.29.23.54" rel="stylesheet">
 </head>
 <body>
 
@@ -41,33 +41,36 @@
   <aside id="side">
     <div class="p-4 pb-3"><a href="#bop" class="text-decoration-none"><span class="brand"><i class="bx bx-link-alt"></i> BIMASATU</span></a></div>
     <nav class="nav flex-column pb-4">
-      <details open>
+      <!-- data-menu = kunci menu (sama dengan hash halaman dan kunci di tabel hak_akses). core.js applyMenus() menampilkan hanya yang boleh dibuka
+           peran akun ini; kelompok (details) yang semua isinya tersembunyi ikut disembunyikan. Daftar kunci: bop.sql (menu_keys) dan js/akses.js. -->
+      <details open data-grup="bop">
         <summary class="nav-link"><i class="bx bx-wallet"></i>BOP<i class="bx bx-chevron-down ms-auto"></i></summary>
-        <a class="nav-link sub admin-only d-none" href="#anggaran"><i class="bx bx-coin-stack"></i>Anggaran</a>
-        <a class="nav-link sub" href="#rpd"><i class="bx bx-calendar-edit"></i>RPD</a>
-        <a class="nav-link sub op-only" href="#realisasi"><i class="bx bx-receipt"></i>Realisasi</a>
-        <a class="nav-link sub admin-only d-none" href="#verifikasi"><i class="bx bx-check-shield"></i>Verifikasi</a>
-        <a class="nav-link sub admin-only d-none" href="#metode"><i class="bx bx-toggle-right"></i>Pengaturan SAKTI</a>
-        <a class="nav-link sub admin-only d-none" href="#sakti"><i class="bx bx-transfer"></i>Realisasi SAKTI</a>
-        <a class="nav-link sub admin-only d-none" href="#config"><i class="bx bx-slider"></i>Config</a>
-        <a class="nav-link sub admin-only d-none" href="#impor"><i class="bx bx-import"></i>Impor Data Lama</a>
-        <a class="nav-link sub" href="#laporan"><i class="bx bx-file"></i>Laporan</a>
+        <a class="nav-link sub d-none" href="#anggaran" data-menu="anggaran"><i class="bx bx-coin-stack"></i>Anggaran</a>
+        <a class="nav-link sub d-none" href="#rpd" data-menu="rpd"><i class="bx bx-calendar-edit"></i>RPD</a>
+        <a class="nav-link sub d-none" href="#realisasi" data-menu="realisasi"><i class="bx bx-receipt"></i>Realisasi</a>
+        <a class="nav-link sub d-none" href="#verifikasi" data-menu="verifikasi"><i class="bx bx-check-shield"></i>Verifikasi</a>
+        <a class="nav-link sub d-none" href="#metode" data-menu="metode"><i class="bx bx-toggle-right"></i>Pengaturan SAKTI</a>
+        <a class="nav-link sub d-none" href="#sakti" data-menu="sakti"><i class="bx bx-transfer"></i>Realisasi SAKTI</a>
+        <a class="nav-link sub d-none" href="#config" data-menu="config"><i class="bx bx-slider"></i>Config</a>
+        <a class="nav-link sub d-none" href="#impor" data-menu="impor"><i class="bx bx-import"></i>Impor Data Lama</a>
+        <a class="nav-link sub d-none" href="#laporan" data-menu="laporan"><i class="bx bx-file"></i>Laporan</a>
       </details>
-      <details class="admin-only d-none">
+      <details class="d-none">
         <summary class="nav-link"><i class="bx bx-file-blank"></i>BAST NR<i class="bx bx-chevron-down ms-auto"></i></summary>
-        <a class="nav-link sub" href="#bast"><i class="bx bx-history"></i>Riwayat</a>
-        <a class="nav-link sub" href="#bast-buat"><i class="bx bx-edit-alt"></i>Buat BA</a>
-        <a class="nav-link sub" href="#bast-pegawai"><i class="bx bx-group"></i>Pegawai</a>
-        <a class="nav-link sub" href="#bast-setting"><i class="bx bx-slider-alt"></i>Pengaturan BAST</a>
+        <a class="nav-link sub d-none" href="#bast" data-menu="bast"><i class="bx bx-history"></i>Riwayat</a>
+        <a class="nav-link sub d-none" href="#bast-buat" data-menu="bast-buat"><i class="bx bx-edit-alt"></i>Buat BA</a>
+        <a class="nav-link sub d-none" href="#bast-pegawai" data-menu="bast-pegawai"><i class="bx bx-group"></i>Pegawai</a>
+        <a class="nav-link sub d-none" href="#bast-setting" data-menu="bast-setting"><i class="bx bx-slider-alt"></i>Pengaturan BAST</a>
       </details>
-      <details class="admin-only d-none">
+      <details class="d-none">
         <summary class="nav-link"><i class="bx bx-badge-check"></i>Sertifikat<i class="bx bx-chevron-down ms-auto"></i></summary>
-        <a class="nav-link sub" href="#sert-masjid"><i class="bx bx-building-house"></i>Masjid / Musala</a>
-        <a class="nav-link sub" href="#sert-kiblat"><i class="bx bx-compass"></i>Arah Kiblat</a>
-        <a class="nav-link sub" href="#sert-pengaturan"><i class="bx bx-slider-alt"></i>Pengaturan Sertifikat</a>
-        <a class="nav-link sub" href="#sert-status"><i class="bx bx-plug"></i>Status Apps Script</a>
+        <a class="nav-link sub d-none" href="#sert-masjid" data-menu="sert-masjid"><i class="bx bx-building-house"></i>Masjid / Musala</a>
+        <a class="nav-link sub d-none" href="#sert-kiblat" data-menu="sert-kiblat"><i class="bx bx-compass"></i>Arah Kiblat</a>
+        <a class="nav-link sub d-none" href="#sert-pengaturan" data-menu="sert-pengaturan"><i class="bx bx-slider-alt"></i>Pengaturan Sertifikat</a>
+        <a class="nav-link sub d-none" href="#sert-status" data-menu="sert-status"><i class="bx bx-plug"></i>Status Apps Script</a>
       </details>
-      <a class="nav-link admin-only d-none" href="#jaspro"><i class="bx bx-id-card"></i>Jaspro Transport</a>
+      <a class="nav-link d-none" href="#jaspro" data-menu="jaspro"><i class="bx bx-id-card"></i>Jaspro Transport</a>
+      <a class="nav-link d-none" href="#akses" data-menu="akses"><i class="bx bx-lock-open-alt"></i>Hak Akses Menu</a>
       <a class="nav-link" href="#pengaturan"><i class="bx bx-cog"></i>Pengaturan</a>
     </nav>
   </aside>
@@ -80,6 +83,7 @@
         <button class="btn btn-sm btn-outline-secondary" id="out"><i class="bx bx-log-out"></i> Keluar</button>
       </div>
     </div>
+    <div id="dbWarn" class="alert alert-warning mx-4 mt-3 mb-0 d-none"><b>Database belum diperbarui.</b> Jalankan <code>bop.sql</code> versi terbaru di SQL Editor Supabase supaya peran baru dan menu Hak Akses Menu aktif. Sampai itu dilakukan, aplikasi berjalan dengan hak akses lama (Admin dan Operator KUA saja).</div>
     <main class="p-4" id="view"></main>
     <div class="p-4 d-none" id="sertView"></div>
   </div>
@@ -88,14 +92,15 @@
 <dialog id="dlg"></dialog>
 <dialog id="vdlg"></dialog>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/config.js?v=2026.10.20.23.40"></script>
-<script src="js/core.js?v=2026.10.20.23.40"></script>
-<script src="js/bop.js?v=2026.10.20.23.40"></script>
-<script src="js/akun.js?v=2026.10.20.23.40"></script>
-<script src="js/jaspro.js?v=2026.10.20.23.40"></script>
-<script src="js/bast.js?v=2026.10.20.23.40"></script>
-<script src="js/sertifikat.js?v=2026.10.20.23.40"></script>
-<script src="js/app.js?v=2026.10.20.23.40"></script>
+<script src="js/config.js?v=2026.10.29.23.54"></script>
+<script src="js/core.js?v=2026.10.29.23.54"></script>
+<script src="js/bop.js?v=2026.10.29.23.54"></script>
+<script src="js/akun.js?v=2026.10.29.23.54"></script>
+<script src="js/akses.js?v=2026.10.29.23.54"></script>
+<script src="js/jaspro.js?v=2026.10.29.23.54"></script>
+<script src="js/bast.js?v=2026.10.29.23.54"></script>
+<script src="js/sertifikat.js?v=2026.10.29.23.54"></script>
+<script src="js/app.js?v=2026.10.29.23.54"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=tsReady&render=explicit" async defer></script>
 </body>
 </html>

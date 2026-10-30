@@ -4,20 +4,22 @@
  *  Data di Spreadsheet yang sama dengan Sertifikat; arsip dokumen di Google Drive.
  *  Sheet: BastPegawai, BastBA, BastSetting (dibuat oleh setupDatabase).
  *
- *  Aksi didaftarkan ke router Code.gs lewat bastActions_(); semuanya khusus admin
- *  (diperiksa di Code.gs). Aturan yang dulu dijaga trigger Supabase kini dijaga di sini
- *  dan berjalan di bawah kunci skrip (lihat write:true): nomor urut tidak ganda,
- *  porporasi tidak tumpang-tindih, Pihak dan Kasi terisi, LAST_NUMBER hanya maju.
+ *  Aksi didaftarkan ke router Code.gs lewat bastActions_(). Tiap aksi menyebut menu yang diperlukannya
+ *  (bast, bast-buat, bast-pegawai, bast-setting; diatur admin di Hak Akses Menu) dan diperiksa di Code.gs.
+ *  Aturan yang dulu dijaga trigger Supabase kini dijaga di sini dan berjalan di bawah kunci skrip
+ *  (lihat write:true): nomor urut tidak ganda, porporasi tidak tumpang-tindih, Pihak dan Kasi terisi,
+ *  LAST_NUMBER hanya maju.
  *
- *  Arsip: <folder master> / BAST NR / <tahun> / <MM Bulan> / BAST KUA <KUA> - <nnn>-<tahun>.<ext>
- *  Folder master = DRIVE_MASTER_FOLDER_ID (bagian atas Code.gs). Drive diakses lewat API v3.
+ *  ARSIP: berkasnya TIDAK diunggah dari sini. Edge Function "bop" menyimpannya ke folder master BIMASATU
+ *    <folder master> / BAST NR / <tahun> / <MM Bulan> / BAST KUA <KUA> - <nnn>-<tahun>.<ext>
+ *  memakai akun Google yang sama dengan LPJ BOP (akun Apps Script berbeda dan ditolak Drive dengan HTTP 403).
+ *  Di sini hanya dicatat id-nya: kolom ArsipId, ArsipLink, dan ArsipMaster ("1" = sudah di folder master).
+ *  Arsip LAMA (ArsipMaster kosong; diunggah versi sebelumnya ke folder lain) masih bisa dibaca memakai akun
+ *  Apps Script sampai dipindahkan lewat Pengaturan BAST > "Pindahkan arsip ke folder master".
  * =====================================================================
  */
 
-const BAST_MAKS_MB = 5; // ukuran maksimum satu arsip
-const BAST_BULAN_ = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-const BAST_TIPE_ = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' };
-const BAST_MAGIC_ = { 'application/pdf': [0x25, 0x50, 0x44, 0x46], 'image/jpeg': [0xff, 0xd8, 0xff], 'image/png': [0x89, 0x50, 0x4e, 0x47] };
+const BAST_TIPE_ARSIP_ = ['application/pdf', 'image/jpeg', 'image/png']; // jenis file arsip yang boleh dibaca
 const BAST_KEY_ = ['KASI_NAMA', 'KASI_NIP', 'NOMOR_AWAL_SURAT', 'KODE_KANTOR', 'KODE_KLASIFIKASI', 'NOMOR_FORMAT_TEMPLATE', 'ALAMAT_BIMAS_LENGKAP', 'LAST_NUMBER', 'LAST_NUMBER_YEAR'];
 const BAST_DRIVE_ = 'https://www.googleapis.com/drive/v3/files';
 
@@ -33,24 +35,25 @@ const BAST_DEF_ = {
       ['PihakSatuNip', 'pihak_satu_nip', 's'], ['PihakSatuNama', 'pihak_satu_nama', 's'], ['PihakSatuJabatan', 'pihak_satu_jabatan', 's'], ['PihakSatuAlamat', 'pihak_satu_alamat', 's'],
       ['PihakKeduaNip', 'pihak_kedua_nip', 's'], ['PihakKeduaNama', 'pihak_kedua_nama', 's'], ['PihakKeduaJabatan', 'pihak_kedua_jabatan', 's'], ['PihakKeduaAlamat', 'pihak_kedua_alamat', 's'],
       ['BanyakNaBuku', 'banyak_na_buku', 'n'], ['BanyakN', 'banyak_n', 'n'], ['BanyakNb', 'banyak_nb', 'n'], ['NoSeri', 'no_seri', 's'], ['Porporasi', 'porporasi', 's'],
-      ['KasiNama', 'kasi_nama', 's'], ['KasiNip', 'kasi_nip', 's'], ['StatusSimkah', 'status_simkah', 's'], ['ArsipId', 'arsip_id', 's'], ['ArsipLink', 'arsip_link', 's'], ['DiubahPada', 'diubah_pada', 'd']]
+      ['KasiNama', 'kasi_nama', 's'], ['KasiNip', 'kasi_nip', 's'], ['StatusSimkah', 'status_simkah', 's'], ['ArsipId', 'arsip_id', 's'], ['ArsipLink', 'arsip_link', 's'], ['ArsipMaster', 'arsip_master', 's'], ['DiubahPada', 'diubah_pada', 'd']]
   },
   setting: { sheet: 'BastSetting', kunci: 'key', kol: [['Key', 'key', 's'], ['Value', 'value', 's']] }
 };
 
 function bastActions_() {
+  const semuaMenuBast = ['bast', 'bast-buat', 'bast-pegawai', 'bast-setting'];
   return {
-    bastInit: { run: function () { return bastInit_(); } },
-    bastSaveBA: { write: true, run: function (p) { return bastSaveBA_(p.row); } },
-    bastStatus: { write: true, run: function (p) { return bastStatus_(p.id, p.status); } },
-    bastDeleteBA: { write: true, run: function (p) { return bastDeleteBA_(p.id); } },
-    bastSavePegawai: { write: true, run: function (p) { return bastSavePegawai_(p.nip, p.data); } },
-    bastDeletePegawai: { write: true, run: function (p) { return bastDeletePegawai_(p.nip); } },
-    bastSaveSetting: { write: true, run: function (p) { return bastSaveSetting_(p.rows); } },
-    bastArsipFile: { run: function (p) { return bastArsipFile_(p.id); } },
-    bastArsipUnggah: { write: true, run: function (p) { return bastArsipUnggah_(p.id, p.name, p.base64); } },
-    bastArsipHapus: { write: true, run: function (p) { return bastArsipHapus_(p.id); } },
-    bastImpor: { write: true, run: function (p) { return bastImpor_(p); } }
+    bastInit: { menu: semuaMenuBast, run: function () { return bastInit_(); } },   // semua halaman BAST memuat datanya dari sini
+    bastSaveBA: { menu: 'bast-buat', write: true, run: function (p) { return bastSaveBA_(p.row); } },
+    bastStatus: { menu: 'bast', write: true, run: function (p) { return bastStatus_(p.id, p.status); } },
+    bastDeleteBA: { menu: 'bast', write: true, run: function (p) { return bastDeleteBA_(p.id); } },
+    bastSavePegawai: { menu: 'bast-pegawai', write: true, run: function (p) { return bastSavePegawai_(p.nip, p.data); } },
+    bastDeletePegawai: { menu: 'bast-pegawai', write: true, run: function (p) { return bastDeletePegawai_(p.nip); } },
+    bastSaveSetting: { menu: 'bast-setting', write: true, run: function (p) { return bastSaveSetting_(p.rows); } },
+    bastArsipFile: { menu: ['bast', 'bast-setting'], run: function (p) { return bastArsipFile_(p.id); } },   // hanya arsip LAMA (di luar folder master)
+    bastArsipSet: { menu: ['bast', 'bast-setting'], write: true, run: function (p) { return bastArsipSet_(p.id, p.arsipId, p.buangLama === true); } },
+    bastArsipHapus: { menu: 'bast', write: true, run: function (p) { return bastArsipHapus_(p.id); } },
+    bastImpor: { admin: true, write: true, run: function (p) { return bastImpor_(p); } }   // pemindahan sekali jalan dari Supabase
   };
 }
 
@@ -208,7 +211,7 @@ function bastSaveBA_(r) {
   const baris = {};
   BAST_DEF_.ba.kol.forEach(function (c) { baris[c[1]] = c[2] === 'n' ? n(c[1]) : s(c[1]); });
   baris.id = semua.reduce(function (mx, x) { return Math.max(mx, x.id); }, 0) + 1;
-  baris.arsip_id = ''; baris.arsip_link = ''; baris.diubah_pada = new Date();
+  baris.arsip_id = ''; baris.arsip_link = ''; baris.arsip_master = ''; baris.diubah_pada = new Date();
   bastTulis_(BAST_DEF_.ba, 0, baris);
 
   const set = {};
@@ -279,12 +282,18 @@ function bastSaveSetting_(rows) {
 
 /* ============================ ARSIP (GOOGLE DRIVE) ============================ */
 
+// Akun Apps Script TIDAK menulis ke Drive lagi. Yang tersisa hanya membaca/membuang arsip LAMA yang dulu diunggah akun ini
+// (sebelum arsip dipindah ke folder master), supaya bisa ditampilkan dan disalin oleh fitur migrasi.
+
 function bastDrive_(url, opsi) {
   opsi = opsi || {};
   opsi.muteHttpExceptions = true;
   opsi.headers = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
   const r = UrlFetchApp.fetch(url, opsi);
-  if (r.getResponseCode() >= 300) throw new Error('Google Drive menolak permintaan (HTTP ' + r.getResponseCode() + '). Periksa DRIVE_MASTER_FOLDER_ID dan izin akun.');
+  if (r.getResponseCode() >= 300) {
+    throw new Error('Google Drive menolak permintaan (HTTP ' + r.getResponseCode() + ') untuk arsip lama ini. Akun Apps Script tidak dapat mengaksesnya; ' +
+      'unggah ulang arsipnya dari Riwayat BAST (akan disimpan di folder master).');
+  }
   return r;
 }
 
@@ -292,68 +301,65 @@ function bastIdValid_(id) {
   return /^[\w-]{10,100}$/.test(String(id || ''));
 }
 
-function bastFolder_(induk, nama) {
-  const q = "name='" + nama.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "' and '" + induk + "' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false";
-  const cari = JSON.parse(bastDrive_(BAST_DRIVE_ + '?q=' + encodeURIComponent(q) + '&fields=files(id)&pageSize=1&supportsAllDrives=true&includeItemsFromAllDrives=true').getContentText());
-  if (cari.files && cari.files[0]) return cari.files[0].id;
-  const baru = JSON.parse(bastDrive_(BAST_DRIVE_ + '?fields=id&supportsAllDrives=true', {
-    method: 'post', contentType: 'application/json',
-    payload: JSON.stringify({ name: nama, mimeType: 'application/vnd.google-apps.folder', parents: [induk] })
-  }).getContentText());
-  if (!baru.id) throw new Error('Gagal membuat folder di Google Drive.');
-  return baru.id;
+function bastLink_(id) {
+  return 'https://drive.google.com/file/d/' + id + '/view';
 }
 
 function bastBuang_(fileId) {
   bastDrive_(BAST_DRIVE_ + '/' + fileId + '?supportsAllDrives=true', { method: 'patch', contentType: 'application/json', payload: JSON.stringify({ trashed: true }) });
 }
 
+/** Pastikan sheet BastBA punya semua kolom (mis. ArsipMaster) walau setupDatabase belum dijalankan ulang setelah pembaruan. */
+function bastKolomAda_(def) {
+  const sh = bastLembar_(def), ada = bastJudul_(sh);
+  const kurang = def.kol.map(function (c) { return c[0]; }).filter(function (h) { return ada.indexOf(h) === -1; });
+  if (kurang.length) sh.getRange(1, sh.getLastColumn() + 1, 1, kurang.length).setValues([kurang]).setFontWeight('bold');
+}
+
+/**
+ * Membaca arsip LAMA (belum di folder master) memakai akun Apps Script: untuk pratinjau sebelum dimigrasi dan sebagai sumber salinan
+ * saat migrasi. Arsip di folder master dibaca lewat Edge Function bop (di sini ditolak, jadi id sembarang dari halaman tidak bisa
+ * dipakai membaca file lain milik akun Apps Script).
+ */
 function bastArsipFile_(id) {
   const ba = bastCari_(id);
+  if (ba.arsip_master === '1') return bastGagal_('Arsip ini sudah di folder master Google Drive; dibaca lewat server BIMASATU, bukan Apps Script.');
   if (!bastIdValid_(ba.arsip_id)) return bastGagal_('Arsip belum ada.');
   const meta = JSON.parse(bastDrive_(BAST_DRIVE_ + '/' + ba.arsip_id + '?fields=mimeType,trashed&supportsAllDrives=true').getContentText());
-  if (meta.trashed || Object.keys(BAST_MAGIC_).indexOf(meta.mimeType) === -1) return bastGagal_('Arsip tidak ditemukan di Google Drive.');
+  if (meta.trashed || BAST_TIPE_ARSIP_.indexOf(meta.mimeType) === -1) return bastGagal_('Arsip tidak ditemukan di Google Drive.');
   const isi = bastDrive_(BAST_DRIVE_ + '/' + ba.arsip_id + '?alt=media&supportsAllDrives=true').getContent();
   return { success: true, mime: meta.mimeType, base64: Utilities.base64Encode(isi) };
 }
 
-function bastArsipHapus_(id) {
-  const ba = bastCari_(id);
-  if (bastIdValid_(ba.arsip_id)) bastBuang_(ba.arsip_id);
-  ba.arsip_id = ''; ba.arsip_link = ''; ba.diubah_pada = new Date();
+/**
+ * Mencatat arsip yang SUDAH tersimpan di folder master (diunggah Edge Function bop) pada Berita Acara: cukup id file; tautannya dibuat di sini.
+ * buangLama: bila arsip sebelumnya adalah arsip lama di luar folder master (milik akun Apps Script), file itu dibuang ke Sampah (kegagalan
+ * tidak menghalangi). Arsip sebelumnya yang sudah di folder master dibuang oleh Edge Function (parameter "ganti"), bukan di sini.
+ */
+function bastArsipSet_(id, arsipId, buangLama) {
+  if (!bastIdValid_(arsipId)) return bastGagal_('ID arsip tidak valid.');
+  bastKolomAda_(BAST_DEF_.ba);
+  const ba = bastCari_(id), lama = ba.arsip_master === '1' ? '' : ba.arsip_id;
+  ba.arsip_id = arsipId; ba.arsip_link = bastLink_(arsipId); ba.arsip_master = '1'; ba.diubah_pada = new Date();
   bastTulis_(BAST_DEF_.ba, ba._baris, ba);
-  return { success: true };
+  let dibuang = false;
+  if (buangLama && bastIdValid_(lama) && lama !== arsipId) {
+    try { bastBuang_(lama); dibuang = true; } catch (err) { /* file lama gagal dibuang: arsip baru tetap tercatat */ }
+  }
+  return { success: true, link: ba.arsip_link, lamaDibuang: dibuang };
 }
 
-function bastArsipUnggah_(id, namaFile, base64) {
-  if (!DRIVE_MASTER_FOLDER_ID) return bastGagal_('DRIVE_MASTER_FOLDER_ID di bagian atas Code.gs belum diisi.');
-  const ba = bastCari_(id);
-  const ext = (String(namaFile || '').split('.').pop() || '').toLowerCase(), tipe = BAST_TIPE_[ext];
-  if (!tipe) return bastGagal_('Hanya PDF, JPG, atau PNG.');
-  if (typeof base64 !== 'string' || !base64) return bastGagal_('Pilih satu file arsip.');
-  const isi = Utilities.base64Decode(base64);
-  if (isi.length > BAST_MAKS_MB * 1024 * 1024) return bastGagal_('Ukuran file melebihi ' + BAST_MAKS_MB + ' MB.');
-  if (!BAST_MAGIC_[tipe].every(function (b, i) { return (isi[i] & 255) === b; })) return bastGagal_('Isi file tidak sesuai ekstensinya.');
-
-  const mi = BAST_BULAN_.findIndex(function (b) { return ba.bln.toLowerCase().indexOf(b.toLowerCase()) === 0; });
-  const bln = mi >= 0 ? mi + 1 : (ba.bln_srt >= 1 && ba.bln_srt <= 12 ? ba.bln_srt : 0);
-  let induk = DRIVE_MASTER_FOLDER_ID;
-  ['BAST NR', String(ba.tahun), bln ? ('0' + bln).slice(-2) + ' ' + BAST_BULAN_[bln - 1] : 'Lainnya'].forEach(function (nama) { induk = bastFolder_(induk, nama); });
-  const peg = bastBaca_(BAST_DEF_.pegawai).filter(function (x) { return x.nip === ba.pihak_kedua_nip; })[0];
-  const nama = 'BAST KUA ' + String((peg && peg.kua) || 'KUA').replace(/[\\/:*?"<>|]/g, '_') + ' - ' + bastPad3_(ba.nomor_urut) + '-' + ba.tahun + '.' + ext;
-
-  const batas = 'bast' + Utilities.getUuid().replace(/-/g, '');
-  const kepala = Utilities.newBlob('--' + batas + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify({ name: nama, parents: [induk] }) +
-    '\r\n--' + batas + '\r\nContent-Type: ' + tipe + '\r\n\r\n').getBytes();
-  const ekor = Utilities.newBlob('\r\n--' + batas + '--').getBytes();
-  const hasil = JSON.parse(bastDrive_('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink', {
-    method: 'post', contentType: 'multipart/related; boundary=' + batas, payload: kepala.concat(isi, ekor)
-  }).getContentText());
-  if (!hasil.id) throw new Error('Gagal mengunggah arsip ke Google Drive.');
-  if (bastIdValid_(ba.arsip_id)) { try { bastBuang_(ba.arsip_id); } catch (err) { /* arsip lama gagal dibuang: tidak menghalangi */ } }
-  ba.arsip_id = hasil.id; ba.arsip_link = hasil.webViewLink || 'https://drive.google.com/file/d/' + hasil.id + '/view'; ba.diubah_pada = new Date();
+/**
+ * Mengosongkan arsip pada Berita Acara. Arsip lama (di luar folder master) langsung dibuang ke Sampah di sini; arsip di folder master
+ * dibuang oleh Edge Function (halaman memanggilnya sesudah ini), jadi id-nya dikembalikan.
+ */
+function bastArsipHapus_(id) {
+  bastKolomAda_(BAST_DEF_.ba);
+  const ba = bastCari_(id), master = ba.arsip_master === '1', sebelumnya = ba.arsip_id;
+  ba.arsip_id = ''; ba.arsip_link = ''; ba.arsip_master = ''; ba.diubah_pada = new Date();
   bastTulis_(BAST_DEF_.ba, ba._baris, ba);
-  return { success: true, fileId: ba.arsip_id, link: ba.arsip_link };
+  if (!master && bastIdValid_(sebelumnya)) { try { bastBuang_(sebelumnya); } catch (err) { /* abaikan */ } }
+  return { success: true, master: master, arsipId: master ? sebelumnya : '' };
 }
 
 /* ============================ PINDAH DARI SUPABASE (sekali jalan, aman diulang) ============================ */

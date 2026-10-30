@@ -1,10 +1,13 @@
 /* =====================================================================================
-   bast.js: menu BAST NR (khusus admin)
+   bast.js: menu BAST NR (menu bast, bast-buat, bast-pegawai, bast-setting; diatur di Hak Akses Menu)
    Data di Spreadsheet lewat Apps Script (gas() di core.js; backend: apps-script/Bast.gs). BX = logika asli yang disalin apa adanya.
+   ARSIP dokumen tertandatangan disimpan di FOLDER MASTER Google Drive (satu folder dengan LPJ BOP) oleh Edge Function bop (api() di
+   core.js: bast-upload, bast-file, bast-hapus, bast-salin); Apps Script hanya mencatat id-nya (bastArsipSet). Arsip lama (diunggah
+   versi sebelumnya ke folder lain) tetap terbaca dan dapat dipindahkan ke folder master dari Pengaturan BAST.
    ===================================================================================== */
 
-/* ====== BAST NR: Berita Acara Serah Terima Sarana Administrasi NR (khusus admin) ======
-   Data: Spreadsheet + Apps Script (Bast.gs; sheet BastPegawai, BastBA, BastSetting). Arsip dokumen: Google Drive lewat Apps Script.
+/* ====== BAST NR: Berita Acara Serah Terima Sarana Administrasi NR ======
+   Data: Spreadsheet + Apps Script (Bast.gs; sheet BastPegawai, BastBA, BastSetting). Arsip dokumen: folder master Google Drive lewat Edge Function.
    BX = kode lama (script.js + pdf.js) yang disalin apa adanya: format nomor surat, alamat lengkap, dan PDF resmi. */
 const BX = (() => {
   let _settingsCache = {}, _pegawaiCache = [];
@@ -571,8 +574,54 @@ const bnReset = () => Object.assign(B, { on: false, peg: [], ba: [], set: {} });
 const bnHead = (t, s, btn = '') => `<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4"><div><h4 class="mb-1">${t}</h4><p class="mb-0">${s}</p></div>${btn}</div><div id="bmsg"></div>`;
 const bnById = id => B.ba.find(r => r.id == id);
 const bnB64Blob = (b64, mime) => { const t = atob(b64), u = new Uint8Array(t.length); for (let i = 0; i < t.length; i++) u[i] = t.charCodeAt(i); return new Blob([u], { type: mime }); };
-const bnFileB64 = f => new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1] || ''); fr.onerror = () => no(new Error('File tidak dapat dibaca.')); fr.readAsDataURL(f); });
-const bnArsipLoad = async id => { const j = await gas('bastArsipFile', { id }), blob = bnB64Blob(j.base64, j.mime); return { blob: async () => blob }; };   // bentuk yang diminta openViewer
+/* ---- Arsip dokumen tertandatangan ----
+   Jenis menurut kolom ArsipId / ArsipLink / ArsipMaster di Spreadsheet:
+     master = arsipId terisi dan arsipMaster '1'  : sudah di folder master (dibaca/dihapus/diganti lewat Edge Function bop)
+     lama   = arsipId terisi, arsipMaster kosong  : unggahan versi sebelumnya di folder lain (dibaca lewat Apps Script; dapat dipindah)
+     tautan = hanya arsipLink Google Drive        : data lama tanpa id (dibuka lewat tautan; dapat disalin bila dibagikan "siapa saja")
+     kosong = belum ada arsip */
+const BN_DRIVE = /^https:\/\/(drive|docs)\.google\.com\//;
+const bnArsipJenis = r => r.arsipId ? (r.arsipMaster === '1' ? 'master' : 'lama') : (BN_DRIVE.test(r.arsipLink || '') ? 'tautan' : 'kosong');
+const bnArsipIkon = r => ({
+  master: '<i class="bx bx-paperclip text-success" role="img" aria-label="Arsip di folder master" title="Arsip di folder master"></i>',
+  lama: '<i class="bx bx-paperclip text-warning" role="img" aria-label="Arsip lama, belum di folder master" title="Arsip lama (belum di folder master)"></i>',
+  tautan: '<i class="bx bx-link text-warning" role="img" aria-label="Tautan arsip lama, belum di folder master" title="Tautan arsip lama (belum di folder master)"></i>',
+  kosong: '' })[bnArsipJenis(r)];
+const BN_MAX_ARSIP = 5 * 1024 * 1024;   // sama dengan MAX_BAST di Edge Function
+// Penentu folder dan nama file di Drive: BAST NR / <tahun> / <MM Bulan> / BAST KUA <KUA> - <nnn>-<tahun>.<ext> (bulan 0 = tidak dikenal)
+const bnTarget = r => ({ tahun: r.tahun, bulan: BX.BULAN_ID.findIndex(b => b.toUpperCase() === String(r.bln || '').trim().toUpperCase()) + 1,
+  nomor: r.nomorUrut, kua: BX.getKuaLabelForRecord_(r) || 'Tanpa KUA', ba: r.id });
+const bnKirim = async (file, t, extra = {}) => {   // unggah satu file ke folder master -> { ok, id, link, ada? }
+  const fd = new FormData(); fd.append('file', file);
+  Object.entries({ ...t, ...extra }).forEach(([k, v]) => { if (v !== '' && v != null) fd.append(k, v); });
+  return (await api({ action: 'bast-upload' }, { method: 'POST', body: fd })).json();
+};
+const bnArsipLoad = async r => {   // bentuk yang diminta openViewer: objek dengan blob()
+  if (r.arsipMaster === '1') return api({ action: 'bast-file', id: r.arsipId });   // folder master: dibaca server BIMASATU
+  const j = await gas('bastArsipFile', { id: r.id }), blob = bnB64Blob(j.base64, j.mime);   // arsip lama: dibaca Apps Script
+  return { blob: async () => blob };
+};
+// Pindahkan SATU arsip lama ke folder master dan catat di Berita Acara. Arsip lama dengan id: dibaca lewat Apps Script lalu diunggah;
+// bila Apps Script tidak dapat membacanya (atau hanya ada tautan): disalin server dari tautan Drive yang dibagikan "siapa saja".
+// Aman diulang: file yang sudah pernah disalin dikenali server (tidak digandakan). buang = file lama dibuang ke Sampah setelah berhasil.
+async function bnPindah(r, buang) {
+  const t = bnTarget(r);
+  let j = null, galat = '';
+  if (r.arsipId && r.arsipMaster !== '1') {
+    try {
+      const f = await gas('bastArsipFile', { id: r.id }), ext = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png' }[f.mime] || 'pdf';
+      j = await bnKirim(new File([bnB64Blob(f.base64, f.mime)], 'arsip.' + ext, { type: f.mime }), t, { lama: r.arsipId });
+    } catch (e) { galat = e.message; }
+  }
+  if (!j && BN_DRIVE.test(r.arsipLink || '')) {
+    try { j = await (await api({ action: 'bast-salin' }, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: r.arsipLink, ...t }) })).json(); }
+    catch (e) { galat = galat ? `${galat} Disalin dari tautan: ${e.message}` : e.message; }
+  }
+  if (!j) throw new Error(galat || 'Arsip lama tidak dapat dibaca.');
+  const s = await gas('bastArsipSet', { id: r.id, arsipId: j.id, buangLama: !!buang && !!r.arsipId && r.arsipMaster !== '1' });
+  Object.assign(r, { arsipId: j.id, arsipLink: j.link || s.link, arsipMaster: '1' });
+  return j;
+}
 const bnSim = r => `<span class="badge bg-label-${r.statusSimkah === 'Sudah' ? 'success' : 'warning'}">${esc(r.statusSimkah)}</span>`;
 const bnRange = t => { const m = /(\d+)\s*-\s*(\d+)/.exec(t || ''); return m ? [+m[1], +m[2]] : null; };
 const bnNext = y => B.set.LAST_NUMBER_YEAR === y ? (parseInt(B.set.LAST_NUMBER, 10) || 0) + 1 : (parseInt(B.set.NOMOR_AWAL_SURAT, 10) || 1);
@@ -620,7 +669,7 @@ function bnRows() {
   const L = B.ba.filter(r => (!B.thn || r.tahun === B.thn) && (!B.bln || String(r.bln).toUpperCase().startsWith(B.bln.toUpperCase())) && (!B.kua || kua(r) === B.kua) && (!B.sim || r.statusSimkah === B.sim)
     && (!q || [r.noSurat, r.tahun, r.pihakSatuNama, r.pihakKeduaNama, kua(r), r.porporasi, r.hari, r.bln].join(' ').toLowerCase().includes(q)));
   const n = Math.max(1, Math.ceil(L.length / 15)); B.pg = Math.min(B.pg, n);
-  $('btb').innerHTML = L.slice((B.pg - 1) * 15, B.pg * 15).map(r => `<tr><td class="fw-semibold">${r.noSurat}/${esc(r.tahun)}</td><td>${esc(r.hari)}, ${esc(r.tgl)} ${esc(r.bln)}</td><td>${esc(r.pihakKeduaNama)}</td><td>${esc(kua(r))}</td><td>${esc(r.porporasi)}</td><td>${bnSim(r)}</td><td>${r.arsipId || r.arsipLink ? '<i class="bx bx-paperclip"></i>' : ''}</td>
+  $('btb').innerHTML = L.slice((B.pg - 1) * 15, B.pg * 15).map(r => `<tr><td class="fw-semibold">${r.noSurat}/${esc(r.tahun)}</td><td>${esc(r.hari)}, ${esc(r.tgl)} ${esc(r.bln)}</td><td>${esc(r.pihakKeduaNama)}</td><td>${esc(kua(r))}</td><td>${esc(r.porporasi)}</td><td>${bnSim(r)}</td><td>${bnArsipIkon(r)}</td>
     <td class="text-end text-nowrap"><button class="btn btn-sm btn-outline-secondary" data-act="bdet" data-k="${r.id}">Detail</button> <button class="btn btn-sm btn-outline-secondary px-2" data-act="bpdf" data-k="${r.id}" title="Unduh PDF"><i class="bx bx-download"></i></button></td></tr>`).join('')
     || '<tr><td colspan="8" class="text-center py-4">Tidak ada Berita Acara yang cocok.</td></tr>';
   $('bpg').innerHTML = `<span>${L.length} data · halaman ${B.pg}/${n}</span><span><button class="btn btn-sm btn-outline-secondary" data-act="bprev"${B.pg <= 1 ? ' disabled' : ''}>‹</button> <button class="btn btn-sm btn-outline-secondary" data-act="bnext"${B.pg >= n ? ' disabled' : ''}>›</button></span>`;
@@ -637,17 +686,19 @@ function bnClick(e) {
 }
 function bnDetail(r) {
   if (!r) return;
-  const nx = r.statusSimkah === 'Sudah' ? 'Belum' : 'Sudah', lama = /^https:\/\/(drive|docs)\.google\.com\//.test(r.arsipLink);
+  const nx = r.statusSimkah === 'Sudah' ? 'Belum' : 'Sudah', jenis = bnArsipJenis(r);
   const kv = (l, v) => `<div class="col-sm-6"><small class="d-block text-uppercase">${l}</small>${esc(v) || '-'}</div>`;
   const pihak = (t, p, kat, al) => `<h6 class="mt-4 mb-2">${t}</h6><div class="row g-2">${kv('Nama', r[p + 'Nama'])}${kv('NIP', r[p + 'Nip'])}${kv('Jabatan', r[p + 'Jabatan'])}${kv('Tempat Kerja', BX.getTempatKerjaLabel_(r[p + 'Nip'], r[p + 'Jabatan'], kat))}<div class="col-12"><small class="d-block text-uppercase">Alamat</small>${esc(al)}</div></div>`;
   bnDlg(`<div class="d-flex justify-content-between align-items-start"><div><h5 class="mb-1">Berita Acara ${r.noSurat}/${esc(r.tahun)}</h5><div>${esc(BX.buildNomorSuratLengkap(r.nomorUrut, r.blnSrt, r.tahun))}</div></div>${bnSim(r)}</div>
     <div class="row g-2 mt-2">${kv('Hari, Tanggal', `${r.hari}, ${r.tgl} ${r.bln} ${r.tahun}`)}${kv('Mengetahui (Kasi)', r.kasiNama)}</div>
     ${pihak('Pihak Pertama', 'pihakSatu', 'Bimas Islam', BX.resolveAlamatLengkapPihakSatu_(r))}${pihak('Pihak Kedua', 'pihakKedua', 'KUA', BX.resolveAlamatLengkapPihakKedua_(r))}
     <h6 class="mt-4 mb-2">Data Sarana</h6><div class="row g-2">${kv('Banyaknya Buku NA', r.banyakNaBuku)}${kv('N', r.banyakN)}${kv('NB', r.banyakNb)}${kv('No. Seri', r.noSeri)}${kv('Nomor Porporasi', r.porporasi)}</div>
-    <h6 class="mt-4 mb-2">Arsip dokumen tertandatangan</h6>
-    <div class="d-flex flex-wrap gap-2 mb-2">${r.arsipId ? '<button class="btn btn-sm btn-outline-primary" data-a="view"><i class="bx bx-show"></i> Lihat arsip</button><button class="btn btn-sm btn-outline-danger" data-a="adel"><i class="bx bx-trash"></i> Hapus arsip</button>'
-      : lama ? `<a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="${esc(r.arsipLink)}"><i class="bx bx-link-external"></i> Buka arsip lama (Drive)</a>` : '<span class="small">Belum ada arsip.</span>'}</div>
-    <input type="file" id="bfa" class="form-control form-control-sm" accept="application/pdf,image/*"><small>PDF/JPG/PNG. Mengunggah file baru menggantikan arsip yang ada.</small>
+    <h6 class="mt-4 mb-2">Arsip dokumen tertandatangan${jenis === 'master' ? ' <span class="badge bg-label-success ms-1">Folder master</span>' : jenis === 'kosong' ? '' : ' <span class="badge bg-label-warning ms-1">Arsip lama</span>'}</h6>
+    <div class="d-flex flex-wrap gap-2 mb-2">${r.arsipId ? '<button class="btn btn-sm btn-outline-primary" data-a="view"><i class="bx bx-show"></i> Lihat arsip</button><button class="btn btn-sm btn-outline-danger" data-a="adel"><i class="bx bx-trash"></i> Hapus arsip</button>' : ''}${
+      jenis === 'tautan' ? `<a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="${esc(r.arsipLink)}"><i class="bx bx-link-external"></i> Buka arsip lama (Drive)</a>` : ''}${
+      jenis === 'lama' || jenis === 'tautan' ? '<button class="btn btn-sm btn-outline-success" data-a="pindah"><i class="bx bx-transfer"></i> Pindahkan ke folder master</button>' : ''}${
+      jenis === 'kosong' ? '<span class="small">Belum ada arsip.</span>' : ''}</div>
+    <input type="file" id="bfa" class="form-control form-control-sm" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"><small>PDF/JPG/PNG, maksimal 5 MB. Disimpan di folder master Google Drive (BAST NR / tahun / bulan). Mengunggah file baru menggantikan arsip yang ada.</small>
     <div class="d-flex flex-wrap justify-content-between gap-2 mt-4"><div class="d-flex gap-2"><button class="btn btn-outline-danger" data-a="del"><i class="bx bx-trash"></i> Hapus BA</button><button class="btn btn-outline-secondary" data-a="sim">Ubah SIMKAH ke ${nx}</button></div>
       <div class="d-flex gap-2"><button class="btn btn-outline-secondary" data-a="pdf"><i class="bx bx-download"></i> PDF</button><button class="btn btn-primary" data-x>Tutup</button></div></div>`,
   d => {
@@ -662,16 +713,40 @@ function bnDetail(r) {
       try { await gas('bastDeleteBA', { id: r.id }); } catch (e) { return jpToast(e.message, 'danger'); }
       B.ba = B.ba.filter(x => x.id !== r.id); bnRows(); jpToast('Berita Acara dihapus.');
     }, true));
-    on('view', () => openViewer([{ name: `Berita Acara ${r.noSurat}/${r.tahun}` }], 0, () => bnArsipLoad(r.id)));   // penampil yang sama dengan menu BOP (dialog tersendiri, detail BA tetap terbuka)
+    on('view', () => openViewer([{ name: `Berita Acara ${r.noSurat}/${r.tahun}` }], 0, () => bnArsipLoad(r)));   // penampil yang sama dengan menu BOP (dialog tersendiri, detail BA tetap terbuka)
     on('adel', () => jpAsk('Hapus arsip?', 'File arsip dipindah ke Sampah Google Drive.', 'Hapus', async () => {
-      try { await gas('bastArsipHapus', { id: r.id }); r.arsipId = r.arsipLink = ''; bnRows(); jpToast('Arsip dihapus.'); } catch (e) { jpToast(e.message, 'danger'); }
+      try {
+        const j = await gas('bastArsipHapus', { id: r.id });   // arsip lama dibuang Apps Script; arsip di folder master dibuang server di bawah ini
+        r.arsipId = r.arsipLink = r.arsipMaster = ''; bnRows();
+        if (j.master && j.arsipId) {
+          try { await api({ action: 'bast-hapus', id: j.arsipId }, { method: 'POST' }); }
+          catch (e) { return jpToast('Arsip dilepas dari Berita Acara, tetapi file di Google Drive gagal dibuang: ' + e.message, 'warning'); }
+        }
+        jpToast('Arsip dihapus.');
+      } catch (e) { jpToast(e.message, 'danger'); }
     }, true));
-    $('bfa').onchange = async e => {
-      const f = e.target.files[0]; if (!f) return;
-      if (f.size > 5 * 1024 * 1024) return jpToast('Ukuran file melebihi 5 MB.', 'danger');
-      jpToast('Mengunggah arsip…', 'warning');
-      try { const j = await gas('bastArsipUnggah', { id: r.id, name: f.name, base64: await bnFileB64(f) }); r.arsipId = j.fileId; r.arsipLink = j.link; d.close(); bnRows(); jpToast('Arsip diunggah.'); }
-      catch (x) { jpToast(x.message, 'danger'); }
+    on('pindah', async () => {
+      const b = d.querySelector('[data-a=pindah]'); b.disabled = true; jpToast('Memindahkan arsip ke folder master…', 'info');
+      try { await bnPindah(r, false); d.close(); bnRows(); jpToast('Arsip dipindahkan ke folder master.'); }
+      catch (e) { b.disabled = false; jpToast(e.message, 'danger'); }
+    });
+    $('bfa').onchange = async e => {   // unggah ke folder master (server), lalu catat id-nya di Berita Acara; arsip sebelumnya dibuang SESUDAH yang baru tercatat
+      const inp = e.target, f = inp.files[0]; if (!f) return;
+      if (f.size > BN_MAX_ARSIP) { inp.value = ''; return jpToast('Ukuran file melebihi 5 MB.', 'danger'); }
+      if (!/\.(pdf|jpe?g|png)$/i.test(f.name)) { inp.value = ''; return jpToast('Hanya PDF, JPG, atau PNG.', 'danger'); }
+      inp.disabled = true; jpToast('Mengunggah arsip ke folder master…', 'info');
+      const sebelumnya = r.arsipMaster === '1' ? r.arsipId : '', lama = jenis === 'lama';
+      let j;
+      try { j = await bnKirim(f, bnTarget(r)); }
+      catch (x) { inp.disabled = false; inp.value = ''; return jpToast(x.message, 'danger'); }
+      try { await gas('bastArsipSet', { id: r.id, arsipId: j.id, buangLama: lama }); }
+      catch (x) {
+        api({ action: 'bast-hapus', id: j.id }, { method: 'POST' }).catch(() => 0);   // file yang gagal dicatat tidak dibiarkan menggantung di folder master
+        inp.disabled = false; inp.value = '';
+        return jpToast('Arsip terunggah tetapi gagal dicatat pada Berita Acara: ' + x.message + ' Silakan unggah ulang.', 'danger');
+      }
+      if (sebelumnya && sebelumnya !== j.id) api({ action: 'bast-hapus', id: sebelumnya }, { method: 'POST' }).catch(() => 0);   // arsip lama di folder master ke Sampah (tidak menghalangi)
+      Object.assign(r, { arsipId: j.id, arsipLink: j.link, arsipMaster: '1' }); d.close(); bnRows(); jpToast('Arsip diunggah ke folder master.');
     };
   }, 'min(760px,95vw)');
 }
@@ -828,12 +903,58 @@ async function pageBastSetting() {
   $('bsf').innerHTML = `<div class="card"><div class="card-body"><div class="row g-3">${F.map(([k, l]) => `<div class="${k.length > 16 ? 'col-12' : 'col-md-6'}"><label class="form-label">${l}</label><input class="form-control" data-k="${k}" value="${esc(B.set[k])}"></div>`).join('')}</div>
     <p class="small mt-3 mb-1">Placeholder format: {NOMOR} {KODE_KANTOR} {BULAN_ROMAWI} {KODE_KLASIFIKASI} {BULAN_ANGKA} {TAHUN}</p>
     <p class="small">Nomor terakhir terpakai: <b>${esc(B.set.LAST_NUMBER)}</b> (tahun ${esc(B.set.LAST_NUMBER_YEAR) || '-'}). Nomor berikutnya mengikuti otomatis dan kembali ke nomor awal tiap tahun baru.</p>
-    <div class="d-flex justify-content-end"><button class="btn btn-primary" id="bs-save"><i class="bx bx-save"></i> Simpan Pengaturan</button></div></div></div>`;
+    <div class="d-flex justify-content-end"><button class="btn btn-primary" id="bs-save"><i class="bx bx-save"></i> Simpan Pengaturan</button></div></div></div>
+    <div class="card mt-4"><div class="card-body" id="bmig"></div></div>`;
   $('bs-save').onclick = async () => {
     const rows = [...document.querySelectorAll('#bsf [data-k]')].map(i => ({ key: i.dataset.k, value: i.value.trim() }));
     try { await gas('bastSaveSetting', { rows }); } catch (e) { return jpToast(e.message, 'danger'); }
     rows.forEach(x => { B.set[x.key] = x.value; }); BX.set(B.set, B.peg); jpToast('Pengaturan disimpan.');
   };
+  bnMig();
+}
+
+/* ---- Pindahkan arsip lama ke folder master ----
+   Semua arsip dokumen tertandatangan kini disimpan di folder master Google Drive (satu folder dengan LPJ BOP). Arsip yang diunggah versi
+   sebelumnya ada di folder lain (milik akun Apps Script): kartu ini menghitungnya dan memindahkannya satu per satu (berurutan, aman diulang;
+   yang sudah di folder master dilewati dan file tidak digandakan). Kegagalan satu arsip tidak menghentikan yang lain. */
+let bnMigStop = false;
+function bnMig() {
+  const el = $('bmig'); if (!el) return;
+  const c = { master: 0, lama: 0, tautan: 0, kosong: 0 };
+  B.ba.forEach(r => c[bnArsipJenis(r)]++);
+  const sisa = c.lama + c.tautan;
+  el.innerHTML = `<h5 class="mb-1">Arsip di folder master</h5>
+    <p class="mb-3">Arsip dokumen tertandatangan disimpan di folder master Google Drive: <code>${esc(CFG.nama)} / BAST NR / tahun / bulan</code>, satu folder induk dengan LPJ BOP. Arsip yang diunggah dengan versi sebelumnya masih berada di folder lain; pindahkan ke folder master di sini.</p>
+    <div class="row g-3 mb-3">${jpCard('bx-folder', 'success', c.master, 'Sudah di folder master')}${jpCard('bx-transfer', sisa ? 'warning' : 'secondary', sisa, 'Arsip lama (perlu dipindah)')}${jpCard('bx-file', 'secondary', c.kosong, 'Belum ada arsip')}</div>
+    ${sisa ? `<div class="form-check mb-3"><input class="form-check-input" type="checkbox" id="bm-buang"><label class="form-check-label" for="bm-buang">Buang file lama ke Sampah Google Drive setelah berhasil disalin <span class="small">(bawaan: file lama dibiarkan; tidak berlaku bagi arsip yang hanya punya tautan)</span></label></div>
+      <div class="d-flex flex-wrap gap-2"><button class="btn btn-primary" id="bm-go"><i class="bx bx-transfer"></i> Pindahkan ${sisa} arsip ke folder master</button><button class="btn btn-outline-secondary d-none" id="bm-stop">Hentikan</button></div>
+      <p class="small mt-2 mb-0">Perkiraan ±${Math.max(1, Math.ceil(sisa * 6 / 60))} menit. Biarkan tab ini terbuka sampai selesai. Arsip dapat juga dipindahkan satu per satu dari Detail di Riwayat.</p>` : note('Semua arsip sudah berada di folder master.', 'success')}
+    <div id="bm-log" class="small mt-3" aria-live="polite"></div><div id="bm-res" class="mt-2"></div>`;
+  if (sisa) {
+    $('bm-go').onclick = bnMigJalan;
+    $('bm-stop').onclick = () => { bnMigStop = true; $('bm-stop').disabled = true; $('bm-log').textContent = 'Menghentikan setelah arsip ini selesai…'; };
+  }
+}
+async function bnMigJalan() {
+  const ep = EP, buang = $('bm-buang').checked;
+  const L = B.ba.filter(r => ['lama', 'tautan'].includes(bnArsipJenis(r))).sort((a, b) => a.tahun - b.tahun || a.nomorUrut - b.nomorUrut);
+  bnMigStop = false; $('bm-go').disabled = true; $('bm-buang').disabled = true; $('bm-stop').disabled = false; $('bm-stop').classList.remove('d-none'); $('bm-res').innerHTML = '';
+  let ok = 0, ada = 0; const gagal = [];
+  for (let i = 0; i < L.length && !bnMigStop; i++) {
+    if (!live(ep)) return;   // pindah halaman: berhenti (yang sudah berhasil tetap tercatat)
+    const r = L[i];
+    $('bm-log').textContent = `Memindahkan ${i + 1} dari ${L.length}: Berita Acara ${r.noSurat}/${r.tahun}…`;
+    try { const j = await bnPindah(r, buang); if (j.ada) ada++; else ok++; }
+    catch (e) { gagal.push({ r, pesan: e.message }); }
+  }
+  if (!live(ep)) return;
+  const henti = bnMigStop && ok + ada + gagal.length < L.length;
+  const ringkas = `${ok} arsip dipindahkan${ada ? `, ${ada} sudah ada di folder master (hanya dicatat)` : ''}${gagal.length ? `, ${gagal.length} gagal` : ''}${henti ? ' (dihentikan)' : ''}.`;
+  bnMig();   // hitung ulang kartu dari data terbaru
+  $('bm-res').innerHTML = note(ringkas, gagal.length ? 'warning' : 'success') + (gagal.length
+    ? `<div class="small">Yang gagal (perbaiki lalu jalankan lagi; yang sudah masuk tidak digandakan):<ul class="mb-0">${
+      gagal.slice(0, 40).map(g => `<li>BA ${esc(g.r.noSurat)}/${esc(g.r.tahun)} (${esc(BX.getKuaLabelForRecord_(g.r) || '-')}): ${esc(g.pesan)}</li>`).join('')}${gagal.length > 40 ? '<li>… dan lainnya.</li>' : ''}</ul></div>` : '');
+  jpToast(ringkas, gagal.length ? 'warning' : 'success');
 }
 
 

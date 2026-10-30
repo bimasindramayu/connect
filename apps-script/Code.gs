@@ -2,19 +2,26 @@
  * =====================================================================
  *  BIMASATU API - Google Apps Script (Spreadsheet sebagai database)
  *  Melayani menu Sertifikat Masjid/Musala, Sertifikat Arah Kiblat, dan
- *  Pengaturan Sertifikat, serta BAST NR (Bast.gs).
+ *  Pengaturan Sertifikat, serta BAST NR (Bast.gs). Drive TIDAK lagi dipakai untuk
+ *  arsip baru: semua dokumen berada di folder master BIMASATU yang dikelola
+ *  Edge Function "bop" (lihat Bast.gs).
  * =====================================================================
  *
  *  Website BIMASATU memanggil Web App ini lewat fetch(). Login TIDAK dikelola
  *  di sini: website mengirim token login Supabase (field "token"), lalu Apps
- *  Script menanyakannya ke Supabase dan hanya melayani akun ber-role admin.
+ *  Script menanyakan ke Supabase siapa pemilik token itu dan menu apa saja yang
+ *  boleh dibuka perannya (fungsi akses_saya; diatur admin di halaman "Hak Akses
+ *  Menu"). Tiap aksi di bawah menyebut menu yang diperlukannya: akun yang
+ *  perannya tidak diberi menu itu ditolak. Admin selalu boleh.
  *  Hasil pemeriksaan disimpan di cache 5 menit, jadi Supabase hanya terkena
- *  beberapa permintaan kecil; perubahan role atau pencabutan sesi berlaku
- *  paling lama 5 menit. Sheet "Users" dan password lama tidak dipakai lagi.
+ *  beberapa permintaan kecil; perubahan role, hak akses menu, atau pencabutan
+ *  sesi berlaku paling lama 5 menit. Sheet "Users" dan password lama tidak
+ *  dipakai lagi.
  *
  *  Pemasangan / pembaruan (project Apps Script yang sama dengan sertifikat):
- *   1. Ganti isi Code.gs dengan file ini. Masjid.gs, Kiblat.gs, dan
- *      Pengaturan.gs tidak berubah. Hapus Dokumen.gs bila masih ada.
+ *   1. Ganti isi Code.gs dan Bast.gs dengan file ini. Masjid.gs, Kiblat.gs, dan
+ *      Pengaturan.gs tidak berubah. Hapus Dokumen.gs bila masih ada. Setelah
+ *      menempel Code.gs, pastikan SUPABASE_URL dan SUPABASE_KEY di bawah masih benar.
  *   2. Project Settings > centang "Show appsscript.json manifest file in
  *      editor", lalu ganti isi appsscript.json dengan berkas dari paket ini.
  *   3. Jalankan setupDatabase (aman diulang), lalu authorizeAccess. Setujui
@@ -32,13 +39,12 @@
 const SUPABASE_URL = 'https://lpfwkitppdnlcakkncov.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_AfVmUT86ttPMaiO3iUmJew_u3l3IBPF';
 
-// ID folder master Google Drive BIMASATU (nilai DRIVE_ROOT_FOLDER_ID di Supabase Secrets,
-// atau bagian akhir URL folder tersebut di Drive). Dipakai arsip BAST NR (Bast.gs).
-const DRIVE_MASTER_FOLDER_ID = '';
+// (DRIVE_MASTER_FOLDER_ID sudah tidak dipakai: arsip BAST NR kini disimpan Edge Function "bop" ke folder master
+// BIMASATU dengan akun Google yang sama dengan LPJ BOP. Bila baris itu masih ada di salinan Anda, boleh dihapus.)
 
 /* ========================================================================== */
 
-const VERSI_ = '1.1 (login Supabase lewat profiles; sertifikat + BAST NR)';
+const VERSI_ = '1.2 (hak akses menu per peran; arsip BAST NR lewat folder master)';
 
 const SHEET_MASJID = 'DataMasjid';
 const SHEET_PENGATURAN = 'Pengaturan';
@@ -57,52 +63,61 @@ const PESAN_SESI_ = 'Sesi tidak valid atau sudah berakhir. Silakan login ulang.'
  * bastActions_() dengan bentuk yang sama, jadi Code.gs tidak perlu diubah.
  */
 function actions_() {
+  // menu: satu kunci menu atau daftar kunci (salah satu cukup); tanpa menu = semua akun yang sudah login. admin:true = khusus admin.
   const dasar = {
     whoami: {
       run: function (p, user) {
-        return { success: true, nama: user.nama, role: user.role };
+        return { success: true, nama: user.nama, role: user.role, menus: user.menus };
       }
     },
     listMasjid: {
+      menu: 'sert-masjid',
       run: function () {
         return { success: true, data: listMasjid() };
       }
     },
     saveMasjid: {
+      menu: 'sert-masjid',
       write: true,
       run: function (p) {
         return saveMasjid(p.data);
       }
     },
     deleteMasjid: {
+      menu: 'sert-masjid',
       write: true,
       run: function (p) {
         return deleteMasjid(p.id);
       }
     },
     listKiblat: {
+      menu: 'sert-kiblat',
       run: function () {
         return { success: true, data: listKiblat() };
       }
     },
     saveKiblat: {
+      menu: 'sert-kiblat',
       write: true,
       run: function (p) {
         return saveKiblat(p.data);
       }
     },
     deleteKiblat: {
+      menu: 'sert-kiblat',
       write: true,
       run: function (p) {
         return deleteKiblat(p.id);
       }
     },
-    getPengaturan: {
+    getPengaturan: {   // data penanda tangan dipakai juga saat mencetak sertifikat Masjid dan Arah Kiblat
+      menu: ['sert-pengaturan', 'sert-masjid', 'sert-kiblat'],
       run: function () {
         return { success: true, data: getPengaturan() };
       }
     },
     savePengaturan: {
+      menu: 'sert-pengaturan',
       write: true,
       run: function (p) {
         return savePengaturan(p.data);
@@ -147,8 +162,9 @@ function tangani_(payload) {
     return { success: false, code: 'UNKNOWN_ACTION', message: 'Aksi tidak dikenali: ' + nama.substring(0, 40) };
   }
 
-  const user = requireAdmin_(payload.token);
+  const user = periksaToken_(payload.token);
   const aksi = daftar[nama];
+  izinkan_(aksi, user);
   if (!aksi.write) return aksi.run(payload, user);
 
   const kunci = LockService.getScriptLock();
@@ -175,7 +191,7 @@ function doGet() {
     status: 'ok',
     app: 'BIMASATU API',
     versi: VERSI_,
-    login: 'token Supabase, khusus admin',
+    login: 'token Supabase; menu yang boleh dibuka mengikuti Hak Akses Menu per peran',
     konfigurasiSupabase: !!(SUPABASE_URL && SUPABASE_KEY),
     deployedActions: Object.keys(actions_()),
     message: 'API BIMASATU aktif. Aksi data hanya lewat POST dengan token login.'
@@ -194,19 +210,29 @@ function galat_(kode, pesan) {
 
 /* ============================ OTENTIKASI ============================ */
 
-/** Lolos hanya untuk token Supabase yang sah milik akun ber-role admin. */
-function requireAdmin_(token) {
-  const user = periksaToken_(token);
-  if (user.role !== 'admin') throw galat_('FORBIDDEN', 'Menu ini hanya untuk admin.');
-  return user;
+/**
+ * Menolak aksi bila peran pemanggil tidak diberi menu yang diperlukan aksi itu (user.menus datang dari Supabase,
+ * bukan dari kiriman halaman). aksi.admin = khusus admin; aksi.menu = satu kunci atau daftar (salah satu cukup);
+ * tanpa keduanya = semua akun yang sudah login.
+ */
+function izinkan_(aksi, user) {
+  if (aksi.admin) {
+    if (user.role !== 'admin') throw galat_('FORBIDDEN', 'Aksi ini hanya untuk admin.');
+    return;
+  }
+  if (!aksi.menu || user.role === 'admin') return;
+  const perlu = Array.isArray(aksi.menu) ? aksi.menu : [aksi.menu];
+  if (perlu.some(function (m) { return user.menus.indexOf(m) !== -1; })) return;
+  throw galat_('FORBIDDEN', 'Peran Anda belum diberi hak akses untuk menu ini. Hubungi admin untuk mengaturnya di Hak Akses Menu.');
 }
 
 /**
- * Memeriksa token login Supabase dengan SATU permintaan ke tabel profiles memakai token itu sendiri, jalur yang
- * sama dengan yang dipakai menu BOP: Supabase menolak token palsu/kedaluwarsa (HTTP 401) dan aturan RLS hanya
- * menyerahkan profil milik pemegang token (id diambil dari isi token yang sudah diverifikasi Supabase itu).
- * Hasil di-cache sebesar sisa umur token (maks. CACHE_LOGIN_DETIK_); token yang ditolak di-cache singkat.
- * Alasan penolakan dari Supabase ikut dilaporkan di pesan galat agar mudah ditelusuri.
+ * Memeriksa token login Supabase dengan SATU permintaan ke fungsi akses_saya() memakai token itu sendiri, jalur yang
+ * sama dengan yang dipakai website: Supabase menolak token palsu/kedaluwarsa (HTTP 401) dan fungsi itu hanya
+ * mengembalikan profil pemegang token (id diambil dari isi token yang sudah diverifikasi Supabase itu) beserta
+ * daftar menu yang boleh dibuka perannya. Hasil di-cache sebesar sisa umur token (maks. CACHE_LOGIN_DETIK_);
+ * token yang ditolak di-cache singkat. Alasan penolakan dari Supabase ikut dilaporkan di pesan galat agar mudah ditelusuri.
+ * Mengembalikan { id, nama, role, menus: [kunci menu] }.
  */
 function periksaToken_(token) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
@@ -222,26 +248,30 @@ function periksaToken_(token) {
   if (isi.exp && Number(isi.exp) <= sekarang) throw galat_('AUTH', PESAN_SESI_ + ' (token kedaluwarsa)');
 
   const cache = CacheService.getScriptCache();
-  const kunci = 'sb_' + sha256Hex_(token);
+  const kunci = 'sb2_' + sha256Hex_(token);   // awalan sb2_: isi cache berubah bentuk (ada menus), jadi cache versi lama tidak terbaca
   const ada = cache.get(kunci);
   if (ada === 'x') throw galat_('AUTH', PESAN_SESI_ + ' (token ditolak Supabase beberapa saat lalu)');
   if (ada) return JSON.parse(ada);
 
-  const resp = tanyaSupabase_('/rest/v1/profiles?select=nama,role&id=eq.' + encodeURIComponent(isi.sub), token);
+  const resp = tanyaSupabase_('/rest/v1/rpc/akses_saya', token);
   const kode = resp.getResponseCode(), badan = bacaJson_(resp), alasan = alasanSupabase_(badan, kode);
   if (kode === 401) {
     if (/api key|apikey/i.test(alasan)) {
-      throw galat_('CONFIG', 'Supabase menolak SUPABASE_KEY di Code.gs (' + alasan + '). Samakan SUPABASE_URL dan SUPABASE_KEY dengan CFG.url dan CFG.key di index.html yang dipakai di produksi.');
+      throw galat_('CONFIG', 'Supabase menolak SUPABASE_KEY di Code.gs (' + alasan + '). Samakan SUPABASE_URL dan SUPABASE_KEY dengan CFG.url dan CFG.key di js/config.js yang dipakai di produksi.');
     }
     cache.put(kunci, 'x', CACHE_GAGAL_DETIK_);
     throw galat_('AUTH', PESAN_SESI_ + ' (' + alasan + ')');
   }
-  if (kode !== 200 || !Array.isArray(badan)) {
+  if (kode === 404 && badan && badan.code === 'PGRST202') {
+    throw galat_('CONFIG', 'Fungsi akses_saya belum ada di Supabase. Jalankan bop.sql versi terbaru di SQL Editor Supabase, lalu coba lagi.');
+  }
+  if (kode !== 200) {
     throw galat_('SUPABASE', 'Server login (Supabase) tidak merespons dengan benar (' + alasan + '). Coba lagi sebentar lagi.');
   }
-  if (!badan.length) throw galat_('FORBIDDEN', 'Profil akun tidak ditemukan.');
+  if (!badan || Array.isArray(badan) || typeof badan !== 'object' || !badan.role) throw galat_('FORBIDDEN', 'Profil akun tidak ditemukan.');
 
-  const info = { id: isi.sub, nama: String(badan[0].nama || ''), role: String(badan[0].role || '') };
+  const menus = Array.isArray(badan.menus) ? badan.menus.map(String) : [];
+  const info = { id: isi.sub, nama: String(badan.nama || ''), role: String(badan.role || ''), menus: menus };
   const ttl = Math.min(CACHE_LOGIN_DETIK_, (Number(isi.exp) || 0) - sekarang - 5);
   if (ttl >= 5) cache.put(kunci, JSON.stringify(info), ttl);
   return info;
@@ -252,10 +282,12 @@ function alasanSupabase_(badan, kode) {
   return 'HTTP ' + kode + (t ? ': ' + String(t).substring(0, 100) : '');
 }
 
-function tanyaSupabase_(path, token) {
+function tanyaSupabase_(path, token) {   // fungsi database (RPC) dipanggil dengan POST, isi {}
   try {
     return UrlFetchApp.fetch(SUPABASE_URL + path, {
-      method: 'get',
+      method: 'post',
+      contentType: 'application/json',
+      payload: '{}',
       muteHttpExceptions: true,
       headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + token, Accept: 'application/json' }
     });
@@ -358,17 +390,9 @@ function authorizeAccess() {
     headers: auth,
     muteHttpExceptions: true
   });
-  Logger.log('Akun Drive yang dipakai: HTTP ' + drive.getResponseCode() + ' ' + drive.getContentText());
-
-  if (DRIVE_MASTER_FOLDER_ID) {
-    const folder = UrlFetchApp.fetch(
-      'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(DRIVE_MASTER_FOLDER_ID) + '?fields=id,name,trashed&supportsAllDrives=true',
-      { headers: auth, muteHttpExceptions: true }
-    );
-    Logger.log('Folder master Drive: HTTP ' + folder.getResponseCode() + ' ' + folder.getContentText());
-  } else {
-    Logger.log('DRIVE_MASTER_FOLDER_ID belum diisi (diperlukan untuk arsip BAST NR).');
-  }
+  Logger.log('Akun Drive yang dipakai Apps Script: HTTP ' + drive.getResponseCode() + ' ' + drive.getContentText());
+  Logger.log('Catatan: arsip BAST NR yang BARU disimpan Edge Function ke folder master BIMASATU (akun Google pemilik folder itu). ' +
+    'Akun Apps Script di atas hanya dipakai membaca arsip LAMA saat dimigrasi (menu Pengaturan BAST > Pindahkan arsip ke folder master).');
 
   const info = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(token), { muteHttpExceptions: true });
   Logger.log('Izin yang melekat pada token: ' + (bacaJson_(info) || {}).scope);

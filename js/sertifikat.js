@@ -1,7 +1,8 @@
 /* =====================================================================================
-   sertifikat.js: pintu masuk menu Sertifikat dan pemuat modulnya (khusus admin)
+   sertifikat.js: pintu masuk menu Sertifikat dan pemuat modulnya (menu sert-masjid, sert-kiblat, sert-pengaturan, sert-status)
    Berisi halaman Status Apps Script dan pemuat: modul berat (sertifikat-masjid, arah-kiblat, pengaturan-sertifikat, mesin PDF)
-   baru diunduh saat menu Sertifikat pertama kali dibuka. Data di Spreadsheet lewat Apps Script.
+   baru diunduh saat menu Sertifikat pertama kali dibuka. Data di Spreadsheet lewat Apps Script, yang memeriksa sendiri menu mana
+   yang dimiliki peran pemanggil (Hak Akses Menu), jadi data hanya dimuat untuk menu yang diberikan ke akun ini.
    ===================================================================================== */
 
 // ---- Pemuat modul Sertifikat ----
@@ -66,25 +67,39 @@ async function sertMount() {
       SERT.dom = true;
     }
     while (SERT.i < SERT_MODUL.length) { await sertBerkas(SERT_MODUL[SERT.i]); SERT.i++; }
-    loadMasjidList(); loadKiblatList(); loadPengaturan();
+    // Hanya data yang menunya dimiliki akun ini yang diminta (Apps Script menolak sisanya; Admin selalu boleh semuanya).
+    // Penanda tangan (Pengaturan) juga dipakai saat mencetak sertifikat Masjid dan Arah Kiblat, jadi ikut dimuat untuk ketiganya.
+    if (can('sert-masjid')) loadMasjidList();
+    if (can('sert-kiblat')) loadKiblatList();
+    if (can('sert-pengaturan') || can('sert-masjid') || can('sert-kiblat')) loadPengaturan();
     SERT.selesai = true;
   })().finally(() => { SERT.sedang = null; });
   return SERT.sedang;
 }
+// Pesan di atas tampilan Sertifikat (memuat / galat). TIDAK menghapus tampilan yang sudah terpasang: berpindah antarmenu Sertifikat saat modul
+// masih dimuat, atau mengulang setelah gagal, tidak boleh membuang tampilan yang sudah dipasang (modul berikutnya mencari elemennya di halaman).
+function sertInfo(html) {
+  var box = $('sertView'), el = $('sertInfo');
+  if (!html) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement('div'); el.id = 'sertInfo'; }
+  el.innerHTML = html;
+  box.prepend(el);
+}
 window.sertPage = async function (view) {   // dipanggil router untuk sert-masjid / sert-kiblat / sert-pengaturan
   var ep = EP, box = $('sertView');
   try {
-    if (!SERT.selesai) box.innerHTML = '<div class="text-body-secondary">Memuat modul Sertifikat…</div>';
+    if (!SERT.dom) box.innerHTML = '<div id="sertInfo" class="text-body-secondary">Memuat modul Sertifikat…</div>';   // hanya sebelum tampilan terpasang
     await sertMount();
     if (!live(ep)) return;
+    sertInfo('');
     box.querySelectorAll('.app-view').forEach(function (v) { v.classList.add('d-none'); });
     var t = $('view-' + view); if (t) t.classList.remove('d-none');
   } catch (e) {
-    if (live(ep)) box.innerHTML = '<div class="alert alert-danger">' + esc(e.message) + '</div>';
+    if (live(ep)) sertInfo('<div class="alert alert-danger">' + esc(e.message) + '</div>');
   }
 };
 
-async function pageSertStatus() {   // admin: periksa sambungan ke Apps Script (menu Masjid/Musala dan Arah Kiblat menyusul di Tahap 3)
+async function pageSertStatus() {   // periksa sambungan ke Apps Script dan peran/menu yang dikenali di sana
   const ep = EP;
   $('view').innerHTML = `
     <h4 class="mb-1">Status Apps Script</h4>
@@ -95,7 +110,7 @@ async function pageSertStatus() {   // admin: periksa sambungan ke Apps Script (
     $('sertStatus').textContent = 'Memeriksa…';
     try {
       const j = await gas('whoami');
-      if (live(ep)) $('sertStatus').innerHTML = `<span class="badge bg-label-success me-2">Tersambung</span>Akun <b>${esc(j.nama)}</b> dikenali Apps Script sebagai <b>${esc(j.role)}</b>.`;
+      if (live(ep)) $('sertStatus').innerHTML = `<span class="badge bg-label-success me-2">Tersambung</span>Akun <b>${esc(j.nama)}</b> dikenali Apps Script sebagai <b>${esc(peranLabel(j.role))}</b>.`;
     } catch (e) {
       if (live(ep)) $('sertStatus').innerHTML = `<span class="badge bg-label-danger me-2">Gagal</span>${esc(e.message)}`;
     }

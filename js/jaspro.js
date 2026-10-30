@@ -1,6 +1,8 @@
 /* =====================================================================================
-   jaspro.js: menu Jaspro Transport (khusus admin)
-   JX = logika asli Jaspro yang disalin apa adanya; J/jp* = tampilan dan penyimpanan di Supabase (tabel jaspro_data).
+   jaspro.js: menu Jaspro Transport (menu 'jaspro': admin dan, bawaan, PNBP NR; diatur di Hak Akses Menu)
+   JX = logika Jaspro (pencocokan nama, golongan, workbook ExcelJS, CSV) + tarif menurut tanggal; J/jp* = tampilan dan penyimpanan di
+   Supabase (tabel jaspro_data).
+   Tarif Jasa Profesi dan Transport boleh berubah pada tanggal tertentu dan berbeda-beda (settings.tarifRiwayat, lihat JX.tarifPada).
    ===================================================================================== */
 
 /* ---- Logika Jaspro (disalin apa adanya dari jaspro.html: pencocokan nama, golongan, workbook ExcelJS, CSV) ---- */
@@ -297,6 +299,8 @@ const JX = (() => {
                 golongan: ['golongan', 'gol', 'gol/ruang', 'golongan/ruang', 'gol ruang'],
                 jumlahPeristiwa: ['jumlah peristiwa', 'jml peristiwa', 'peristiwa', 'jumlah nikah rujuk', 'jumlah nr'],
                 noRekening: ['no rekening', 'nomor rekening', 'rekening'],
+                // opsional: tanggal peristiwa. Baris bertanggal memakai tarif yang berlaku pada tanggalnya (lihat tarifPada).
+                tanggal: ['tanggal', 'tgl', 'tanggal peristiwa', 'tgl peristiwa', 'tanggal nikah', 'tgl nikah', 'tanggal akad', 'tgl akad', 'tanggal nikah/rujuk', 'tanggal nr', 'tanggal pelaksanaan', 'tanggal pencatatan'],
             };
 
             var MASTER_ALIASES = {
@@ -306,6 +310,257 @@ const JX = (() => {
             };
 
             var BULAN_LIST = ['JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI', 'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'];
+
+            // ---------- Tarif menurut tanggal ----------
+            // Tarif dasar (settings.tarifJaspro / tarifTransport) berlaku sejak awal. settings.tarifRiwayat = [{mulai: 'YYYY-MM-DD',
+            // jaspro: angka|null, transport: angka|null}] mengubah tarif MULAI tanggal itu (tanggal itu sendiri sudah memakai tarif baru).
+            // Nominal kosong (null) = tidak berubah, jadi Jaspro dan Transport boleh berubah sendiri-sendiri pada tanggal yang berbeda
+            // dan nominalnya boleh berbeda-beda di tiap perubahan. Tarif sebuah baris laporan ditentukan oleh tanggal barisnya (kolom
+            // Tanggal di laporan) atau, bila tidak ada, oleh tanggal acuan (settings.tanggalAcuan; kosong = hari terakhir bulan laporan).
+            // Aturan pemeriksaan di riwayatPeriksa harus sama dengan jaspro_guard di bop.sql (server menolak data yang melanggarnya).
+            var TARIF_MAKS = 1000000000;
+            var RIWAYAT_MAKS = 100;
+            var BULAN_SINGKAT = {
+                JAN: 1, FEB: 2, MAR: 3, APR: 4, MEI: 5, MAY: 5, JUN: 6, JUL: 7, AGU: 8, AGS: 8, AUG: 8, SEP: 9, OKT: 10, OCT: 10, NOV: 11, DES: 12, DEC: 12
+            };
+
+            function tglIso(y, m, d) {   // angka tahun/bulan(1..12)/hari -> 'YYYY-MM-DD'; '' bila bukan tanggal yang sah
+                if (!(y >= 1900 && y <= 2200 && m >= 1 && m <= 12 && d >= 1 && d <= 31))
+                    return '';
+                var dt = new Date(Date.UTC(y, m - 1, d));
+                if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d)
+                    return '';
+                return y + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d;
+            }
+
+            function tglSah(s) {   // true bila s berupa teks 'YYYY-MM-DD' yang tanggalnya ada
+                var p = typeof s === 'string' ? s.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
+                return !!p && tglIso(+p[1], +p[2], +p[3]) === s;
+            }
+
+            function tglID(iso) {   // 'YYYY-MM-DD' -> 'dd/mm/yyyy' (tampilan)
+                return tglSah(iso) ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '';
+            }
+
+            function tambahHari(iso, n) {
+                var p = iso.split('-')
+                  , dt = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n));
+                return tglIso(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+            }
+
+            function parseTanggal(raw) {   // isi sel Excel (Date, nomor seri, atau teks) -> 'YYYY-MM-DD'; '' bila kosong / tidak terbaca
+                if (raw == null || raw === '' || typeof raw === 'boolean')
+                    return '';
+                if (raw instanceof Date)   // ExcelJS memberi tanggal Excel sebagai Date UTC; getter UTC = tanggal yang tampil di Excel
+                    return isNaN(raw.getTime()) ? '' : tglIso(raw.getUTCFullYear(), raw.getUTCMonth() + 1, raw.getUTCDate());
+                if (typeof raw === 'object') {   // hasil rumus, teks kaya, tautan
+                    if ('result' in raw)
+                        return parseTanggal(raw.result);
+                    if (raw.text != null)
+                        return parseTanggal(raw.text);
+                    if (raw.richText)
+                        return parseTanggal(raw.richText.map(function(r) {
+                            return r.text;
+                        }).join(''));
+                    return '';
+                }
+                if (typeof raw === 'number') {   // nomor seri tanggal Excel = hari sejak 1899-12-30 (25569 = 1970-01-01)
+                    if (!isFinite(raw) || raw < 20000 || raw > 80000)
+                        return '';
+                    var dn = new Date(Math.round((Math.floor(raw) - 25569) * 86400000));
+                    return tglIso(dn.getUTCFullYear(), dn.getUTCMonth() + 1, dn.getUTCDate());
+                }
+                var s = String(raw).trim().replace(/^[A-Za-z]+,\s*/, '');   // "Rabu, 15 Oktober 2026" -> "15 Oktober 2026"
+                if (!s)
+                    return '';
+                if (/^\d{5}(\.\d+)?$/.test(s))
+                    return parseTanggal(parseFloat(s));
+                var m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?:[T\s].*)?$/);   // 2026-10-15, 2026/10/15
+                if (m)
+                    return tglIso(+m[1], +m[2], +m[3]);
+                m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4}|\d{2})(?:[T\s].*)?$/);   // 15/10/2026, 15-10-2026, 15.10.26 (hari lebih dulu)
+                if (m)
+                    return tglIso(m[3].length === 2 ? 2000 + +m[3] : +m[3], +m[2], +m[1]);
+                m = s.match(/^(\d{1,2})[\s.\-\/]*([A-Za-z]{3,})\.?[\s.\-\/,]*(\d{4})(?:\D.*)?$/);   // 15 Oktober 2026, 15-Okt-2026
+                if (m) {
+                    var bl = BULAN_SINGKAT[m[2].slice(0, 3).toUpperCase()];
+                    return bl ? tglIso(+m[3], bl, +m[1]) : '';
+                }
+                return '';
+            }
+
+            function indeksBulan(bulan) {
+                return BULAN_LIST.indexOf(String(bulan || '').toUpperCase());
+            }
+
+            function awalBulan(bulan, tahun) {   // hari pertama bulan laporan ('' bila bulan/tahun tidak sah)
+                var i = indeksBulan(bulan);
+                return i < 0 ? '' : tglIso(parseInt(tahun, 10), i + 1, 1);
+            }
+
+            function akhirBulan(bulan, tahun) {   // hari terakhir bulan laporan
+                var i = indeksBulan(bulan)
+                  , y = parseInt(tahun, 10);
+                if (i < 0 || !(y >= 1900 && y <= 2200))
+                    return '';
+                return tglIso(y, i + 1, new Date(Date.UTC(y, i + 1, 0)).getUTCDate());
+            }
+
+            function angkaTarif(v) {   // angka 0..TARIF_MAKS, atau null bila kosong / tidak sah
+                if (v == null || typeof v === 'boolean')
+                    return null;
+                if (typeof v === 'string') {
+                    v = v.trim();
+                    if (v === '')
+                        return null;
+                }
+                var n = typeof v === 'number' ? v : Number(v);
+                return isFinite(n) && n >= 0 && n <= TARIF_MAKS ? n : null;
+            }
+
+            // Memeriksa daftar perubahan tarif. sah = perubahan yang dipakai (urut tanggal naik); masalah = baris yang diabaikan beserta alasannya
+            // (i = nomor urut di daftar asal, mulai dari 0).
+            function riwayatPeriksa(list) {
+                var sah = []
+                  , masalah = []
+                  , seen = {};
+                (Array.isArray(list) ? list : []).forEach(function(e, i) {
+                    if (!e || typeof e !== 'object' || Array.isArray(e))
+                        return masalah.push({
+                            i: i,
+                            pesan: 'Data perubahan tarif tidak valid.'
+                        });
+                    var mulai = e.mulai == null ? '' : String(e.mulai);
+                    if (!mulai)
+                        return masalah.push({
+                            i: i,
+                            pesan: 'Tanggal mulai belum diisi.'
+                        });
+                    if (!tglSah(mulai))
+                        return masalah.push({
+                            i: i,
+                            pesan: 'Tanggal mulai tidak sah.'
+                        });
+                    if (seen[mulai])
+                        return masalah.push({
+                            i: i,
+                            pesan: 'Tanggal ' + tglID(mulai) + ' sudah dipakai perubahan lain.'
+                        });
+                    var j = angkaTarif(e.jaspro)
+                      , t = angkaTarif(e.transport)
+                      , jAda = !(e.jaspro == null || String(e.jaspro).trim() === '')
+                      , tAda = !(e.transport == null || String(e.transport).trim() === '');
+                    if ((jAda && j == null) || (tAda && t == null))
+                        return masalah.push({
+                            i: i,
+                            pesan: 'Nominal harus angka 0 sampai 1.000.000.000.'
+                        });
+                    if (j == null && t == null)
+                        return masalah.push({
+                            i: i,
+                            pesan: 'Isi minimal satu nominal (Jasa Profesi atau Transport).'
+                        });
+                    if (sah.length >= RIWAYAT_MAKS)
+                        return masalah.push({
+                            i: i,
+                            pesan: 'Maksimal ' + RIWAYAT_MAKS + ' perubahan tarif.'
+                        });
+                    seen[mulai] = true;
+                    sah.push({
+                        mulai: mulai,
+                        jaspro: j,
+                        transport: t
+                    });
+                });
+                sah.sort(function(a, b) {
+                    return a.mulai < b.mulai ? -1 : (a.mulai > b.mulai ? 1 : 0);
+                });
+                return {
+                    sah: sah,
+                    masalah: masalah
+                };
+            }
+
+            function tanggalAcuan(settings) {   // tanggal yang menentukan tarif baris tanpa tanggal: pilihan pengguna, atau hari terakhir bulan laporan
+                var a = settings && settings.tanggalAcuan;
+                return tglSah(a) ? a : akhirBulan(settings && settings.bulan, settings && settings.tahun);
+            }
+
+            function tanggalBaris(row, settings) {   // tanggal yang dipakai menentukan tarif sebuah baris
+                return row && tglSah(row.tanggal) ? row.tanggal : tanggalAcuan(settings);
+            }
+
+            // Tarif per peristiwa pada sebuah tanggal ('YYYY-MM-DD'). mulaiJaspro/mulaiTransport = tanggal perubahan yang sedang berlaku
+            // ('' = masih tarif dasar). Tanggal kosong/tidak sah memakai tarif dasar.
+            function tarifPada(tanggal, settings) {
+                var j = Number(settings.tarifJaspro) || 0
+                  , t = Number(settings.tarifTransport) || 0
+                  , mj = ''
+                  , mt = '';
+                if (tglSah(tanggal))
+                    riwayatPeriksa(settings.tarifRiwayat).sah.forEach(function(e) {
+                        if (e.mulai > tanggal)
+                            return;
+                        if (e.jaspro != null) {
+                            j = e.jaspro;
+                            mj = e.mulai;
+                        }
+                        if (e.transport != null) {
+                            t = e.transport;
+                            mt = e.mulai;
+                        }
+                    });
+                return {
+                    jaspro: j,
+                    transport: t,
+                    mulaiJaspro: mj,
+                    mulaiTransport: mt
+                };
+            }
+
+            // Potongan tanggal dari..sampai (inklusif) yang tarifnya sama. kind 'jaspro' | 'transport' hanya memperhatikan tarif itu;
+            // tanpa kind keduanya diperhatikan. Hasil: [{dari, sampai, jaspro, transport}]
+            function tarifSegmen(settings, dari, sampai, kind) {
+                if (!tglSah(dari) || !tglSah(sampai) || dari > sampai)
+                    return [];
+                var titik = [dari];
+                riwayatPeriksa(settings.tarifRiwayat).sah.forEach(function(e) {
+                    if (e.mulai > dari && e.mulai <= sampai)
+                        titik.push(e.mulai);
+                });
+                var seg = [];
+                titik.forEach(function(mulai, i) {
+                    var akhir = i + 1 < titik.length ? tambahHari(titik[i + 1], -1) : sampai
+                      , t = tarifPada(mulai, settings)
+                      , prev = seg[seg.length - 1]
+                      , sama = prev && (kind === 'jaspro' ? prev.jaspro === t.jaspro : kind === 'transport' ? prev.transport === t.transport : prev.jaspro === t.jaspro && prev.transport === t.transport);
+                    if (sama)
+                        prev.sampai = akhir;
+                    else
+                        seg.push({
+                            dari: mulai,
+                            sampai: akhir,
+                            jaspro: t.jaspro,
+                            transport: t.transport
+                        });
+                });
+                return seg;
+            }
+
+            function fmtRupiah(n) {
+                return String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            }
+
+            // Keterangan di bawah tabel Excel bila tarif berubah di tengah bulan laporan ('' bila tarifnya tetap sepanjang bulan).
+            function catatanTarif(settings, kind) {   // kind: 'jaspro' atau 'transpo' / 'transport'
+                var k = kind === 'jaspro' ? 'jaspro' : 'transport';
+                var seg = tarifSegmen(settings, awalBulan(settings.bulan, settings.tahun), akhirBulan(settings.bulan, settings.tahun), k);
+                if (seg.length < 2)
+                    return '';
+                return 'Catatan: tarif ' + (k === 'jaspro' ? 'jasa profesi' : 'transport') + ' per peristiwa pada bulan ini ' + seg.map(function(s) {
+                    return 'Rp ' + fmtRupiah(s[k]) + ' (' + tglID(s.dari) + ' s.d. ' + tglID(s.sampai) + ')';
+                }).join(', ') + '. Baris tanpa tanggal memakai tarif per ' + tglID(tanggalAcuan(settings)) + '.';
+            }
 
             if (typeof module !== 'undefined' && module.exports) {
                 module.exports = {
@@ -325,6 +580,17 @@ const JX = (() => {
                     LAPORAN_ALIASES: LAPORAN_ALIASES,
                     MASTER_ALIASES: MASTER_ALIASES,
                     BULAN_LIST: BULAN_LIST,
+                    parseTanggal: parseTanggal,
+                    tglSah: tglSah,
+                    tglID: tglID,
+                    awalBulan: awalBulan,
+                    akhirBulan: akhirBulan,
+                    riwayatPeriksa: riwayatPeriksa,
+                    tanggalAcuan: tanggalAcuan,
+                    tanggalBaris: tanggalBaris,
+                    tarifPada: tarifPada,
+                    tarifSegmen: tarifSegmen,
+                    catatanTarif: catatanTarif,
                 };
             }
             /*
@@ -394,7 +660,8 @@ const JX = (() => {
                 var colGol = findHeaderColumn(headerCells, LAPORAN_ALIASES.golongan);
                 var colJumlah = findHeaderColumn(headerCells, LAPORAN_ALIASES.jumlahPeristiwa);
                 var colRek = findHeaderColumn(headerCells, LAPORAN_ALIASES.noRekening);
-                // optional
+                var colTgl = findHeaderColumn(headerCells, LAPORAN_ALIASES.tanggal);
+                // optional: No Rekening, Tanggal
 
                 var missing = [];
                 if (!colNama)
@@ -420,6 +687,7 @@ const JX = (() => {
 
                 var rows = [];
                 var skipped = 0;
+                var tglTakSah = 0;
                 ws.eachRow(function(row, rowNum) {
                     if (rowNum <= headerRowNum)
                         return;
@@ -433,6 +701,10 @@ const JX = (() => {
                         return;
                     }
 
+                    var tglRaw = colTgl ? row.getCell(colTgl).value : null
+                      , tgl = parseTanggal(tglRaw);
+                    if (colTgl && !tgl && cellText(tglRaw) !== '')
+                        tglTakSah++;   // ada isinya tetapi bukan tanggal yang terbaca: baris memakai tanggal acuan
                     rows.push({
                         nama: namaText,
                         kua: cellText(row.getCell(colKua).value),
@@ -440,6 +712,7 @@ const JX = (() => {
                         golongan: cellText(row.getCell(colGol).value),
                         jumlahPeristiwa: parseNumberID(row.getCell(colJumlah).value),
                         noRekeningSumber: colRek ? cellText(row.getCell(colRek).value) : '',
+                        tanggal: tgl,
                     });
                 });
 
@@ -454,7 +727,9 @@ const JX = (() => {
                     ok: true,
                     rows: rows,
                     sheetName: ws.name,
-                    skipped: skipped
+                    skipped: skipped,
+                    adaKolomTanggal: !!colTgl,
+                    tanggalTakSah: tglTakSah
                 };
             }
 
@@ -534,6 +809,11 @@ const JX = (() => {
                   , settings = opts.settings
                   , footer = opts.footer;
                 var isJaspro = kind === 'jaspro';
+                // Kolom TANGGAL hanya muncul bila ada baris yang membawa tanggal sendiri (laporan dengan kolom Tanggal);
+                // tanpa itu susunan laporan sama seperti sebelumnya.
+                var adaTgl = rows.some(function(r) {
+                    return tglSah(r.tanggal);
+                });
 
                 // Column A (blank spacer) and the second, always-empty "NO. REKENING" column
                 // have been removed — "NO. REKENING CSV" is now the sheet's only rekening column.
@@ -543,34 +823,35 @@ const JX = (() => {
                     kua: 3,
                     nip: 4,
                     gol: 5,
-                    rekcsv: 6,
-                    jumlah: 7,
-                    tarif: 8,
-                    subtotal: 9
+                    rekcsv: 6
                 };
-                if (isJaspro) {
-                    COL.pph = 10;
-                    COL.diterima = 11;
-                } else {
-                    COL.diterima = 10;
-                }
+                var nextCol = 7;
+                if (adaTgl)
+                    COL.tgl = nextCol++;
+                COL.jumlah = nextCol++;
+                COL.tarif = nextCol++;
+                COL.subtotal = nextCol++;
+                if (isJaspro)
+                    COL.pph = nextCol++;
+                COL.diterima = nextCol++;
                 var lastColNum = COL.diterima;
 
-                var widths = {
-                    1: 6.9,
-                    2: 40,
-                    3: 24.5,
-                    4: 22.5,
-                    5: 9.5,
-                    6: 19.5,
-                    7: 8.5,
-                    8: 11.7,
-                    9: 15.1,
-                    10: 15.5,
-                    11: 19.3
+                var widthOf = {
+                    no: 6.9,
+                    nama: 40,
+                    kua: 24.5,
+                    nip: 22.5,
+                    gol: 9.5,
+                    rekcsv: 19.5,
+                    tgl: 12.5,
+                    jumlah: 8.5,
+                    tarif: 11.7,
+                    subtotal: 15.1,
+                    pph: 15.5,
+                    diterima: isJaspro ? 19.3 : 15.5
                 };
-                Object.keys(widths).forEach(function(c) {
-                    ws.getColumn(Number(c)).width = widths[c];
+                Object.keys(COL).forEach(function(name) {
+                    ws.getColumn(COL[name]).width = widthOf[name];
                 });
 
                 ws.mergeCells(2, COL.nama, 2, lastColNum);
@@ -588,7 +869,7 @@ const JX = (() => {
                 };
                 ws.getRow(2).height = 24;
 
-                var headers = isJaspro ? ['No', 'NAMA', 'KUA', 'NIP', 'GOL', 'NO. REKENING CSV', 'JUMLAH', 'TARIF', 'JUMLAH', 'PPH', 'JUMLAH DITERIMA'] : ['No', 'NAMA', 'KUA', 'NIP', 'GOL', 'NO. REKENING CSV', 'JUMLAH', 'TARIF', 'JUMLAH', 'JUMLAH DITERIMA'];
+                var headers = ['No', 'NAMA', 'KUA', 'NIP', 'GOL', 'NO. REKENING CSV'].concat(adaTgl ? ['TANGGAL'] : [], ['JUMLAH', 'TARIF', 'JUMLAH'], isJaspro ? ['PPH', 'JUMLAH DITERIMA'] : ['JUMLAH DITERIMA']);
                 headers.forEach(function(h, i) {
                     var cell = ws.getCell(4, COL.no + i);
                     cell.value = h;
@@ -689,6 +970,23 @@ const JX = (() => {
                         size: 11
                     };
 
+                    if (adaTgl) {
+                        var cTgl = R.getCell(COL.tgl);
+                        if (tglSah(row.tanggal)) {   // tanggal asli Excel (bukan teks) supaya bisa diurutkan / disaring
+                            cTgl.value = new Date(Date.UTC(+row.tanggal.slice(0, 4), +row.tanggal.slice(5, 7) - 1, +row.tanggal.slice(8, 10)));
+                            cTgl.numFmt = 'dd/mm/yyyy';
+                        }
+                        cTgl.alignment = {
+                            horizontal: 'center',
+                            vertical: 'center'
+                        };
+                        cTgl.border = BORDER_ALL;
+                        cTgl.font = {
+                            name: REPORT_FONT,
+                            size: 11
+                        };
+                    }
+
                     var cJumlah = R.getCell(COL.jumlah);
                     cJumlah.value = row.jumlahPeristiwa;
                     cJumlah.numFmt = '0';
@@ -702,7 +1000,10 @@ const JX = (() => {
                         size: 11
                     };
 
-                    var tarifValue = isJaspro ? settings.tarifJaspro : settings.tarifTransport;
+                    // tarif per baris (menurut tanggal baris); settings hanya dipakai bila baris belum dihitung lewat classifyRow
+                    var tarifValue = isJaspro ? row.tarifJaspro : row.tarifTransport;
+                    if (tarifValue == null)
+                        tarifValue = isJaspro ? settings.tarifJaspro : settings.tarifTransport;
                     var cTarif = R.getCell(COL.tarif);
                     cTarif.value = tarifValue;
                     cTarif.numFmt = CURRENCY_FMT;
@@ -794,7 +1095,8 @@ const JX = (() => {
 
                 var totalRow = r;
                 var lastDataRow = r - 1;
-                ws.mergeCells(totalRow, COL.no, totalRow, COL.rekcsv);
+                var labelTo = adaTgl ? COL.tgl : COL.rekcsv;   // label "JUMLAH" membentang sampai tepat sebelum kolom JUMLAH peristiwa
+                ws.mergeCells(totalRow, COL.no, totalRow, labelTo);
                 var labelCell = ws.getCell(totalRow, COL.no);
                 labelCell.value = 'JUMLAH';
                 labelCell.font = {
@@ -811,7 +1113,7 @@ const JX = (() => {
                     bottom: THIN,
                     left: THIN
                 };
-                ws.getCell(totalRow, COL.rekcsv).border = {
+                ws.getCell(totalRow, labelTo).border = {
                     top: THIN,
                     bottom: THIN,
                     right: THIN
@@ -855,6 +1157,25 @@ const JX = (() => {
                     sumCol(COL.pph);
                 sumCol(COL.diterima);
                 ws.getRow(totalRow).height = 18;
+
+                // Keterangan tarif: hanya bila tarif berubah di tengah bulan laporan. Diletakkan di baris kosong antara total dan tanda tangan.
+                var catatan = catatanTarif(settings, kind);
+                if (catatan) {
+                    ws.mergeCells(totalRow + 1, COL.no, totalRow + 1, lastColNum);
+                    var cCat = ws.getCell(totalRow + 1, COL.no);
+                    cCat.value = catatan;
+                    cCat.font = {
+                        name: REPORT_FONT,
+                        size: 9,
+                        italic: true
+                    };
+                    cCat.alignment = {
+                        horizontal: 'left',
+                        vertical: 'top',
+                        wrapText: true
+                    };
+                    ws.getRow(totalRow + 1).height = 26;
+                }
 
                 // Footer / signature block — text at 12pt, with extra blank rows left for the
                 // physical signature/stamp between the "jabatan" line and the printed name.
@@ -1007,13 +1328,19 @@ function classifyRow(row, settings) {
                         PPPK: settings.pphPPPK / 100
                     };
                     var pphRate = pphRateMap.hasOwnProperty(golClass) ? pphRateMap[golClass] : null;
-                    var jasproSubtotal = row.jumlahPeristiwa * settings.tarifJaspro;
+                    // Tarif per peristiwa menurut tanggal baris (kolom Tanggal di laporan) atau tanggal acuan bila baris tanpa tanggal.
+                    var tanggalTarif = tanggalBaris(row, settings);
+                    var tarif = tarifPada(tanggalTarif, settings);
+                    var jasproSubtotal = row.jumlahPeristiwa * tarif.jaspro;
                     var jasproPph = pphRate != null ? Math.round(jasproSubtotal * pphRate) : 0;
                     var jasproDiterima = jasproSubtotal - jasproPph;
-                    var transpoSubtotal = row.jumlahPeristiwa * settings.tarifTransport;
+                    var transpoSubtotal = row.jumlahPeristiwa * tarif.transport;
                     return {
                         golClass: golClass,
                         pphRate: pphRate,
+                        tanggalTarif: tanggalTarif,
+                        tarifJaspro: tarif.jaspro,
+                        tarifTransport: tarif.transport,
                         jasproSubtotal: jasproSubtotal,
                         jasproPph: jasproPph,
                         jasproDiterima: jasproDiterima,
@@ -1111,19 +1438,33 @@ function buildCsvContent(rows) {
                     return lines.join('\r\n');
                 }
 return { BULAN_LIST, normalizeCoreName, buildMasterIndex, matchPenghulu, golonganLabel, parseLaporanFile, parseMasterFile,
-  buildOutputWorkbook, downloadWorkbook, classifyRow, buildDisbursementRows, buildCsvContent };
+  buildOutputWorkbook, downloadWorkbook, classifyRow, buildDisbursementRows, buildCsvContent,
+  parseTanggal, tglSah, tglID, awalBulan, akhirBulan, riwayatPeriksa, tanggalAcuan, tanggalBaris, tarifPada, tarifSegmen, catatanTarif, fmtRupiah,
+  TARIF_MAKS, RIWAYAT_MAKS };
 })();
 
-/* ====== Jaspro Transport: Laporan Nominatif PNBP NR (khusus admin) ======
-   Data hanya SATU baris di tabel jaspro_data (id = 1): setiap simpan menimpa data lama, tanpa riwayat. */
+/* ====== Jaspro Transport: Laporan Nominatif PNBP NR (menu 'jaspro') ======
+   Data hanya SATU baris di tabel jaspro_data (id = 1): setiap simpan menimpa data lama, tanpa riwayat.
+   settings.tarifRiwayat = perubahan tarif menurut tanggal (JX.tarifPada); hanya perubahan yang lengkap dan sah yang dikirim ke server. */
 const J = { on: false, master: [], laporan: null, set: {}, rows: null, stale: false, tab: 'input', q: '', t: null };
 const jpDef = () => ({
   bulan: JX.BULAN_LIST[new Date().getMonth()], tahun: new Date().getFullYear(), tarifJaspro: 100000, tarifTransport: 50000,
+  tarifRiwayat: [], tanggalAcuan: '',
   pphII: 0, pphIII: 5, pphIV: 15, pphPPPK: 5, tempatTanggal: '',
   kpaJabatan: 'Kuasa Pengguna Anggaran', kpaNama: '', kpaNip: '', ppkJabatan: 'Pejabat Pembuat Komitmen', ppkNama: '', ppkNip: '',
   bendaharaJabatan: 'Bendahara Bimas', bendaharaNama: '', bendaharaNip: ''
 });
 const jpReset = () => Object.assign(J, { on: false, master: [], laporan: null, rows: null });
+function jpMuatSet(tersimpan) {   // pengaturan tersimpan di atas bawaan; riwayat tarif dijaga selalu berupa daftar
+  const s = { ...jpDef(), ...(tersimpan || {}) };
+  s.tarifRiwayat = (Array.isArray(s.tarifRiwayat) ? s.tarifRiwayat : []).map(e => ({ mulai: e?.mulai ?? '', jaspro: e?.jaspro ?? null, transport: e?.transport ?? null }));
+  if (typeof s.tanggalAcuan !== 'string') s.tanggalAcuan = '';
+  return s;
+}
+function jpSetOut() {   // pengaturan yang dikirim ke server: perubahan tarif yang belum lengkap tidak ikut (server menolak yang tidak sah)
+  return { ...J.set, tarifRiwayat: JX.riwayatPeriksa(J.set.tarifRiwayat).sah, tanggalAcuan: JX.tglSah(J.set.tanggalAcuan) ? J.set.tanggalAcuan : '' };
+}
+const jpSetSimpan = () => { clearTimeout(J.t); J.t = setTimeout(() => jpSave({ settings: jpSetOut() }), 800); };   // ketikan beruntun digabung jadi satu simpan
 const jpX = () => loadJs(CDN.exceljs);   // ExcelJS hanya dimuat saat dibutuhkan
 const JST = { OTOMATIS: ['success', 'Cocok otomatis'], OTOMATIS_FUZZY: ['warning', 'Cocok (mirip)'], AMBIGU: ['warning', 'Ambigu'], TIDAK_DITEMUKAN: ['danger', 'Tidak ditemukan'], MANUAL: ['secondary', 'Diisi manual'] };
 
@@ -1145,7 +1486,7 @@ async function pageJaspro() {
   if (!J.on) {
     const { data, error } = await sb.from('jaspro_data').select('master,laporan,settings').eq('id', 1).maybeSingle();
     if (error) return $('jpanel').innerHTML = note('Gagal memuat data Jaspro: ' + error.message + ' (jalankan bop.sql terbaru di Supabase bila tabel jaspro_data belum ada).');
-    Object.assign(J, { master: data?.master || [], laporan: data?.laporan || null, set: { ...jpDef(), ...(data?.settings || {}) }, rows: null, stale: false, on: true });
+    Object.assign(J, { master: data?.master || [], laporan: data?.laporan || null, set: jpMuatSet(data?.settings), rows: null, stale: false, on: true });
   }
   jpStat('Tersimpan', 'success');
   const r = $('jroot');
@@ -1160,23 +1501,26 @@ function jpRender() {
   const S = [['input', 'Input Laporan', 'Unggah nominatif .xlsx'], ['master', 'Master Rekening', 'Nama &amp; nomor rekening'], ['proses', 'Proses &amp; Unduh', 'Cocokkan lalu unduh']];
   $('jsteps').innerHTML = `<div class="card mb-4"><div class="card-body py-2"><div class="jp-steps">${S.map(([k, t, s], i) =>
     `<button class="jp-step${J.tab === k ? ' on' : ''}${done[k] ? ' done' : ''}" data-act="tab" data-tab="${k}"><span class="n">${done[k] ? '<i class="bx bx-check"></i>' : i + 1}</span><span>${t}<small>${s}</small></span></button>`).join('')}</div></div></div>`;
+  if (J.tab === 'proses') jpUrutRiwayat();
   $('jpanel').innerHTML = { input: pIn, master: pMa, proses: pPr }[J.tab]();
   if (J.tab === 'proses') { jpProcBtn(); jpReview(); }
 }
 
 /* ---- Langkah 1: Input Laporan Nominatif ---- */
 const pIn = () => {
-  const R = J.laporan?.rows || [], u = new Set(R.map(r => JX.normalizeCoreName(r.nama) || r.nama)).size, tp = R.reduce((s, r) => s + (r.jumlahPeristiwa || 0), 0);
+  const R = J.laporan?.rows || [], u = new Set(R.map(r => JX.normalizeCoreName(r.nama) || r.nama)).size, tp = R.reduce((s, r) => s + (r.jumlahPeristiwa || 0), 0), bt = R.filter(r => JX.tglSah(r.tanggal)).length;
   return `<div class="card"><div class="card-body">
     <h5 class="mb-1">Input Laporan Nominatif</h5>
     <p class="mb-3">Unggah laporan nominatif bulanan (.xlsx), satu baris per penghulu per KUA. Nomor rekening diambil dari Master Rekening. File baru <b>menggantikan</b> laporan yang tersimpan.</p>
     <div class="jp-drop" data-act="upl"><div class="avatar rounded bg-label-primary mx-auto mb-2"><i class="bx bx-cloud-upload fs-3"></i></div>
-      <div class="fw-semibold">Seret file ke sini, atau klik untuk memilih</div><small>Format .xlsx · Kolom wajib: Nama Penghulu, KUA, NIP, Golongan, Jumlah Peristiwa</small></div>
+      <div class="fw-semibold">Seret file ke sini, atau klik untuk memilih</div><small>Format .xlsx · Kolom wajib: Nama Penghulu, KUA, NIP, Golongan, Jumlah Peristiwa · Kolom opsional: No Rekening, Tanggal</small></div>
     <input type="file" id="jfl" accept=".xlsx" hidden>
-    ${R.length ? `<div class="row g-3 mt-1">${jpCard('bx-list-ul', 'primary', R.length, 'Total baris')}${jpCard('bx-user', 'info', u, 'Penghulu')}${jpCard('bx-calendar-check', 'success', tp, 'Total peristiwa')}</div>
+    <p class="small text-body-secondary mt-2 mb-0">Kolom <b>Tanggal</b> (opsional) menentukan tarif per peristiwa bila tarif berubah pada tanggal tertentu. Baris tanpa tanggal memakai tanggal acuan (atur di langkah Proses &amp; Unduh). Untuk tarif yang berubah di tengah bulan, tulis satu baris per penghulu per tanggal.</p>
+    ${R.length ? `<div class="row g-3 mt-1">${jpCard('bx-list-ul', 'primary', R.length, 'Total baris')}${jpCard('bx-user', 'info', u, 'Penghulu')}${jpCard('bx-calendar-check', 'success', tp, 'Total peristiwa')}${bt ? jpCard('bx-calendar', 'warning', bt, 'Baris bertanggal') : ''}</div>
+      ${J.laporan.tanggalTakSah ? `<div class="alert alert-warning py-2 mt-3 mb-0">${J.laporan.tanggalTakSah} baris berisi kolom Tanggal yang tidak terbaca sebagai tanggal (contoh yang dikenali: 15/10/2026, 2026-10-15, 15 Oktober 2026). Baris itu memakai tanggal acuan.</div>` : ''}
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 my-3"><span>${R.length} baris dari “${esc(J.laporan.fileName)}”</span><button class="btn btn-sm btn-outline-danger" data-act="clr"><i class="bx bx-trash"></i> Hapus laporan</button></div>
-      <div class="scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th><th class="text-end">Peristiwa</th></tr></thead>
-      <tbody>${R.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td><td>${esc(r.golongan)}</td><td class="text-end">${esc(r.jumlahPeristiwa)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      <div class="scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th>${bt ? '<th>Tanggal</th>' : ''}<th class="text-end">Peristiwa</th></tr></thead>
+      <tbody>${R.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td><td>${esc(r.golongan)}</td>${bt ? `<td class="text-nowrap">${JX.tglSah(r.tanggal) ? JX.tglID(r.tanggal) : '<span class="text-body-secondary">–</span>'}</td>` : ''}<td class="text-end">${esc(r.jumlahPeristiwa)}</td></tr>`).join('')}</tbody></table></div>` : ''}
   </div></div>`;
 };
 async function jpLaporan(f) {
@@ -1186,10 +1530,11 @@ async function jpLaporan(f) {
   let r; try { await jpX(); r = await JX.parseLaporanFile(f); } catch (e) { r = { ok: false, error: e.message }; }
   if (r.ok && r.rows.length > 5000) r = { ok: false, error: 'Maksimal 5.000 baris per laporan.' };
   if (!r.ok) { jpStat('Tersimpan', 'success'); return $('jmsg').innerHTML = note(r.error); }
-  J.laporan = { fileName: f.name, rows: r.rows }; J.rows = null; J.stale = true;
+  J.laporan = { fileName: f.name, rows: r.rows, tanggalTakSah: r.tanggalTakSah || 0 }; J.rows = null; J.stale = true;
   const ok = await jpSave({ laporan: J.laporan });   // menimpa laporan sebelumnya
   jpRender();
-  $('jmsg').innerHTML = ok ? note(`${r.rows.length} baris dimuat dari "${f.name}"${r.skipped ? ` (${r.skipped} baris jumlah dilewati)` : ''}. Laporan sebelumnya sudah diganti.`, 'success') : '';
+  const bt = r.rows.filter(x => x.tanggal).length;
+  $('jmsg').innerHTML = ok ? note(`${r.rows.length} baris dimuat dari "${f.name}"${r.skipped ? ` (${r.skipped} baris jumlah dilewati)` : ''}${bt ? `, ${bt} di antaranya bertanggal` : ''}. Laporan sebelumnya sudah diganti.`, 'success') : '';
 }
 
 /* ---- Langkah 2: Master Rekening ---- */
@@ -1273,13 +1618,55 @@ async function jpMExp() {
 }
 
 /* ---- Langkah 3: Proses & Unduh ---- */
+// Tarif dasar + perubahan tarif menurut tanggal. Baris pertama = tarif dasar (berlaku sejak awal); baris berikutnya = perubahan yang
+// berlaku MULAI tanggalnya. Nominal dikosongkan bila tarif itu tidak ikut berubah (Jasa Profesi dan Transport bisa berubah sendiri-sendiri).
+const pTarif = () => {
+  const L = J.set.tarifRiwayat, ang = x => x == null ? '' : esc(x);
+  const num = extra => `<input type="number" min="0" max="${JX.TARIF_MAKS}" step="any" class="form-control form-control-sm" ${extra}>`;
+  return `<p class="small text-body-secondary mb-2">Isi tarif dasar, lalu tambahkan perubahan bila tarif berganti pada tanggal tertentu (mis. setelah ada aturan baru). Perubahan berlaku mulai tanggal yang diisi (tanggal itu sendiri sudah memakai tarif baru) dan nominalnya boleh berbeda di tiap perubahan. Kosongkan satu nominal bila tarif itu tidak berubah.</p>
+    <div class="table-responsive"><table class="table table-sm align-middle mb-2" id="jtr"><thead><tr><th style="min-width:170px">Berlaku mulai</th><th style="min-width:150px">Jasa Profesi (Rp)</th><th style="min-width:150px">Transport (Rp)</th><th></th></tr></thead><tbody>
+      <tr><td class="text-body-secondary">Sejak awal (tarif dasar)</td><td>${num(`data-s="tarifJaspro" data-n value="${ang(J.set.tarifJaspro)}" aria-label="Tarif dasar Jasa Profesi"`)}</td><td>${num(`data-s="tarifTransport" data-n value="${ang(J.set.tarifTransport)}" aria-label="Tarif dasar Transport"`)}</td><td></td></tr>
+      ${L.map((e, i) => `<tr><td><input type="date" class="form-control form-control-sm" data-t="mulai" data-k="${i}" value="${esc(e.mulai)}" aria-label="Perubahan ${i + 1}: berlaku mulai tanggal"></td>
+        <td>${num(`data-t="jaspro" data-k="${i}" value="${ang(e.jaspro)}" placeholder="tidak berubah" aria-label="Perubahan ${i + 1}: Jasa Profesi baru"`)}</td>
+        <td>${num(`data-t="transport" data-k="${i}" value="${ang(e.transport)}" placeholder="tidak berubah" aria-label="Perubahan ${i + 1}: Transport baru"`)}</td>
+        <td class="text-end"><button class="btn btn-sm btn-outline-danger px-2" data-act="tdel" data-k="${i}" aria-label="Hapus perubahan ${i + 1}"><i class="bx bx-trash"></i></button></td></tr>`).join('')}
+    </tbody></table></div>
+    <button class="btn btn-sm btn-outline-primary mb-3" data-act="tadd"><i class="bx bx-plus"></i> Tambah perubahan tarif</button>
+    <div class="row g-3 mb-3"><div class="col-sm-6 col-lg-4"><label class="form-label">Tanggal acuan (opsional)</label><input type="date" class="form-control" data-s="tanggalAcuan" value="${esc(J.set.tanggalAcuan)}"><div class="form-text">Menentukan tarif baris laporan yang tidak punya tanggal. Kosong = hari terakhir bulan laporan.</div></div></div>
+    <div id="jtsum" class="mb-4">${jpTarifRingkas()}</div>`;
+};
+// Ringkasan: tarif yang berlaku pada bulan laporan, peringatan bila tarif berubah di tengah bulan, dan perubahan yang belum lengkap.
+function jpTarifRingkas() {
+  const s = J.set, P = JX.riwayatPeriksa(s.tarifRiwayat), a = JX.awalBulan(s.bulan, s.tahun), z = JX.akhirBulan(s.bulan, s.tahun), seg = JX.tarifSegmen(s, a, z);
+  const R = x => `Rp ${rp(Math.round(x))}`, acuan = JX.tglID(JX.tanggalAcuan(s));
+  let h = '';
+  if (P.masalah.length) h += `<div class="alert alert-warning py-2"><div class="fw-semibold">Perubahan tarif ini belum dihitung dan belum disimpan:</div><ul class="mb-0 ps-3">${P.masalah.map(m => `<li>Baris ${m.i + 1}: ${esc(m.pesan)}</li>`).join('')}</ul></div>`;
+  if (!seg.length) return h + '<div class="small text-body-secondary">Pilih bulan dan isi tahun yang sah untuk melihat tarif yang berlaku.</div>';
+  h += `<div class="border rounded p-3" style="background:rgba(67,89,113,.04)"><div class="fw-semibold mb-1">Tarif yang berlaku pada ${esc(s.bulan[0] + s.bulan.slice(1).toLowerCase())} ${esc(s.tahun)}</div>${seg.map(g =>
+    `<div class="small">${JX.tglID(g.dari)}${g.sampai !== g.dari ? ' – ' + JX.tglID(g.sampai) : ''}: Jasa Profesi <b>${R(g.jaspro)}</b> · Transport <b>${R(g.transport)}</b></div>`).join('')}</div>`;
+  if (seg.length > 1) {
+    const L = J.laporan?.rows || [], ada = L.some(r => JX.tglSah(r.tanggal)), tanpa = !L.length || L.some(r => !JX.tglSah(r.tanggal));
+    h += `<div class="alert alert-info py-2 mt-2 mb-0">Tarif berubah di tengah bulan ini. ${!ada
+      ? `Laporan yang dimuat tidak memiliki kolom Tanggal, sehingga seluruh baris memakai tarif per ${acuan} (tanggal acuan). Untuk memisahkan peristiwa sebelum dan sesudah perubahan, unggah laporan dengan kolom Tanggal (satu baris per penghulu per tanggal) atau ubah tanggal acuan.`
+      : tanpa ? `Baris bertanggal memakai tarif sesuai tanggalnya; baris tanpa tanggal memakai tarif per ${acuan} (tanggal acuan).` : 'Setiap baris laporan memakai tarif sesuai tanggalnya.'}</div>`;
+  }
+  return h;
+}
+const jpTarifRefresh = () => { const b = $('jtsum'); if (b) b.innerHTML = jpTarifRingkas(); };
+function jpUrutRiwayat() {   // perubahan yang tanggalnya sah diurutkan naik; baris yang belum lengkap tetap di bawah (urutan aslinya)
+  const L = J.set.tarifRiwayat.map((e, i) => [e, i]);
+  L.sort(([a, i], [b, j]) => { const x = JX.tglSah(a.mulai), y = JX.tglSah(b.mulai); return x && y ? (a.mulai < b.mulai ? -1 : a.mulai > b.mulai ? 1 : i - j) : x ? -1 : y ? 1 : i - j; });
+  J.set.tarifRiwayat = L.map(([e]) => e);
+}
 const pPr = () => {
   const f = (k, l, n, c = 'col-sm-6 col-lg-3') => `<div class="${c}"><label class="form-label">${l}</label><input class="form-control" ${n ? 'type="number" min="0" data-n' : 'type="text"'} data-s="${k}" value="${esc(J.set[k])}"></div>`;
   return `<div class="card mb-4"><div class="card-body">
     <h5 class="mb-1">Proses &amp; Unduh Laporan</h5><p class="mb-4">Atur periode, tarif, dan tanda tangan, cocokkan data, lalu unduh Excel (sheet JASPRO &amp; TRANSPO) atau CSV pencairan. Pengaturan tersimpan otomatis.</p>
-    <h6 class="text-uppercase small">Periode &amp; tarif per peristiwa</h6>
+    <h6 class="text-uppercase small">Periode laporan</h6>
     <div class="row g-3 mb-4"><div class="col-sm-6 col-lg-3"><label class="form-label">Bulan</label><select class="form-select" data-s="bulan">${JX.BULAN_LIST.map(b => `<option value="${b}"${b === J.set.bulan ? ' selected' : ''}>${b[0] + b.slice(1).toLowerCase()}</option>`).join('')}</select></div>
-      ${f('tahun', 'Tahun', 1)}${f('tarifJaspro', 'Tarif Jasa Profesi (Rp)', 1)}${f('tarifTransport', 'Tarif Transport (Rp)', 1)}</div>
+      ${f('tahun', 'Tahun', 1)}</div>
+    <h6 class="text-uppercase small">Tarif per peristiwa <span class="fw-normal text-lowercase">· dapat berubah pada tanggal tertentu</span></h6>
+    ${pTarif()}
     <h6 class="text-uppercase small">Tarif PPh Jasa Profesi (%) <span class="fw-normal text-lowercase">· transport tidak dikenakan PPh</span></h6>
     <div class="row g-3 mb-4">${f('pphII', 'PNS Golongan II', 1)}${f('pphIII', 'PNS Golongan III', 1)}${f('pphIV', 'PNS Golongan IV', 1)}${f('pphPPPK', 'PPPK Golongan IX', 1)}</div>
     <h6 class="text-uppercase small">Blok tanda tangan</h6>
@@ -1306,9 +1693,10 @@ function jpReview() {
   const R = J.rows, h = $('jrev'); if (!h) return;
   if (!R) return h.innerHTML = '';
   const sum = k => R.reduce((s, r) => s + r[k], 0), ok = R.filter(r => r.matchStatus === 'OTOMATIS').length, bad = R.filter(r => !['OTOMATIS', 'MANUAL'].includes(r.matchStatus)).length;
+  const adaTgl = R.some(r => JX.tglSah(r.tanggal)), tengah = jpTarifTengah('xlsx');
   h.innerHTML = `<div class="row g-3 mb-4">${jpCard('bx-list-ul', 'primary', R.length, 'Total baris')}${jpCard('bx-check-circle', 'success', ok, 'Cocok otomatis')}${jpCard('bx-error', bad ? 'warning' : 'success', bad, 'Perlu ditinjau')}${jpCard('bx-wallet', 'info', 'Rp ' + rp(Math.round(sum('jasproDiterima'))), 'Jaspro diterima')}${jpCard('bx-bus', 'info', 'Rp ' + rp(Math.round(sum('transpoDiterima'))), 'Transport diterima')}</div>
-    <div class="card mb-3"><div class="card-body"><p class="mb-3">Tinjau hasil pencocokan. Kolom <b>Golongan</b>, <b>No. Rekening</b>, dan <b>Nama Pemilik</b> dapat diedit langsung (tidak disimpan ke server).</p>
-    <div class="scroll"><table class="table align-middle mb-0"><thead><tr><th>No</th><th>Nama</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Status</th><th>No. Rekening</th><th>Nama Pemilik</th><th class="text-end">Peristiwa</th><th class="text-end">Jaspro (Rp)</th><th class="text-end">Transport (Rp)</th></tr></thead>
+    <div class="card mb-3"><div class="card-body"><p class="mb-3">Tinjau hasil pencocokan. Kolom <b>Golongan</b>, <b>No. Rekening</b>, dan <b>Nama Pemilik</b> dapat diedit langsung (tidak disimpan ke server).${jpTarifBerubah() ? ` Tarif berubah di tengah bulan ini: baris bertanggal memakai tarif sesuai tanggalnya${tengah ? `, ${tengah.n} baris tanpa tanggal memakai tarif per ${tengah.acuan} (tanggal acuan)` : ''}. Tarif per peristiwa tampil di bawah nominal.` : ''}</p>
+    <div class="scroll"><table class="table align-middle mb-0"><thead><tr><th>No</th><th>Nama</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Status</th><th>No. Rekening</th><th>Nama Pemilik</th>${adaTgl ? '<th>Tanggal</th>' : ''}<th class="text-end">Peristiwa</th><th class="text-end">Jaspro (Rp)</th><th class="text-end">Transport (Rp)</th></tr></thead>
     <tbody>${R.map((r, i) => {
       const [c, l] = JST[r.matchStatus] || JST.TIDAK_DITEMUKAN, isBad = !['OTOMATIS', 'MANUAL'].includes(r.matchStatus), cd = r.candidates?.[0], unk = r.golClass === 'UNKNOWN';
       return `<tr class="${isBad ? 'issue' : ''}"><td>${i + 1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td>
@@ -1316,16 +1704,28 @@ function jpReview() {
         <td><span class="badge bg-label-${c}">${l}</span>${isBad && cd ? `<button class="btn btn-link btn-sm p-0 d-block text-start" data-act="use" data-i="${i}">Pakai: ${esc(cd.nama.slice(0, 22))}${cd.nama.length > 22 ? '…' : ''}</button>` : ''}</td>
         <td><input class="form-control form-control-sm" style="width:140px" list="jdl-list" data-i="${i}" data-f="rek" value="${esc(r.rekening)}"></td>
         <td><input class="form-control form-control-sm" style="width:160px" data-i="${i}" data-f="own" value="${esc(r.namaPemilik || '')}" placeholder="(sama dengan nama)"></td>
-        <td class="text-end">${esc(r.jumlahPeristiwa)}</td><td class="text-end">${rp(Math.round(r.jasproDiterima))}</td><td class="text-end">${rp(Math.round(r.transpoDiterima))}</td></tr>`;
+        ${adaTgl ? `<td class="text-nowrap">${JX.tglSah(r.tanggal) ? JX.tglID(r.tanggal) : '<span class="text-body-secondary">–</span>'}</td>` : ''}
+        <td class="text-end">${esc(r.jumlahPeristiwa)}</td><td class="text-end">${rp(Math.round(r.jasproDiterima))}<div class="small text-body-secondary text-nowrap">@ ${rp(r.tarifJaspro)}</div></td><td class="text-end">${rp(Math.round(r.transpoDiterima))}<div class="small text-body-secondary text-nowrap">@ ${rp(r.tarifTransport)}</div></td></tr>`;
     }).join('')}</tbody></table></div>
     <datalist id="jdl-list">${J.master.map(m => `<option value="${esc(m.noRekening)}">${esc(m.nama)}</option>`).join('')}</datalist></div></div>
     <div class="d-flex flex-wrap justify-content-end gap-2"><button class="btn btn-outline-secondary" data-act="dct"><i class="bx bx-download"></i> CSV Transport</button><button class="btn btn-outline-secondary" data-act="dcj"><i class="bx bx-download"></i> CSV Jaspro</button><button class="btn btn-primary" data-act="dxl"><i class="bx bx-download"></i> Unduh Laporan Excel</button></div>`;
 }
+// Tarif (kind: xlsx = keduanya | jaspro | transpo) berubah di tengah bulan laporan?
+function jpTarifBerubah(kind = 'xlsx') {
+  const s = J.set;
+  return JX.tarifSegmen(s, JX.awalBulan(s.bulan, s.tahun), JX.akhirBulan(s.bulan, s.tahun), kind === 'xlsx' ? undefined : kind === 'jaspro' ? 'jaspro' : 'transport').length > 1;
+}
+// Jumlah baris tanpa tanggal yang terpaksa memakai tanggal acuan padahal tarif berubah di tengah bulan; null bila tidak ada.
+function jpTarifTengah(kind) {
+  if (!J.rows || !jpTarifBerubah(kind)) return null;
+  const n = J.rows.filter(r => !JX.tglSah(r.tanggal)).length;
+  return n ? { n, acuan: JX.tglID(JX.tanggalAcuan(J.set)) } : null;
+}
 function jpDl(kind) {   // kind: xlsx | jaspro | transpo
-  const rek = J.rows.filter(r => !r.rekening).length, gol = J.rows.filter(r => r.golClass === 'UNKNOWN').length;
+  const rek = J.rows.filter(r => !r.rekening).length, gol = J.rows.filter(r => r.golClass === 'UNKNOWN').length, tengah = jpTarifTengah(kind);
   const go = () => kind === 'xlsx' ? jpExcel() : jpCsv(kind);
-  const msg = [rek && `${rek} baris tanpa nomor rekening`, kind === 'xlsx' && gol && `${gol} baris golongan tidak dikenali (PPh dihitung 0%)`].filter(Boolean).join(' dan ');
-  if (msg) jpAsk('Masih ada data yang perlu ditinjau', msg + '. File tetap bisa dibuat dengan kolom terkait kosong/0. Lanjutkan mengunduh?', 'Lanjutkan Unduh', go); else go();
+  const msg = [rek && `${rek} baris tanpa nomor rekening`, kind === 'xlsx' && gol && `${gol} baris golongan tidak dikenali (PPh dihitung 0%)`, tengah && `${tengah.n} baris tanpa tanggal memakai tarif per ${tengah.acuan} padahal tarif berubah di tengah bulan`].filter(Boolean).join(' dan ');
+  if (msg) jpAsk('Masih ada data yang perlu ditinjau', msg + (rek || (kind === 'xlsx' && gol) ? '. File tetap bisa dibuat dengan kolom terkait kosong/0' : '') + '. Lanjutkan mengunduh?', 'Lanjutkan Unduh', go); else go();
 }
 async function jpExcel() {
   const s = J.set, f = { tempatTanggal: s.tempatTanggal || '' };
@@ -1357,6 +1757,12 @@ function jpClick(e) {
     const m = J.master.find(x => x.id === id);
     if (m) jpAsk('Hapus data penghulu?', `"${m.nama}" akan dihapus dari Master Rekening.`, 'Hapus', async () => { J.master = J.master.filter(x => x.id !== id); J.stale = true; await jpSave({ master: J.master }); jpRender(); }, true);
   }
+  else if (a === 'tadd') {
+    J.set.tarifRiwayat.push({ mulai: '', jaspro: null, transport: null });
+    jpRender();
+    $('jpanel').querySelector(`[data-t="mulai"][data-k="${J.set.tarifRiwayat.length - 1}"]`)?.focus();
+  }
+  else if (a === 'tdel') { J.set.tarifRiwayat.splice(+b.dataset.k, 1); J.stale = true; jpSetSimpan(); jpRender(); }
   else if (a === 'proc') jpProcess();
   else if (a === 'use') { const r = J.rows[b.dataset.i], c = r.candidates[0]; Object.assign(r, { rekening: c.noRekening, namaPemilik: c.namaPemilik, matchStatus: 'MANUAL' }); jpReview(); }
   else if (a === 'dxl') jpDl('xlsx');
@@ -1377,9 +1783,15 @@ function jpChange(e) {
 function jpInput(e) {
   const t = e.target;
   if (t.id === 'jq') { J.q = t.value; const r = jpMRows(); $('jmt').innerHTML = r.html; $('jmc').textContent = jpMCount(r.n); }
+  else if (t.dataset.t) {   // perubahan tarif menurut tanggal: kolom mulai | jaspro | transport pada baris ke-k
+    const e = J.set.tarifRiwayat[+t.dataset.k]; if (!e) return;
+    if (t.dataset.t === 'mulai') e.mulai = t.value;
+    else { const v = parseFloat(t.value); e[t.dataset.t] = t.value.trim() === '' || !Number.isFinite(v) ? null : v; }
+    J.stale = true; jpSetSimpan(); jpProcBtn(); jpTarifRefresh();
+  }
   else if (t.dataset.s) {   // pengaturan: ketikan beruntun digabung jadi satu simpan
     J.set[t.dataset.s] = 'n' in t.dataset ? (parseFloat(t.value) || 0) : t.value; J.stale = true;
-    clearTimeout(J.t); J.t = setTimeout(() => jpSave({ settings: J.set }), 800); jpProcBtn();
+    jpSetSimpan(); jpProcBtn(); jpTarifRefresh();
   }
 }
 

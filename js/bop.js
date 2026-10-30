@@ -1,6 +1,9 @@
 /* =====================================================================================
    bop.js: menu BOP (RPD, Realisasi, Laporan, Anggaran, Verifikasi, Metode, SAKTI, Config, Impor Data Lama)
    Data di Supabase. Dimuat setelah core.js.
+   Siapa yang boleh membuka halaman mana ditentukan menu di Hak Akses Menu (can() di core.js) dan DITEGAKKAN database (RLS/trigger di
+   bop.sql). Kode di sini hanya menyesuaikan tampilan: Operator KUA selalu terikat ke KUA-nya sendiri, peran lain (pusat) melihat semua KUA.
+   Hasil aksi (simpan, kirim, ubah status) dilaporkan lewat lapor()/jpToast() di core.js: catatan di halaman DAN pop-up paling depan.
    ===================================================================================== */
 
 /* ====== Data master (cache di memori), format rupiah ====== */
@@ -28,7 +31,10 @@ const fmtIn = el => {   // format 1.500.000 saat mengetik (maks. 10 digit), kurs
   el.setSelectionRange(i, i);
 };
 const yearSel = (id, y) => `<select id="${id}" class="form-select" style="width:auto">${[y - 1, y, y + 1].map(v => `<option${v === y ? ' selected' : ''}>${v}</option>`).join('')}</select>`;
+// Peran pusat = semua peran selain Operator KUA (Admin, Bendahara BOP, Verifikator BOP, ...): memilih KUA atau melihat semua KUA.
+const pusat = () => me.role !== 'operator';
 
+/* ====== Anggaran (menu anggaran: bawaan hanya Admin) ====== */
 async function pageAnggaran() {
   const ep = EP;
   $('view').innerHTML = `<div class="card"><div class="card-body">
@@ -55,11 +61,11 @@ async function pageAnggaran() {
       const items = {};   // hanya KUA yang berubah; yang lain tidak tersentuh (digabung di server)
       $('atab').querySelectorAll('[data-k]').forEach(i => { const v = i.value.trim() ? num(i.value) : 0; if (v !== (set[i.dataset.k] || 0)) items[i.dataset.k] = v; });
       const c = Object.keys(items).length;
-      if (!c) return $('amsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
+      if (!c) return lapor($('amsg'), 'Tidak ada perubahan untuk disimpan.', 'info');
       $('asave').disabled = true;
       const { error } = await sb.rpc('set_anggaran', { p_tahun: t, p_items: items });   // satu transaksi: gagal satu = batal semua
       if (!live(ep)) return;
-      $('amsg').innerHTML = error ? note(error.message) : note(`Anggaran ${t} tersimpan untuk ${c} KUA.`, 'success');
+      lapor($('amsg'), error ? error.message : `Anggaran ${t} tersimpan untuk ${c} KUA.`, error ? 'danger' : 'success');
       if (error) $('asave').disabled = false; else load();
     };
   };
@@ -72,7 +78,7 @@ const sumT = a => a.reduce((s, x) => s + x.total, 0);
 const isum = o => Object.values(o || {}).reduce((s, v) => s + v, 0);
 const posLabel = p => `${p.kode_pos} · ${p.nama_rincian || p.nama_pos}`;   // kode akun + nama POS/rincian
 /* ====== Pembayaran SAKTI: hanya Listrik dan Telepon/Internet. Ceklis GLOBAL per KUA + POS (tanpa bulan/tahun berlaku) dan
-   nominal bulanan yang diinput admin (Realisasi SAKTI) ====== */
+   nominal bulanan yang diinput petugas (Admin, atau peran bermenu Realisasi SAKTI) ====== */
 const SAKTI_POS = ['522111', '522112'];   // Listrik dan Telepon/Internet: hanya POS ini yang dapat dibayar lewat SAKTI
 const metodeOf = (vers, kid, pid) => vers.find(v => v.kua_id === kid && v.pos_id === pid)?.metode || 'MANUAL';   // belum diatur = MANUAL (sama dengan fungsi SQL metode_pos)
 const saktiOf = (rs, b) => { const o = {}; rs.forEach(x => { if (x.bulan === b && x.nominal > 0) o[x.pos_id] = x.nominal; }); return o; };   // {pos_id: nominal} Realisasi SAKTI satu bulan
@@ -88,8 +94,8 @@ async function showDocs(el, ctx, opt = {}) {   // ctx = { kua, tahun, bulan }; o
       if (v) return openViewer(files, +v.dataset.f, f => api({ action: 'file', ...ctx, id: f.id }), opt.side);
       if (!x || !confirm(`Hapus file "${files[+x.dataset.x].name}" dari Google Drive?`)) return;
       x.disabled = true;
-      try { await api({ action: 'delete', ...ctx, id: files[+x.dataset.x].id }, { method: 'POST' }); showDocs(el, ctx, opt); }
-      catch (er) { x.disabled = false; el.insertAdjacentHTML('beforeend', note(er.message)); }
+      try { await api({ action: 'delete', ...ctx, id: files[+x.dataset.x].id }, { method: 'POST' }); showDocs(el, ctx, opt); jpToast('Dokumen dihapus dari Google Drive.', 'success'); }
+      catch (er) { x.disabled = false; el.insertAdjacentHTML('beforeend', note(er.message)); jpToast(er.message, 'danger'); }
     };
   } catch (e) { el.innerHTML = note(e.message); if (opt.onCount) opt.onCount(null); }
 }
@@ -108,15 +114,17 @@ function realisasiSide(judul, sub, pos, man, sak, flagged, rpdTotal) {
     ${rows.some(p => flagged.has(p.id)) ? '<div class="small mt-2">Baris biru: dibayar lewat SAKTI.</div>' : ''}`;
 }
 
-/* ====== RPD: daftar dulu (admin: filter semua kecamatan), Detail membuka rincian per POS. 1 record = 1 bulan ====== */
+/* ====== RPD: daftar dulu (peran pusat: filter semua kecamatan), Detail membuka rincian per POS. 1 record = 1 bulan.
+   Admin mengubah RPD kapan saja; Operator KUA hanya KUA-nya selama pengisian RPD dibuka (Config); peran pusat lain (Bendahara/Verifikator
+   BOP) hanya MELIHAT, sama dengan aturan database (policy rpd_write) ====== */
 async function pageRpd() {
-  const ep = EP, admin = me.role === 'admin', y = new Date().getFullYear();
+  const ep = EP, admin = me.role === 'admin', pu = pusat(), ro = pu && !admin, y = new Date().getFullYear();
   let m;
   try { m = await master(); } catch (e) { return live(ep) && ($('view').innerHTML = note('Gagal memuat data master: ' + e.message)); }
   if (!live(ep)) return;
-  if (!admin && !me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
+  if (!pu && !me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
   $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">RPD</h4>
-    <div class="d-flex flex-wrap gap-2 mb-3">${admin ? `<select id="rk" class="form-select" style="width:auto" aria-label="Kecamatan"><option value="0">Semua Kecamatan</option>${m.kua.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>` : ''}${yearSel('ry', y)}</div>
+    <div class="d-flex flex-wrap gap-2 mb-3">${pu ? `<select id="rk" class="form-select" style="width:auto" aria-label="Kecamatan"><option value="0">Semua Kecamatan</option>${m.kua.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>` : ''}${yearSel('ry', y)}</div>
     <div id="xmsg"></div><div id="rbody">Memuat…</div></div></div>`;
   let rows = [], ang = {}, cap = null, t, kid;   // ang = { "<id KUA>": anggaran }
   const listAll = () => {   // admin: semua kecamatan sekaligus
@@ -131,24 +139,24 @@ async function pageRpd() {
   const list = () => {   // satu kecamatan: 12 bulan
     const tot = sumT(rows);
     $('rbody').oninput = null;
-    $('rbody').innerHTML = `${admin ? '<button class="btn btn-sm btn-outline-secondary mb-3" id="rall"><i class="bx bx-arrow-back"></i> Semua kecamatan</button>' : ''}
+    $('rbody').innerHTML = `${pu ? '<button class="btn btn-sm btn-outline-secondary mb-3" id="rall"><i class="bx bx-arrow-back"></i> Semua kecamatan</button>' : ''}
       <div class="alert alert-primary py-2">Anggaran Tahunan ${t}: <b>${cap == null ? 'belum ditetapkan' : 'Rp ' + rp(cap)}</b> · Total RPD: <b>Rp ${rp(tot)}</b> · Sisa: <b>Rp ${rp((cap ?? 0) - tot)}</b></div>
       <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Bulan</th><th class="text-end">Total RPD (Rp)</th><th></th></tr></thead><tbody>${BULAN.map((n, i) => `<tr><td>${n}</td><td class="text-end">${rp(rows.find(x => x.bulan === i + 1)?.total)}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${i + 1}">Detail</button></td></tr>`).join('')}</tbody>
       <tfoot><tr class="fw-semibold"><td>Total ${t}</td><td class="text-end">${rp(tot)}</td><td></td></tr></tfoot></table></div>`;
-    if (admin) $('rall').onclick = () => { $('rk').value = 0; load(); };
+    if (pu) $('rall').onclick = () => { $('rk').value = 0; load(); };
     $('rbody').onclick = e => { const b = e.target.closest('[data-b]'); if (b) detail(+b.dataset.b); };
   };
   const detail = b => {
-    const locked = !admin && !(m.cfg.rpd_enabled === true && (m.cfg.bulan_edit_rpd || []).includes(b));
+    const locked = ro || (!admin && !(m.cfg.rpd_enabled === true && (m.cfg.bulan_edit_rpd || []).includes(b)));
     const cur = rows.find(x => x.bulan === b)?.items || {};
     $('rbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="rback"><i class="bx bx-arrow-back"></i> Kembali</button>
-      <h5 class="mb-3">RPD ${BULAN[b - 1]} ${t}${admin ? ' · ' + esc(m.kua.find(k => k.id === kid).nama_kua) : ''}</h5><div id="rsum"></div>
-      ${locked ? note('Pengisian RPD untuk bulan ini ditutup. Hubungi admin bila perlu perubahan.', 'warning') : ''}
+      <h5 class="mb-3">RPD ${BULAN[b - 1]} ${t}${pu ? ' · ' + esc(m.kua.find(k => k.id === kid).nama_kua) : ''}</h5><div id="rsum"></div>
+      ${ro ? note('Peran Anda hanya dapat melihat RPD. RPD diisi oleh Operator KUA atau Admin.', 'info') : locked ? note('Pengisian RPD untuk bulan ini ditutup. Hubungi admin bila perlu perubahan.', 'warning') : ''}
       <div class="table-responsive"><table class="table align-middle"><tbody>${m.pos.map(p => `<tr>
         <td>${esc(posLabel(p))}${p.nama_rincian ? `<div class="small">${esc(p.nama_pos)}</div>` : ''}</td>
         <td style="width:190px"><input class="form-control text-end" inputmode="numeric" placeholder="0" data-p="${p.id}" value="${cur[p.id] ? rp(cur[p.id]) : ''}"${locked ? ' disabled' : ''}></td></tr>`).join('')}</tbody>
         <tfoot><tr class="fw-semibold"><td>Total RPD ${BULAN[b - 1]}</td><td class="text-end" id="rtot"></td></tr></tfoot></table></div>
-      <button class="btn btn-primary" id="rsave">Simpan RPD ${BULAN[b - 1]}</button>`;
+      ${ro ? '' : `<button class="btn btn-primary" id="rsave">Simpan RPD ${BULAN[b - 1]}</button>`}`;
     const calc = () => {
       const others = sumT(rows.filter(x => x.bulan !== b)), mine = [...$('rbody').querySelectorAll('[data-p]')].reduce((s, i) => s + num(i.value), 0);
       const total = others + mine, sisa = (cap ?? 0) - total, over = cap == null || sisa < 0;
@@ -157,26 +165,26 @@ async function pageRpd() {
       $('rsum').innerHTML = cap == null ? `Anggaran Tahunan ${t} belum ditetapkan admin, jadi RPD belum bisa diisi.`
         : `Total RPD ${t}: <b>Rp ${rp(total)}</b> · Anggaran: <b>Rp ${rp(cap)}</b> · Sisa: <b>Rp ${rp(sisa)}</b>` +
           (sisa < 0 ? `<br>Melebihi anggaran Rp ${rp(-sisa)}. Batas Rp ${rp(cap)}; bulan lain Rp ${rp(others)}; bulan ini yang diisi Rp ${rp(mine)}. Kurangi isian bulan ini.` : '');
-      $('rsave').disabled = locked || over;
+      if ($('rsave')) $('rsave').disabled = locked || over;
       return over;
     };
     $('rback').onclick = list;
     $('rbody').onclick = null;
     $('rbody').oninput = e => { if (e.target.dataset.p) { fmtIn(e.target); calc(); } };
-    $('rsave').onclick = async () => {
+    if ($('rsave')) $('rsave').onclick = async () => {
       if (calc()) return;
       const items = {};
       $('rbody').querySelectorAll('[data-p]').forEach(i => { const v = num(i.value); if (v > 0) items[i.dataset.p] = v; });
       $('rsave').disabled = true;
       const { error } = await sb.from('rpd').upsert({ kua_id: kid, tahun: t, bulan: b, items }, { onConflict: 'kua_id,tahun,bulan' }); if (!live(ep)) return;   // 1 bulan = 1 record
-      $('xmsg').innerHTML = error ? note(error.message) : note(`RPD ${BULAN[b - 1]} ${t} tersimpan.`, 'success');
+      lapor($('xmsg'), error ? error.message : `RPD ${BULAN[b - 1]} ${t} tersimpan.`, error ? 'danger' : 'success');
       if (!error) rows = rows.filter(x => x.bulan !== b).concat({ kua_id: kid, bulan: b, items, total: isum(items) });
       calc();
     };
     calc();
   };
   const load = async () => {
-    t = +$('ry').value; kid = admin ? +$('rk').value : me.kua_id;
+    t = +$('ry').value; kid = pu ? +$('rk').value : me.kua_id;
     $('rbody').textContent = 'Memuat…';
     const qr = sb.from('rpd').select('kua_id,bulan,items,total').eq('tahun', t);
     const [a, r] = await Promise.all([sb.rpc('anggaran_tahun', { p_tahun: t }), kid ? qr.eq('kua_id', kid) : qr]);   // anggaran 1 baris per tahun; operator hanya menerima KUA-nya
@@ -189,7 +197,10 @@ async function pageRpd() {
   load();
 }
 
-/* ====== Realisasi (operator): daftar bulan dulu. Hanya yang belum diisi / ditolak yang bisa diedit ====== */
+/* ====== Realisasi (Operator KUA): daftar bulan dulu. Hanya yang belum diisi / ditolak yang bisa diedit ======
+   Batas RPD (sama dengan realisasi_guard di bop.sql): (1) total sebulan (manual + SAKTI) <= RPD bulan itu; (2) tiap POS setahun
+   (manual + SAKTI) <= RPD POS itu setahun. Realisasi SAKTI sudah dibayar dan boleh melampaui RPD (diinput petugas); selama sebuah POS
+   melebihi RPD setahun, Realisasi baru TIDAK dapat dikirim (tombol Kirim nonaktif) dan kelebihannya ditampilkan di daftar dan detail. */
 async function pageRealisasi() {
   const ep = EP, now = new Date();
   let m;
@@ -200,10 +211,22 @@ async function pageRealisasi() {
     <div class="d-flex flex-wrap gap-2 mb-3">${yearSel('lt', now.getFullYear())}<select id="lm" class="form-select" style="width:auto" aria-label="Bulan"><option value="0">Semua bulan</option>${BULAN.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('')}</select></div><div id="lmsg"></div><div id="lbody">Memuat…</div></div></div>`;
   let rpd = [], rl = [], vers = null, rs = [], t;   // vers = metode pembayaran KUA ini; rs = Realisasi SAKTI tahun terpilih
   const rec = b => rl.find(x => x.bulan === b), rpdOf = b => rpd.find(x => x.bulan === b);
+  // POS yang Realisasi setahunnya (manual semua bulan + SAKTI) sudah melebihi RPD setahun. Kosong = tidak ada kelebihan.
+  const lebihTahun = () => m.pos.map(p => {
+    const cap = rpd.reduce((s, x) => s + (x.items[p.id] || 0), 0), man = rl.reduce((s, x) => s + (x.items[p.id] || 0), 0), sak = saktiYear(rs, p.id);
+    return { p, cap, man, sak, lebih: man + sak - cap };
+  }).filter(x => x.lebih > 0);
+  const bannerLebih = () => {
+    const L = lebihTahun();
+    if (!L.length) return '';
+    return `<div class="alert alert-danger py-2" role="alert"><b>Realisasi ${t} sudah melebihi RPD setahun, jadi Realisasi baru belum dapat dikirim.</b><ul class="mb-1">${L.map(x =>
+      `<li>${esc(posLabel(x.p))}: terpakai Rp ${rp(x.man + x.sak)} (manual Rp ${rp(x.man)}${x.sak ? ` + SAKTI Rp ${rp(x.sak)}` : ''}) dari RPD setahun Rp ${rp(x.cap)}; <b>kelebihan Rp ${rp(x.lebih)}</b></li>`).join('')}</ul>
+      <span class="small">${L.some(x => x.sak) ? 'Realisasi SAKTI sudah dibayar sehingga tidak dapat diubah operator. ' : ''}Tombol Kirim terbuka lagi setelah RPD POS tersebut ditambah (menu RPD, bila pengisian RPD dibuka) atau dihubungi admin.</span></div>`;
+  };
   const list = () => {
     let ta = 0; const ms = +$('lm').value;   // filter bulan (0 = semua)
     $('lbody').oninput = null;
-    $('lbody').innerHTML = `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Bulan</th><th class="text-end">RPD (Rp)</th><th class="text-end">Realisasi (Rp)</th><th>Status</th><th></th></tr></thead><tbody>${BULAN.map((n, i) => {
+    $('lbody').innerHTML = bannerLebih() + `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Bulan</th><th class="text-end">RPD (Rp)</th><th class="text-end">Realisasi (Rp)</th><th>Status</th><th></th></tr></thead><tbody>${BULAN.map((n, i) => {
         if (ms && ms !== i + 1) return '';
         const b = i + 1, r = rec(b), st = r ? ST[r.status] : ['bg-secondary', 'Belum diisi'], au = isum(saktiOf(rs, b)); ta += au;
         return `<tr><td>${n}</td><td class="text-end">${rp(rpdOf(b)?.total)}</td><td class="text-end">${rp((r?.total || 0) + au)}</td><td><span class="badge ${st[0]}">${st[1]}</span>${r?.status === 'paid' && r.nominal_dibayar ? `<div class="small">Rp ${rp(r.nominal_dibayar)}</div>` : ''}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${b}">Detail</button></td></tr>`; }).join('')}</tbody>
@@ -215,9 +238,9 @@ async function pageRealisasi() {
     const open = m.cfg.realisasi_enabled === true, okDate = now >= new Date(t, b - 1, 10), canRec = !r || r.status === 'rejected', edit = open && canRec, send = edit && okDate;   // send = boleh unggah dokumen dan mengirim
     let nDocs = lpj ? null : 0, upl = '';   // jumlah dokumen LPJ di Drive; upl = folder yang baru diunggah pada sesi ini
     $('lbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="lback"><i class="bx bx-arrow-back"></i> Kembali</button>
-      <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">Realisasi ${BULAN[b - 1]} ${t}</h5>${r ? `<span class="badge ${ST[r.status][0]}">${ST[r.status][1]}</span>` : ''}${r?.status === 'paid' && r.nominal_dibayar ? `<span class="small">Dibayar admin <b>Rp ${rp(r.nominal_dibayar)}</b></span>` : ''}</div>
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">Realisasi ${BULAN[b - 1]} ${t}</h5>${r ? `<span class="badge ${ST[r.status][0]}">${ST[r.status][1]}</span>` : ''}${r?.status === 'paid' && r.nominal_dibayar ? `<span class="small">Dibayar <b>Rp ${rp(r.nominal_dibayar)}</b></span>` : ''}</div>
       <div id="lsum" class="alert alert-primary py-2"></div>
-      ${r && r.status === 'rejected' ? note('Ditolak admin' + (r.catatan_admin ? ': ' + r.catatan_admin : '') + '. Perbaiki nominal atau dokumen LPJ, lalu kirim ulang.', 'danger') : ''}
+      ${r && r.status === 'rejected' ? note('Ditolak' + (r.catatan_admin ? ': ' + r.catatan_admin : '') + '. Perbaiki nominal atau dokumen LPJ, lalu kirim ulang.', 'danger') : ''}
       ${r && r.status !== 'rejected' ? note(`Realisasi berstatus ${ST[r.status][1]} dan tidak dapat diubah. Hanya Realisasi yang ditolak yang dapat diperbaiki.`, 'info') : ''}
       ${open ? '' : note('Pengisian Realisasi sedang ditutup oleh admin.', 'warning')}
       ${edit && !okDate ? note(`Realisasi ${BULAN[b - 1]} ${t} baru dapat disubmit mulai 10 ${BULAN[b - 1]} ${t}.`, 'info') : ''}
@@ -233,7 +256,8 @@ async function pageRealisasi() {
       ${canRec ? `<label class="form-label" for="lfile">${lpj ? 'Tambah file LPJ' : 'Unggah file LPJ <span class="text-danger">(wajib)</span>'}</label>
         <input id="lfile" type="file" class="form-control mb-1" multiple accept=".pdf,.jpg,.jpeg,.png"${send ? '' : ' disabled'}>
         <div class="form-text mb-3">PDF, JPG, atau PNG. Maksimal ${m.cfg.max_file_count ?? 3} file per bulan, masing-masing ${m.cfg.max_file_size_mb ?? 5} MB.</div>
-        <button class="btn btn-primary" id="lsave"${send ? '' : ' disabled'}>Kirim Realisasi ${BULAN[b - 1]}</button>` : ''}`;
+        <button class="btn btn-primary" id="lsave"${send ? '' : ' disabled'}>Kirim Realisasi ${BULAN[b - 1]}</button>
+        <div id="lblock" class="small text-danger mt-2" aria-live="polite"></div>` : ''}`;
     const side = () => {   // pembanding di samping dokumen: nilai yang SEDANG diisi di form (belum tentu tersimpan) + nominal SAKTI
       const man = {}, sak = {}, flagged = new Set();
       m.pos.forEach(p => { if (mt[p.id] === 'SAKTI') { flagged.add(p.id); if (au[p.id]) sak[p.id] = au[p.id]; if (cur[p.id]) man[p.id] = cur[p.id]; } });
@@ -243,26 +267,42 @@ async function pageRealisasi() {
     if (lpj) showDocs($('ldocs'), { kua: me.kua_id, tahun: t, bulan: b }, { del: edit, onCount: n => nDocs = n, side });
     const calc = () => {
       const inp = [...$('lbody').querySelectorAll('[data-p]')], errs = [], aTot = isum(au), rpdBln = rpdOf(b)?.total || 0;
-      let man = 0;
+      let man = 0, sakLebih = false;
       inp.forEach(i => {
         const pid = +i.dataset.p, p = m.pos.find(x => x.id === pid), v = mt[pid] === 'SAKTI' ? (cur[pid] || 0) : num(i.value); man += v;
-        const cap = rpd.reduce((s, x) => s + (x.items[pid] || 0), 0), used = rl.filter(x => x.bulan !== b).reduce((s, x) => s + (x.items[pid] || 0), 0) + saktiYear(rs, pid), sisa = cap - used - v;
+        // SEMUA POS diperiksa (juga yang tidak diisi bulan ini), sama dengan database: POS yang sudah melebihi RPD setahun karena
+        // Realisasi SAKTI menutup pengiriman Realisasi bulan apa pun.
+        const cap = rpd.reduce((s, x) => s + (x.items[pid] || 0), 0), oth = rl.filter(x => x.bulan !== b).reduce((s, x) => s + (x.items[pid] || 0), 0), sak = saktiYear(rs, pid);
+        const used = oth + sak, sisa = cap - used - v;
         $('sisa' + pid).textContent = 'Rp ' + rp(sisa); $('sisa' + pid).className = sisa < 0 ? 'text-danger' : '';
-        if (sisa < 0) errs.push(`${posLabel(p)}: melebihi RPD setahun. Batas Rp ${rp(cap)}; terpakai di bulan lain dan SAKTI Rp ${rp(used)}; dimasukkan Rp ${rp(v)}; kelebihan Rp ${rp(-sisa)}.`);
+        if (sisa < 0) {
+          if (sak) sakLebih = true;
+          errs.push(`${posLabel(p)}: melebihi RPD setahun. RPD setahun Rp ${rp(cap)}; terpakai Rp ${rp(used)} (bulan lain Rp ${rp(oth)}${sak ? ` + SAKTI Rp ${rp(sak)}` : ''}); bulan ini Rp ${rp(v)}; kelebihan Rp ${rp(-sisa)}.`);
+        }
       });
-      if (man + aTot > rpdBln) errs.push(`Total Realisasi ${BULAN[b - 1]} Rp ${rp(man + aTot)} melebihi RPD bulan ini Rp ${rp(rpdBln)}; kelebihan Rp ${rp(man + aTot - rpdBln)}.`);
+      if (man + aTot > rpdBln) {
+        if (aTot) sakLebih = true;
+        errs.push(`Total Realisasi ${BULAN[b - 1]} Rp ${rp(man + aTot)}${aTot ? ` (manual Rp ${rp(man)} + SAKTI Rp ${rp(aTot)})` : ''} melebihi RPD bulan ini Rp ${rp(rpdBln)}; kelebihan Rp ${rp(man + aTot - rpdBln)}.`);
+      }
       $('trpd').textContent = rp(rpdBln); $('treal').textContent = rp(man + aTot);
       $('lsum').innerHTML = `RPD ${BULAN[b - 1]}: <b>Rp ${rp(rpdBln)}</b> · Realisasi: <b>Rp ${rp(man + aTot)}</b> · Sisa RPD bulan ini: <b>Rp ${rp(rpdBln - man - aTot)}</b>`;
-      $('lerr').innerHTML = errs.length ? `<div class="alert alert-danger py-2">${errs.map(esc).join('<br>')}</div>` : '';
-      if ($('lsave')) $('lsave').disabled = errs.length > 0 || !send || !inp.some(i => !i.disabled);
-      return errs.length > 0;
+      // Rincian kelebihan hanya untuk bulan yang masih bisa dikirim/diperbaiki; bulan yang sudah terkunci cukup keterangan statusnya.
+      $('lerr').innerHTML = errs.length && canRec ? `<div class="alert alert-danger py-2" role="alert">${errs.map(esc).join('<br>')}${
+        sakLebih ? '<div class="small mt-1">Realisasi SAKTI sudah dibayar dan tidak dapat diubah operator. Tambah RPD terkait (menu RPD, bila pengisian RPD dibuka) atau hubungi admin.</div>' : ''}</div>` : '';
+      const kunci = errs.length > 0;
+      if ($('lsave')) {
+        $('lsave').disabled = kunci || !send || !inp.some(i => !i.disabled);
+        $('lsave').title = kunci ? 'Realisasi melebihi RPD: lihat keterangan di atas.' : '';
+        $('lblock').textContent = kunci && send ? 'Kirim dinonaktifkan: Realisasi melebihi RPD (lihat keterangan merah di atas).' : '';
+      }
+      return kunci;
     };
     $('lback').onclick = list;
     $('lbody').onclick = null;
     $('lbody').oninput = e => { if (e.target.dataset.p) { fmtIn(e.target); calc(); } };
     if ($('lsave')) $('lsave').onclick = async () => {
       if (calc()) return;
-      const files = [...$('lfile').files], warn = txt => $('lmsg').innerHTML = note(txt, 'warning'), items = {};
+      const files = [...$('lfile').files], warn = txt => lapor($('lmsg'), txt, 'warning'), items = {};
       $('lbody').querySelectorAll('[data-p]:not([disabled])').forEach(i => { const v = num(i.value); if (v > 0) items[i.dataset.p] = v; });
       const maxMb = m.cfg.max_file_size_mb ?? 5, maxN = m.cfg.max_file_count ?? 3, bad = files.find(f => f.size > maxMb * 1048576 || !/\.(pdf|jpe?g|png)$/i.test(f.name));
       if (!Object.keys(items).length) return warn('Belum ada nominal yang diisi.');
@@ -276,13 +316,13 @@ async function pageRealisasi() {
         $('lmsg').innerHTML = note('Mengunggah dokumen LPJ…', 'info');
         const fd = new FormData(); fd.append('tahun', t); fd.append('bulan', b); files.forEach(f => fd.append('files', f));
         try { const j = await (await api({ action: 'upload' }, { method: 'POST', body: fd })).json(); url = upl = j.folderUrl; nDocs = j.total; $('lfile').value = ''; }
-        catch (e) { if (!live(ep)) return; $('lmsg').innerHTML = note(e.message); return calc(); }
+        catch (e) { if (!live(ep)) return; lapor($('lmsg'), e.message, 'danger'); return calc(); }
         if (!live(ep)) return;
       }
       const { error } = await sb.from('realisasi').upsert({ kua_id: me.kua_id, tahun: t, bulan: b, items, file_lpj_url: url }, { onConflict: 'kua_id,tahun,bulan' });   // 1 bulan = 1 record
       if (!live(ep)) return;
-      if (error) { $('lmsg').innerHTML = note(error.message); return calc(); }
-      $('lmsg').innerHTML = note('Realisasi terkirim dan menunggu verifikasi admin. Selama menunggu, nominal dan dokumen tidak dapat diubah.', 'success');
+      if (error) { lapor($('lmsg'), error.message, 'danger'); return calc(); }
+      lapor($('lmsg'), 'Realisasi terkirim dan menunggu verifikasi. Selama menunggu, nominal dan dokumen tidak dapat diubah.', 'success');
       await load(b);
     };
     calc();
@@ -305,7 +345,8 @@ async function pageRealisasi() {
   load();
 }
 
-/* ====== Verifikasi (admin): filter kecamatan/tahun/status, tabel dulu, Detail = POS + dokumen + ubah status ====== */
+/* ====== Verifikasi (menu verifikasi: Admin, Bendahara BOP, Verifikator BOP): filter kecamatan/tahun/status, tabel dulu,
+   Detail = POS + dokumen + ubah status. Tidak dapat mengubah nominal atau dokumen LPJ (dijaga database) ====== */
 async function pageVerifikasi() {
   const ep = EP;
   let m;
@@ -349,8 +390,8 @@ async function pageVerifikasi() {
       <div class="table-responsive"><table class="table align-middle mb-2"><thead><tr><th>POS</th><th class="text-end">RPD bulan ini (Rp)</th><th class="text-end">Realisasi (Rp)</th></tr></thead><tbody>${rowsPos.map(p => { const s = flagged.has(p.id);
           return `<tr${s ? ' class="table-info"' : ''}><td>${esc(posLabel(p))}${s ? ' <span class="badge bg-label-primary">SAKTI</span>' : ''}</td><td class="text-end">${rp(ri[p.id])}</td><td class="text-end">${rp((f.items[p.id] || 0) + (sk[p.id] || 0))}</td></tr>`; }).join('')}</tbody>
         <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end">${rp(isum(ri))}</td><td class="text-end">${rp(f.total + sakti)}</td></tr></tfoot></table></div>
-      ${anySak ? '<div class="small mb-2"><span class="badge" style="background:#cff4fc;color:#055160;border:1px solid #9eeaf9">Biru</span> = POS dibayar lewat SAKTI (nominal diinput Admin, bukan diajukan operator).</div>' : ''}
-      <p class="small mb-3">Realisasi Manual (operator): <b>Rp ${rp(f.total)}</b> · Realisasi SAKTI (diinput Admin): <b>Rp ${rp(sakti)}</b> · Total Realisasi (Manual + SAKTI): <b>Rp ${rp(f.total + sakti)}</b> · RPD bulan ini: <b>Rp ${rp(isum(ri))}</b></p>
+      ${anySak ? '<div class="small mb-2"><span class="badge" style="background:#cff4fc;color:#055160;border:1px solid #9eeaf9">Biru</span> = POS dibayar lewat SAKTI (nominal diinput petugas SAKTI, bukan diajukan operator).</div>' : ''}
+      <p class="small mb-3">Realisasi Manual (operator): <b>Rp ${rp(f.total)}</b> · Realisasi SAKTI (diinput petugas SAKTI): <b>Rp ${rp(sakti)}</b> · Total Realisasi (Manual + SAKTI): <b>Rp ${rp(f.total + sakti)}</b> · RPD bulan ini: <b>Rp ${rp(isum(ri))}</b></p>
       <div class="fw-semibold mb-1">Dokumen LPJ</div><div id="vdocs" class="mb-3"></div>
       <div class="border rounded p-3"><div class="fw-semibold mb-2">Ubah status</div>
         <select id="vst" class="form-select mb-2" style="max-width:260px">${Object.entries(ST).map(([k, v]) => `<option value="${k}"${k === f.status ? ' selected' : ''}>${v[1]}</option>`).join('')}</select>
@@ -360,13 +401,13 @@ async function pageVerifikasi() {
         <textarea id="vnote" class="form-control mb-2${f.status === 'rejected' ? '' : ' d-none'}" rows="2" placeholder="Alasan penolakan (wajib)">${esc(f.catatan_admin || '')}</textarea>
         <div id="vperr"></div>
         <button class="btn btn-primary" id="vsave">Simpan status</button>
-        <div class="form-text mt-2">Admin dapat mengubah status kapan saja, tetapi tidak dapat mengubah nominal atau dokumen LPJ.</div></div>`;
+        <div class="form-text mt-2">Status dapat diubah kapan saja, tetapi nominal dan dokumen LPJ tidak dapat diubah dari sini.</div></div>`;
     showDocs($('vdocs'), { kua: f.kua_id, tahun: f.tahun, bulan: f.bulan }, { side: () => realisasiSide(kn(f.kua_id), `${BULAN[f.bulan - 1]} ${f.tahun}`, m.pos, f.items, sk, flagged, isum(ri)) });
     $('vback').onclick = list;
     $('vst').onchange = () => { $('vnote').classList.toggle('d-none', $('vst').value !== 'rejected'); $('vpaidbox').classList.toggle('d-none', $('vst').value !== 'paid'); };
     $('vpaid').oninput = () => fmtIn($('vpaid'));
     $('vsave').onclick = async () => {
-      const st = $('vst').value, why = $('vnote').value.trim(), paid = num($('vpaid').value), warn = txt => $('vperr').innerHTML = note(txt, 'warning');
+      const st = $('vst').value, why = $('vnote').value.trim(), paid = num($('vpaid').value), warn = txt => lapor($('vperr'), txt, 'warning');
       if (st === f.status && st !== 'rejected' && !(st === 'paid' && paid !== (f.nominal_dibayar || 0))) return warn('Status belum diubah.');
       if (st === 'rejected' && !why) return warn('Alasan penolakan wajib diisi.');
       if (st === 'paid' && !paid) return warn('Nominal yang dibayarkan wajib diisi.');
@@ -375,8 +416,8 @@ async function pageVerifikasi() {
       const { error } = await sb.from('realisasi').update(st === 'rejected' ? { status: st, catatan_admin: why } : st === 'paid' ? { status: st, nominal_dibayar: paid } : { status: st })
         .eq('kua_id', f.kua_id).eq('tahun', f.tahun).eq('bulan', f.bulan);
       if (!live(ep)) return;
-      if (error) { $('vperr').innerHTML = note(error.message); $('vsave').disabled = false; return; }
-      $('vmsg').innerHTML = note(`Status ${kn(f.kua_id)} ${BULAN[f.bulan - 1]} ${f.tahun} diubah menjadi ${ST[st][1]}${st === 'paid' ? ` (Rp ${rp(paid)})` : ''}.`, 'success');
+      if (error) { lapor($('vperr'), error.message, 'danger'); $('vsave').disabled = false; return; }
+      lapor($('vmsg'), `Status ${kn(f.kua_id)} ${BULAN[f.bulan - 1]} ${f.tahun} diubah menjadi ${ST[st][1]}${st === 'paid' ? ` (Rp ${rp(paid)})` : ''}.`, 'success');
       await load();
     };
   };
@@ -395,7 +436,7 @@ async function pageVerifikasi() {
   load();
 }
 
-/* ====== Pengaturan SAKTI (admin): ceklis GLOBAL per KUA + POS (Listrik dan Telepon/Internet). Tanpa bulan/tahun berlaku ====== */
+/* ====== Pengaturan SAKTI (menu metode: bawaan hanya Admin): ceklis GLOBAL per KUA + POS (Listrik dan Telepon/Internet). Tanpa bulan/tahun berlaku ====== */
 async function pageMetode() {
   const ep = EP;
   let m;
@@ -404,7 +445,7 @@ async function pageMetode() {
   const P = m.pos.filter(p => SAKTI_POS.includes(p.kode_pos)), nm = p => p.nama_pos.replace('Belanja Langganan ', '');   // Listrik, Telepon/Internet
   $('view').innerHTML = `<div class="card"><div class="card-body">
     <h4 class="mb-1">Pengaturan SAKTI</h4>
-    <p class="mb-3">Centang KUA yang pembayaran <b>Listrik</b> dan <b>Telepon/Internet</b>-nya lewat SAKTI (autopayment). Berlaku untuk semua bulan. KUA yang dicentang: nominalnya diinput Admin di menu <a href="#sakti">Realisasi SAKTI</a> dan tidak dapat diisi operator. KUA yang tidak dicentang: operator mengisi Realisasi seperti biasa.</p>
+    <p class="mb-3">Centang KUA yang pembayaran <b>Listrik</b> dan <b>Telepon/Internet</b>-nya lewat SAKTI (autopayment). Berlaku untuk semua bulan. KUA yang dicentang: nominalnya diinput petugas di menu <a href="#sakti">Realisasi SAKTI</a> dan tidak dapat diisi operator. KUA yang tidak dicentang: operator mengisi Realisasi seperti biasa.</p>
     <div id="mmsg"></div><div id="mbody">Memuat…</div></div></div>`;
   let vers = [];
   const mark = c => c.closest('td').classList.toggle('table-warning', (c.checked ? 1 : 0) !== +c.dataset.o);
@@ -422,12 +463,12 @@ async function pageMetode() {
     $('msave').onclick = async () => {   // hanya baris yang berubah, satu transaksi
       const rows = [];
       $('mbody').querySelectorAll('input[data-k]').forEach(c => { if ((c.checked ? 1 : 0) !== +c.dataset.o) rows.push({ kua_id: +c.dataset.k, pos_id: +c.dataset.p, metode: c.checked ? 'SAKTI' : 'MANUAL' }); });
-      if (!rows.length) return $('mmsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
+      if (!rows.length) return lapor($('mmsg'), 'Tidak ada perubahan untuk disimpan.', 'info');
       $('msave').disabled = true;
       const { error } = await sb.from('metode_pembayaran').upsert(rows, { onConflict: 'kua_id,pos_id' });   // satu transaksi: gagal satu = batal semua
       if (!live(ep)) return;
       $('msave').disabled = false;
-      $('mmsg').innerHTML = error ? note(error.message) : note(`Pengaturan SAKTI tersimpan untuk ${rows.length} KUA/POS.`, 'success');
+      lapor($('mmsg'), error ? error.message : `Pengaturan SAKTI tersimpan untuk ${rows.length} KUA/POS.`, error ? 'danger' : 'success');
       if (!error) load();
     };
   };
@@ -441,7 +482,11 @@ async function pageMetode() {
   load();
 }
 
-/* ====== Realisasi SAKTI (admin): tampilan sama dengan Pengaturan SAKTI, tetapi ceklis diganti kolom nominal (per bulan) ====== */
+/* ====== Realisasi SAKTI (menu sakti: Admin, Bendahara BOP): tampilan sama dengan Pengaturan SAKTI, tetapi ceklis diganti kolom nominal (per bulan) ======
+   Pembayaran SAKTI (autopayment) SUDAH terjadi, jadi nominalnya TIDAK dibatasi RPD: tetap dapat disimpan walau melebihi RPD bulan itu atau
+   RPD setahun (database tidak lagi menolaknya, lihat realisasi_sakti_guard di bop.sql). Kelebihannya hanya DITAMPILKAN sebagai peringatan,
+   tidak memblokir. Dampaknya ada di Operator KUA: selama Realisasi sebuah POS melebihi RPD setahun, atau Realisasi sebuah bulan melebihi RPD
+   bulan itu, operator tidak dapat mengirim Realisasi (tombol Kirim nonaktif dan kelebihannya tampil; lihat pageRealisasi). ====== */
 async function pageSakti() {
   const ep = EP, now = new Date();
   let m;
@@ -450,50 +495,103 @@ async function pageSakti() {
   const P = m.pos.filter(p => SAKTI_POS.includes(p.kode_pos)), nm = p => p.nama_pos.replace('Belanja Langganan ', '');
   $('view').innerHTML = `<div class="card"><div class="card-body">
     <h4 class="mb-1">Realisasi SAKTI</h4>
-    <p class="mb-3">Input nominal pembayaran SAKTI untuk <b>Listrik</b> dan <b>Telepon/Internet</b> pada bulan terpilih. Hanya kolom KUA yang dicentang di <a href="#metode">Pengaturan SAKTI</a> yang dapat diisi. Nominal otomatis dijumlahkan dengan Realisasi manual pada batas RPD dan Laporan.</p>
+    <p class="mb-2">Input nominal pembayaran SAKTI untuk <b>Listrik</b> dan <b>Telepon/Internet</b> pada bulan terpilih. Hanya kolom KUA yang dicentang di ${can('metode') ? '<a href="#metode">Pengaturan SAKTI</a>' : 'Pengaturan SAKTI'} yang dapat diisi. Nominal otomatis dijumlahkan dengan Realisasi manual pada batas RPD dan Laporan.</p>
+    <p class="mb-3">Pembayaran SAKTI sudah terjadi, jadi nominalnya <b>tetap dapat disimpan walau melebihi RPD</b>. Kelebihan ditandai kuning di kolom Keterangan RPD; Operator KUA yang bersangkutan tidak dapat mengirim Realisasi sampai RPD-nya disesuaikan.</p>
     <div class="d-flex flex-wrap gap-2 mb-3">${yearSel('sy', now.getFullYear())}
       <select id="sm" class="form-select" style="width:auto" aria-label="Bulan">${BULAN.map((n, i) => `<option value="${i + 1}"${i === now.getMonth() ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
     <div id="smsg"></div><div id="sbody">Memuat…</div></div></div>`;
-  let vers = [], rs = [];
+  let vers = [], rs = [], rpd = [], rel = [], D = {};   // rs = Realisasi SAKTI, rpd = RPD, rel = Realisasi manual: semuanya satu tahun, semua KUA
+  // Indeks per KUA agar pemeriksaan kelebihan RPD cepat saat mengetik: total per bulan, per POS setahun, dan SAKTI per POS per bulan.
+  const index = () => {
+    D = {};
+    m.kua.forEach(k => D[k.id] = { rpdB: Array(13).fill(0), rpdP: {}, rpdPB: {}, manB: Array(13).fill(0), manP: {}, sak: {} });
+    rpd.forEach(x => { const d = D[x.kua_id]; if (!d) return; d.rpdB[x.bulan] += x.total; Object.entries(x.items).forEach(([pid, n]) => { d.rpdP[pid] = (d.rpdP[pid] || 0) + n; d.rpdPB[pid + '|' + x.bulan] = n; }); });
+    rel.forEach(x => { const d = D[x.kua_id]; if (!d) return; d.manB[x.bulan] += x.total; Object.entries(x.items).forEach(([pid, n]) => { d.manP[pid] = (d.manP[pid] || 0) + n; }); });
+    rs.forEach(x => { const d = D[x.kua_id]; if (d) (d.sak[x.pos_id] ||= Array(13).fill(0))[x.bulan] = x.nominal; });
+  };
+  // Kelebihan RPD satu KUA, dengan isian bulan terpilih (v = {id POS: nominal}) menggantikan nilai tersimpan. Sama dengan aturan realisasi_guard:
+  // (1) Realisasi sebulan (manual + SAKTI) <= RPD bulan itu; (2) tiap POS setahun (manual + SAKTI) <= RPD POS itu setahun. Kembalian: daftar teks.
+  const cek = (k, b, v) => {
+    const d = D[k.id], out = [], sakB = Array(13).fill(0);
+    P.forEach(p => { const a = d.sak[p.id] || []; for (let i = 1; i <= 12; i++) sakB[i] += i === b ? (v[p.id] || 0) : (a[i] || 0); });
+    for (let i = 1; i <= 12; i++) {
+      const tot = d.manB[i] + sakB[i];
+      if (sakB[i] > 0 && tot > d.rpdB[i]) out.push(`${BULAN[i - 1]}: Realisasi Rp ${rp(tot)} melebihi RPD bulan itu Rp ${rp(d.rpdB[i])} (lebih Rp ${rp(tot - d.rpdB[i])})`);
+    }
+    P.forEach(p => {
+      const a = d.sak[p.id] || [], sak = a.reduce((s, x, i) => s + (i === b ? 0 : x || 0), 0) + (v[p.id] || 0);
+      if (!sak) return;
+      const man = d.manP[p.id] || 0, cap = d.rpdP[p.id] || 0;
+      if (man + sak > cap) out.push(`${nm(p)} setahun: Rp ${rp(man + sak)} melebihi RPD setahun Rp ${rp(cap)} (lebih Rp ${rp(man + sak - cap)})`);
+    });
+    return out;
+  };
+  const vals = k => { const o = {}; $('sbody').querySelectorAll(`input[data-k="${k.id}"]`).forEach(i => o[+i.dataset.p] = num(i.value)); return o; };
   const sums = () => P.map(p => [...$('sbody').querySelectorAll(`input[data-p="${p.id}"]`)].reduce((s, i) => s + num(i.value), 0));
+  // Hitung ulang total kolom, petunjuk RPD tiap kotak, dan baris/ringkasan yang melebihi RPD. Dipanggil tiap ketikan.
+  const recalc = () => {
+    const b = +$('sm').value;
+    sums().forEach((v, i) => $('sbody').querySelector(`[data-tot="${P[i].id}"]`).textContent = rp(v));
+    let n = 0;
+    $('sbody').querySelectorAll('[data-hint]').forEach(h => {
+      const [kid, pid] = h.dataset.hint.split('|'), r = D[kid].rpdPB[pid + '|' + b] || 0, v = num($('sbody').querySelector(`input[data-k="${kid}"][data-p="${pid}"]`).value);
+      h.textContent = `RPD bulan ini Rp ${rp(r)}` + (v > r ? ` · melebihi Rp ${rp(v - r)}` : '');
+      h.className = 'small mt-1 ' + (v > r ? 'text-warning-emphasis fw-semibold' : 'text-muted');
+    });
+    m.kua.forEach(k => {
+      const w = cek(k, b, vals(k)), tr = $('sbody').querySelector(`tr[data-row="${k.id}"]`);
+      tr.classList.toggle('table-warning', w.length > 0);
+      tr.querySelector('[data-warn]').innerHTML = w.map(x => `<div>${esc(x)}</div>`).join('');
+      if (w.length) n++;
+    });
+    $('swarn').innerHTML = n ? `<div class="alert alert-warning py-2" role="status"><b>${n} KUA melebihi RPD</b> (baris kuning).<br>Realisasi SAKTI tetap dapat disimpan karena sudah dibayar. Operator KUA terkait tidak dapat mengirim Realisasi (bulan yang melebihi RPD bulannya, atau semua bulan bila sebuah POS melebihi RPD setahun) sampai RPD-nya disesuaikan.</div>` : '';
+  };
   const draw = () => {
     const t = +$('sy').value, b = +$('sm').value;
     const future = t * 12 + b > now.getFullYear() * 12 + now.getMonth() + 1;   // periode belum berjalan: ditolak juga oleh database
-    const val = (k, p) => rs.find(x => x.kua_id === k.id && x.pos_id === p.id)?.nominal || 0;
+    const val = (k, p) => D[k.id].sak[p.id]?.[b] || 0;
     const any = m.kua.some(k => P.some(p => metodeOf(vers, k.id, p.id) === 'SAKTI'));
-    $('sbody').innerHTML = `${future ? note(`${BULAN[b - 1]} ${t} belum berjalan, jadi Realisasi SAKTI belum dapat diinput.`, 'warning') : ''}${any ? '' : note('Belum ada KUA yang dicentang SAKTI. Atur dulu di menu Pengaturan SAKTI.', 'info')}
-      <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>KUA</th>${P.map(p => `<th class="text-end">${esc(p.kode_pos)} · ${esc(nm(p))} (Rp)</th>`).join('')}</tr></thead>
-      <tbody>${m.kua.map(k => `<tr><td>${esc(k.nama_kua)}</td>${P.map(p => { const on = metodeOf(vers, k.id, p.id) === 'SAKTI', v = val(k, p);
-        return `<td><input class="form-control form-control-sm text-end" style="min-width:140px" inputmode="numeric" placeholder="${on ? '0' : '-'}" data-k="${k.id}" data-p="${p.id}" data-o="${v}" aria-label="Nominal ${esc(k.nama_kua)} ${esc(nm(p))}" value="${v ? rp(v) : ''}"${on && !future ? '' : ' disabled'}></td>`; }).join('')}</tr>`).join('')}</tbody>
-      <tfoot><tr class="fw-semibold"><td>Total ${BULAN[b - 1]} ${t}</td>${P.map(p => `<td class="text-end" data-tot="${p.id}"></td>`).join('')}</tr></tfoot></table></div>
+    $('sbody').innerHTML = `${future ? note(`${BULAN[b - 1]} ${t} belum berjalan, jadi Realisasi SAKTI belum dapat diinput.`, 'warning') : ''}${any ? '' : note('Belum ada KUA yang dicentang SAKTI. Atur dulu di menu Pengaturan SAKTI.', 'info')}<div id="swarn"></div>
+      <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>KUA</th>${P.map(p => `<th class="text-end">${esc(p.kode_pos)} · ${esc(nm(p))} (Rp)</th>`).join('')}<th style="min-width:240px">Keterangan RPD</th></tr></thead>
+      <tbody>${m.kua.map(k => `<tr data-row="${k.id}"><td>${esc(k.nama_kua)}</td>${P.map(p => { const on = metodeOf(vers, k.id, p.id) === 'SAKTI', v = val(k, p);
+        return `<td><input class="form-control form-control-sm text-end" style="min-width:140px" inputmode="numeric" placeholder="${on ? '0' : '-'}" data-k="${k.id}" data-p="${p.id}" data-o="${v}" aria-label="Nominal ${esc(k.nama_kua)} ${esc(nm(p))}" value="${v ? rp(v) : ''}"${on && !future ? '' : ' disabled'}>${on ? `<div data-hint="${k.id}|${p.id}"></div>` : ''}</td>`; }).join('')}<td class="small" data-warn="${k.id}"></td></tr>`).join('')}</tbody>
+      <tfoot><tr class="fw-semibold"><td>Total ${BULAN[b - 1]} ${t}</td>${P.map(p => `<td class="text-end" data-tot="${p.id}"></td>`).join('')}<td></td></tr></tfoot></table></div>
       <button class="btn btn-primary" id="ssave"${future || !any ? ' disabled' : ''}>Simpan Realisasi SAKTI</button>`;
-    const tot = () => sums().forEach((v, i) => $('sbody').querySelector(`[data-tot="${P[i].id}"]`).textContent = rp(v));
-    tot();
-    $('sbody').oninput = e => { if (e.target.dataset.p) { fmtIn(e.target); tot(); } };
-    $('ssave').onclick = async () => {   // hanya sel yang berubah, satu transaksi
+    recalc();
+    $('sbody').oninput = e => { if (e.target.dataset.p) { fmtIn(e.target); recalc(); } };
+    $('ssave').onclick = async () => {   // hanya sel yang berubah, satu transaksi. Kelebihan RPD TIDAK menghalangi penyimpanan
       const out = [];
       $('sbody').querySelectorAll('input[data-k]:not([disabled])').forEach(i => { const v = num(i.value); if (v !== +i.dataset.o) out.push({ kua_id: +i.dataset.k, pos_id: +i.dataset.p, tahun: t, bulan: b, nominal: v }); });
-      if (!out.length) return $('smsg').innerHTML = note('Tidak ada perubahan untuk disimpan.', 'info');
+      if (!out.length) return lapor($('smsg'), 'Tidak ada perubahan untuk disimpan.', 'info');
       $('ssave').disabled = true;
       const { error } = await sb.from('realisasi_sakti').upsert(out, { onConflict: 'kua_id,pos_id,tahun,bulan' });
       if (!live(ep)) return;
       $('ssave').disabled = false;
-      $('smsg').innerHTML = error ? note(error.message) : note(`Realisasi SAKTI ${BULAN[b - 1]} ${t} tersimpan (${out.length} perubahan).`, 'success');
-      if (!error) load();
+      if (error) return lapor($('smsg'), error.message, 'danger');
+      await load();   // muat ulang: ringkasan kelebihan di bawah dihitung dari data yang baru tersimpan
+      if (!live(ep)) return;
+      lapor($('smsg'), `Realisasi SAKTI ${BULAN[b - 1]} ${t} tersimpan (${out.length} perubahan).`, 'success');
+      const lebih = [...new Set(out.map(o => o.kua_id))].map(id => m.kua.find(k => k.id === id)).filter(k => k && cek(k, b, vals(k)).length);
+      if (lebih.length) jpToast(`${lebih.map(k => k.nama_kua).join(', ')}: Realisasi SAKTI melebihi RPD. Tetap tersimpan karena SAKTI sudah dibayar; Operator KUA terkait tidak dapat mengirim Realisasi sampai RPD-nya disesuaikan.`, 'warning');
     };
   };
   const load = async () => {
-    const y = +$('sy').value, mo = +$('sm').value;
+    const y = +$('sy').value;
     $('sbody').textContent = 'Memuat…';
-    const [v, r] = await Promise.all([
-      sb.from('metode_pembayaran').select('kua_id,pos_id,metode'),
-      sb.from('realisasi_sakti').select('kua_id,pos_id,nominal').eq('tahun', y).eq('bulan', mo)]);
-    if (!live(ep)) return;
-    const err = v.error || r.error;
-    if (err) return $('sbody').innerHTML = note(err.message);
-    vers = v.data; rs = r.data; draw();
+    try {
+      const [v, r, d, l] = await Promise.all([
+        sb.from('metode_pembayaran').select('kua_id,pos_id,metode'),
+        fetchAll(() => sb.from('realisasi_sakti').select('kua_id,pos_id,bulan,nominal').eq('tahun', y).order('kua_id').order('pos_id').order('bulan')),
+        fetchAll(() => sb.from('rpd').select('kua_id,bulan,items,total').eq('tahun', y).order('kua_id').order('bulan')),
+        fetchAll(() => sb.from('realisasi').select('kua_id,bulan,items,total').eq('tahun', y).order('kua_id').order('bulan'))]);
+      if (!live(ep)) return;
+      if (v.error) throw v.error;
+      vers = v.data; rs = r; rpd = d; rel = l;
+    } catch (e) { if (live(ep)) $('sbody').innerHTML = note(e.message); return; }
+    index(); draw();
   };
-  ['sy', 'sm'].forEach(id => $(id).onchange = () => { $('smsg').innerHTML = ''; load(); });
+  $('sy').onchange = () => { $('smsg').innerHTML = ''; load(); };
+  $('sm').onchange = () => { $('smsg').innerHTML = ''; draw(); };   // data satu tahun sudah dimuat: pindah bulan tidak perlu mengambil ulang
   load();
 }
 
@@ -816,6 +914,7 @@ function multiSelect(host, options, selected, label) {
   return { values: () => picked().map(([v]) => v), all: on => { on ? options.forEach(([v]) => sel.add(v)) : sel.clear(); chips(); draw(); } };
 }
 
+/* ====== Config (menu config: bawaan hanya Admin): buka/tutup pengisian RPD dan Realisasi, batas file LPJ, bulan RPD yang dibuka ====== */
 async function pageConfig() {
   const ep = EP;
   $('view').innerHTML = `<div class="card"><div class="card-body"><h4 class="mb-3">Config</h4><div id="cmsg"></div><div id="cbody">Memuat…</div></div></div>`;
@@ -847,7 +946,7 @@ async function pageConfig() {
     if (!error) Object.assign(M.cfg, v);
     if (!live(ep)) return;
     $('csave').disabled = false;
-    $('cmsg').innerHTML = error ? note(error.message) : note('Pengaturan tersimpan.', 'success');
+    lapor($('cmsg'), error ? error.message : 'Pengaturan tersimpan.', error ? 'danger' : 'success');
   };
 }
 
@@ -966,12 +1065,13 @@ async function toPdf(r) {
   doc.save(r.name + '.pdf');
 }
 
+/* Laporan (menu laporan): peran pusat (Admin, Bendahara/Verifikator BOP, ...) memilih KUA atau seluruh KUA; Operator KUA hanya KUA-nya. */
 async function pageLaporan() {
-  const ep = EP, admin = me.role === 'admin', y = new Date().getFullYear();
+  const ep = EP, pu = pusat(), y = new Date().getFullYear();
   let m;
   try { m = await master(); } catch (e) { return live(ep) && ($('view').innerHTML = note('Gagal memuat data master: ' + e.message)); }
   if (!live(ep)) return;
-  if (!admin && !me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
+  if (!pu && !me.kua_id) return $('view').innerHTML = note('Akun ini belum terhubung ke KUA. Hubungi admin.', 'warning');
   const opt = (arr, cur) => arr.map(([v, t]) => `<option value="${v}"${v == cur ? ' selected' : ''}>${esc(t)}</option>`).join('');
   const col = (id, label, arr, cur, extra = '') => `<div class="col-sm-6 col-lg-4"><label class="form-label" for="${id}">${label}</label><select id="${id}" class="form-select">${opt(arr, cur)}</select>${extra}</div>`;
   $('view').innerHTML = `<div class="card"><div class="card-body">
@@ -982,7 +1082,7 @@ async function pageLaporan() {
       ${col('gt', 'Tahun', [y - 1, y, y + 1].map(v => [v, v]), y)}
       ${col('gp', 'Periode', [['tahun', 'Satu tahun'], ['bulan', 'Satu bulan']], 'tahun',
         `<select id="gb" class="form-select mt-2 d-none" aria-label="Bulan">${opt(BULAN.map((b, i) => [i + 1, b]), new Date().getMonth() + 1)}</select>`)}
-      ${admin ? col('gc', 'Cakupan', [['', 'Seluruh KUA'], ...m.kua.map(k => [k.id, k.nama_kua])], '')
+      ${pu ? col('gc', 'Cakupan', [['', 'Seluruh KUA'], ...m.kua.map(k => [k.id, k.nama_kua])], '')
               : `<div class="col-sm-6 col-lg-4"><label class="form-label" for="gc">Cakupan</label><input id="gc" class="form-control" value="${esc(me.kua || '')}" disabled></div>`}
       ${col('gs', 'Status Realisasi (manual)', [['ok', 'Disetujui + Dibayar'], ['paid', 'Dibayar saja'], ['all', 'Semua status']], 'ok')}
       ${col('gm', 'Metode pembayaran', [['', 'Semua metode'], ['MANUAL', 'MANUAL'], ['SAKTI', 'SAKTI']], '')}
@@ -1002,37 +1102,37 @@ async function pageLaporan() {
   $('view').onclick = async e => {
     const b = e.target.closest('[data-x]'); if (!b) return;
     const f = { nom: $('gn').value, bentuk: $('gf').value, tahun: +$('gt').value, per: $('gp').value, bulan: +$('gb').value, st: $('gs').value,
-      metode: $('gm').value, pos: +$('gq').value || 0, kid: admin ? +$('gc').value || 0 : me.kua_id };
+      metode: $('gm').value, pos: +$('gq').value || 0, kid: pu ? +$('gc').value || 0 : me.kua_id };
     const btns = $('view').querySelectorAll('[data-x]');
     btns.forEach(x => x.disabled = true); $('gmsg').innerHTML = note('Menyiapkan laporan…', 'info');
     try {
       const r = await buildReport(f, m);
       await (b.dataset.x === 'xlsx' ? toXlsx : toPdf)(r);
-      if (live(ep)) $('gmsg').innerHTML = note(`Laporan berisi ${r.body.length} baris dan sudah diunduh.`, 'success');
-    } catch (err) { if (live(ep)) $('gmsg').innerHTML = note(err.message); }
+      if (live(ep)) lapor($('gmsg'), `Laporan berisi ${r.body.length} baris dan sudah diunduh.`, 'success');
+    } catch (err) { if (live(ep)) lapor($('gmsg'), err.message, 'danger'); }
     btns.forEach(x => x.disabled = false);
   };
 }
 
-function pageBop() {
+function pageBop() {   // kartu modul = menu BOP yang boleh dibuka akun ini (Hak Akses Menu)
   const items = [
-    ['anggaran', 'Anggaran', 'bx-coin-stack', 'Anggaran tahunan setiap KUA', 'a'],
-    ['rpd', 'RPD', 'bx-calendar-edit', 'Rencana penarikan dana bulanan', ''],
-    ['realisasi', 'Realisasi', 'bx-receipt', 'Isi realisasi dan unggah LPJ', 'o'],
-    ['verifikasi', 'Verifikasi', 'bx-check-shield', 'Setujui atau tolak realisasi', 'a'],
-    ['metode', 'Pengaturan SAKTI', 'bx-toggle-right', 'Centang KUA yang dibayar lewat SAKTI', 'a'],
-    ['sakti', 'Realisasi SAKTI', 'bx-transfer', 'Input nominal pembayaran SAKTI', 'a'],
-    ['config', 'Config', 'bx-slider', 'Pengaturan sistem', 'a'],
-    ['impor', 'Impor Data Lama', 'bx-import', 'Ambil data dari Spreadsheet lama', 'a'],
-    ['laporan', 'Laporan', 'bx-file', 'Unduh Excel dan PDF', '']];
-  $('view').innerHTML = `<h4 class="mb-1">BOP</h4><p class="mb-3">Halo, <b>${esc(me.nama)}</b>. Pilih modul:</p>
-    ${me.role === 'admin' ? '<div class="row g-3 mb-3" id="bstat"></div>' : ''}<div class="row g-3">${items.filter(i => !i[4] || (i[4] === 'a') === (me.role === 'admin')).map(i => `<div class="col-sm-6 col-lg-4">
+    ['anggaran', 'Anggaran', 'bx-coin-stack', 'Anggaran tahunan setiap KUA'],
+    ['rpd', 'RPD', 'bx-calendar-edit', 'Rencana penarikan dana bulanan'],
+    ['realisasi', 'Realisasi', 'bx-receipt', 'Isi realisasi dan unggah LPJ'],
+    ['verifikasi', 'Verifikasi', 'bx-check-shield', 'Setujui atau tolak realisasi'],
+    ['metode', 'Pengaturan SAKTI', 'bx-toggle-right', 'Centang KUA yang dibayar lewat SAKTI'],
+    ['sakti', 'Realisasi SAKTI', 'bx-transfer', 'Input nominal pembayaran SAKTI'],
+    ['config', 'Config', 'bx-slider', 'Pengaturan sistem'],
+    ['impor', 'Impor Data Lama', 'bx-import', 'Ambil data dari Spreadsheet lama'],
+    ['laporan', 'Laporan', 'bx-file', 'Unduh Excel dan PDF']].filter(i => can(i[0]));
+  $('view').innerHTML = `<h4 class="mb-1">BOP</h4><p class="mb-3">Halo, <b>${esc(me.nama)}</b>. ${items.length ? 'Pilih modul:' : 'Belum ada modul BOP yang dapat Anda buka. Hubungi admin.'}</p>
+    ${can('sakti') ? '<div class="row g-3 mb-3" id="bstat"></div>' : ''}<div class="row g-3">${items.map(i => `<div class="col-sm-6 col-lg-4">
       <a class="card h-100 text-decoration-none" href="#${i[0]}"><div class="card-body d-flex gap-3 align-items-center">
         <div class="avatar"><i class="bx ${i[2]} fs-4"></i></div><div><h5 class="mb-0">${i[1]}</h5><small>${i[3]}</small></div></div></a></div>`).join('')}</div>`;
-  if (me.role === 'admin') bopStat(EP);
+  if (can('sakti')) bopStat(EP);
 }
 
-async function bopStat(ep) {   // statistik ringkas SAKTI untuk admin (opsional: diam bila gagal)
+async function bopStat(ep) {   // statistik ringkas SAKTI untuk yang punya menu Realisasi SAKTI (opsional: diam bila gagal)
   try {
     const now = new Date(), y = now.getFullYear(), b = now.getMonth() + 1;
     const [m, v, s] = await Promise.all([master(), sb.from('metode_pembayaran').select('kua_id,pos_id,metode'),
