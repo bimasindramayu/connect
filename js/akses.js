@@ -14,7 +14,7 @@ const AKSES_BAWAAN = {   // isi awal di bop.sql (tombol "Kembalikan ke bawaan" h
   bendahara_bop: ['bop', 'rpd', 'verifikasi', 'sakti', 'laporan'],
   verifikator_bop: ['bop', 'rpd', 'verifikasi', 'laporan'],
   bast_nr: ['bast', 'bast-buat', 'bast-pegawai', 'bast-setting'],
-  kemasjidan: ['sert-masjid', 'sert-kiblat', 'sert-pengaturan', 'sert-status'],
+  kemasjidan: ['sert-masjid', 'sert-kiblat', 'sert-pengaturan'],
   pnbp_nr: ['jaspro']
 };
 // [kunci, nama menu, keterangan]
@@ -38,8 +38,7 @@ const MENU_DEF = [
   ['Sertifikat', [
     ['sert-masjid', 'Masjid / Musala', 'Data masjid/musala dan cetak sertifikat.'],
     ['sert-kiblat', 'Arah Kiblat', 'Data kalibrasi arah kiblat dan cetak sertifikat.'],
-    ['sert-pengaturan', 'Pengaturan Sertifikat', 'Nama penanda tangan dan tanda tangan petugas ukur.'],
-    ['sert-status', 'Status Apps Script', 'Memeriksa sambungan ke Apps Script dan Spreadsheet.']]],
+    ['sert-pengaturan', 'Pengaturan Sertifikat', 'Nama penanda tangan dan tanda tangan petugas ukur.']]],
   ['Lainnya', [
     ['jaspro', 'Jaspro Transport', 'Menghitung Jaspro dan Transport dari data presensi dan membuat laporannya.'],
     ['akses', 'Hak Akses Menu', 'Halaman ini. Khusus Admin.']]]

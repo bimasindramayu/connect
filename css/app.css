@@ -4,7 +4,10 @@ h4,h5{color:#566a7f;font-weight:600}
 .btn-primary{--bs-btn-bg:#696cff;--bs-btn-border-color:#696cff;--bs-btn-hover-bg:#5f61e6;--bs-btn-hover-border-color:#5f61e6;--bs-btn-active-bg:#5456cc;--bs-btn-active-border-color:#5456cc;--bs-btn-disabled-bg:#696cff;--bs-btn-disabled-border-color:#696cff;box-shadow:0 .125rem .25rem rgba(105,108,255,.4)}
 .card{border:0;border-radius:.5rem;box-shadow:0 2px 6px rgba(67,89,113,.12)}
 .form-control:focus{border-color:#696cff;box-shadow:0 0 .25rem .05rem rgba(105,108,255,.1)}
-.brand{font-size:1.5rem;font-weight:700;color:#566a7f}.brand i{color:#696cff}
+.brand{display:inline-flex;align-items:center;gap:.55rem;font-size:1.5rem;font-weight:700;color:#566a7f;line-height:1.1}.brand i{color:#696cff}
+/* Logo assets/b-logo.png: tinggi tetap, lebar mengikuti perbandingan gambar (persegi maupun lebar), tidak pernah terpotong atau melar */
+.brand-logo{height:2.25rem;width:auto;max-width:4rem;object-fit:contain;flex:none}
+#auth .brand-logo{height:3rem;max-width:5rem}
 .bg-label-primary{background:rgba(105,108,255,.16)!important;color:#696cff!important}
 #auth{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
 #auth .card{width:100%;max-width:400px}

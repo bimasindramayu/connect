@@ -102,13 +102,14 @@ async function showDocs(el, ctx, opt = {}) {   // ctx = { kua, tahun, bulan }; o
 
 // Rincian Realisasi per POS untuk panel kiri penampil dokumen, pembanding dengan isi dokumen LPJ.
 // man = {id POS: nominal manual}, sak = {id POS: nominal SAKTI}, flagged = Set id POS yang dibayar lewat SAKTI (baris diwarnai biru).
+// SEMUA POS ditampilkan (yang tidak ada Realisasinya bernilai 0), supaya pemeriksa melihat daftar POS yang utuh dan tidak ada yang terlewat.
 function realisasiSide(judul, sub, pos, man, sak, flagged, rpdTotal) {
-  const rows = pos.filter(p => man[p.id] > 0 || sak[p.id] > 0 || flagged.has(p.id)), tm = isum(man), ts = isum(sak);
+  const rows = pos, tm = isum(man), ts = isum(sak);
   return `<div class="fw-semibold">${esc(judul)}</div><div class="small mb-2">${esc(sub)}</div>
     <table class="table table-sm align-middle mb-2"><thead><tr><th>POS</th><th class="text-end">Realisasi (Rp)</th></tr></thead><tbody>${rows.length ? rows.map(p => {
       const s = flagged.has(p.id), v = (man[p.id] || 0) + (sak[p.id] || 0);
-      return `<tr${s ? ' class="table-info"' : ''}><td>${esc(posLabel(p))}${s ? ' <span class="badge bg-label-primary">SAKTI</span>' : ''}</td><td class="text-end">${v ? rp(v) : '-'}</td></tr>`; }).join('')
-      : '<tr><td colspan="2" class="small">Belum ada nominal.</td></tr>'}</tbody>
+      return `<tr${s ? ' class="table-info"' : ''}><td>${esc(posLabel(p))}${s ? ' <span class="badge bg-label-primary">SAKTI</span>' : ''}</td><td class="text-end">${rp(v)}</td></tr>`; }).join('')
+      : '<tr><td colspan="2" class="small">Daftar POS belum dimuat.</td></tr>'}</tbody>
       <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end">${rp(tm + ts)}</td></tr></tfoot></table>
     <div class="small">Manual: <b>Rp ${rp(tm)}</b>${flagged.size || ts ? `<br>SAKTI: <b>Rp ${rp(ts)}</b>` : ''}${rpdTotal != null ? `<br>RPD bulan ini: <b>Rp ${rp(rpdTotal)}</b>` : ''}</div>
     ${rows.some(p => flagged.has(p.id)) ? '<div class="small mt-2">Baris biru: dibayar lewat SAKTI.</div>' : ''}`;
@@ -367,7 +368,11 @@ async function pageVerifikasi() {
   const sortBy = k => { if (sortK === k && sortD < 0) { sortK = ''; sortD = 1; } else { sortD = sortK === k ? -1 : 1; sortK = k; } list(); };
   const list = () => {
     const ord = G.map((_, i) => i); if (sortK) ord.sort(cmp);   // data-i tetap menunjuk indeks asli, jadi Detail selalu membuka baris yang benar
-    $('vbody').innerHTML = G.length ? `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr>${th('kua', 'Kecamatan')}${th('periode', 'Periode')}${th('total', 'Total (Rp)', 'text-end')}${th('status', 'Status')}<th></th></tr></thead><tbody>${ord.map(i => { const f = G[i]; return `<tr><td>${esc(kn(f.kua_id))}</td><td>${BULAN[f.bulan - 1]} ${f.tahun}</td><td class="text-end">${rp(f.total)}</td><td><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span>${f.status === 'paid' ? `<div class="small">${f.nominal_dibayar ? 'Rp ' + rp(f.nominal_dibayar) : 'nominal belum dicatat'}</div>` : ''}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-i="${i}">Detail</button></td></tr>`; }).join('')}</tbody></table></div>`
+    // Total seluruh baris yang tertampil (G sudah mengikuti filter; tidak ada halaman, jadi semua baris ada di tabel): kolom Total, dan nominal
+    // yang tampil di bawah status "Dibayar" (hanya yang sudah dicatat)
+    const dib = G.filter(f => f.status === 'paid' && f.nominal_dibayar), tDib = dib.reduce((a, f) => a + f.nominal_dibayar, 0);
+    $('vbody').innerHTML = G.length ? `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr>${th('kua', 'Kecamatan')}${th('periode', 'Periode')}${th('total', 'Total (Rp)', 'text-end')}${th('status', 'Status')}<th></th></tr></thead><tbody>${ord.map(i => { const f = G[i]; return `<tr><td>${esc(kn(f.kua_id))}</td><td>${BULAN[f.bulan - 1]} ${f.tahun}</td><td class="text-end">${rp(f.total)}</td><td><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span>${f.status === 'paid' ? `<div class="small">${f.nominal_dibayar ? 'Rp ' + rp(f.nominal_dibayar) : 'nominal belum dicatat'}</div>` : ''}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-i="${i}">Detail</button></td></tr>`; }).join('')}</tbody>
+      <tfoot><tr class="fw-semibold"><td colspan="2">Total (${G.length} Realisasi)</td><td class="text-end" id="vtotal">${rp(sumT(G))}</td><td id="vtdib">${dib.length ? `Dibayar: Rp ${rp(tDib)}` : ''}</td><td></td></tr></tfoot></table></div>`
       : '<p class="mb-0">Tidak ada Realisasi untuk filter ini.</p>';
     $('vbody').onclick = e => { const s = e.target.closest('[data-s]'); if (s) return sortBy(s.dataset.s); const b = e.target.closest('[data-i]'); if (b) detail(+b.dataset.i); };
     $('vbody').onkeydown = e => { const s = e.target.closest('[data-s]'); if (s && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); sortBy(s.dataset.s); } };
@@ -383,7 +388,7 @@ async function pageVerifikasi() {
     const ri = rr.data?.items || {}, sk = Object.fromEntries((rk.data || []).map(x => [x.pos_id, x.nominal])), sakti = isum(sk);   // sk = Realisasi SAKTI bulan ini per POS (diinput Admin)
     const flagged = new Set((rm.data || []).filter(x => x.metode === 'SAKTI').map(x => x.pos_id));   // POS yang dibayar lewat SAKTI
     Object.keys(sk).forEach(k => flagged.add(+k));
-    const rowsPos = m.pos.filter(p => f.items[p.id] || ri[p.id] || sk[p.id]), anySak = rowsPos.some(p => flagged.has(p.id));
+    const rowsPos = m.pos, anySak = rowsPos.some(p => flagged.has(p.id));   // SEMUA POS ditampilkan, juga yang tidak punya RPD/Realisasi bulan ini (angkanya 0)
     $('vbody').innerHTML = `<button class="btn btn-sm btn-outline-secondary mb-3" id="vback"><i class="bx bx-arrow-back"></i> Kembali</button>
       <div class="d-flex flex-wrap gap-2 align-items-center mb-3"><h5 class="mb-0 me-auto">${esc(kn(f.kua_id))} · ${BULAN[f.bulan - 1]} ${f.tahun}</h5><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span>${f.status === 'paid' ? `<span class="small">Dibayar <b>${f.nominal_dibayar ? 'Rp ' + rp(f.nominal_dibayar) : '(nominal belum dicatat)'}</b></span>` : ''}</div>
       ${f.status === 'rejected' && f.catatan_admin ? note('Alasan penolakan: ' + f.catatan_admin, 'danger') : ''}

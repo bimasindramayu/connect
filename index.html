@@ -4,18 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BIMASATU · Bimas Islam Indramayu</title>
+<!-- Ikon tab dan logo aplikasi: assets/b-logo.png (satu berkas; ukuran tampil diatur CSS, lihat assets/README.md). ?v= ikut dinaikkan oleh bump-versi.mjs agar ikon baru tidak tertahan cache. -->
+<link rel="icon" type="image/png" href="assets/b-logo.png?v=2026.11.01.04.09">
+<link rel="apple-touch-icon" href="assets/b-logo.png?v=2026.11.01.04.09">
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!-- Tema Sneat (sama dengan portal sertifikat, versi dikunci). Kembali ke Bootstrap polos: ganti href dengan https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css -->
 <link href="https://cdn.jsdelivr.net/gh/themeselection/sneat-bootstrap-html-admin-template-free@de094c2bf89e602054b7c14f46c9a3a5b9f6cac9/assets/vendor/css/core.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
-<link href="css/app.css?v=2026.10.29.23.54" rel="stylesheet">
-<link href="css/sertifikat.css?v=2026.10.29.23.54" rel="stylesheet">
+<link href="css/app.css?v=2026.11.01.04.09" rel="stylesheet">
+<link href="css/sertifikat.css?v=2026.11.01.04.09" rel="stylesheet">
 </head>
 <body>
 
 <section id="auth" class="d-none">
   <div class="card"><div class="card-body p-4 p-sm-5">
-    <div class="text-center mb-4"><span class="brand"><i class="bx bx-link-alt"></i> BIMASATU</span></div>
+    <div class="text-center mb-4"><span class="brand"><img class="brand-logo" src="assets/b-logo.png?v=2026.11.01.04.09" alt="" width="48" height="48"> BIMASATU</span></div>
     <h5 class="mb-1">Selamat datang 👋</h5>
     <p class="mb-4">Masuk untuk mengelola layanan KUA se-Kabupaten Indramayu.</p>
     <div id="msg"></div>
@@ -39,7 +42,7 @@
 
 <div id="app" class="d-none">
   <aside id="side">
-    <div class="p-4 pb-3"><a href="#bop" class="text-decoration-none"><span class="brand"><i class="bx bx-link-alt"></i> BIMASATU</span></a></div>
+    <div class="p-4 pb-3"><a href="#bop" class="text-decoration-none"><span class="brand"><img class="brand-logo" src="assets/b-logo.png?v=2026.11.01.04.09" alt="" width="36" height="36"> BIMASATU</span></a></div>
     <nav class="nav flex-column pb-4">
       <!-- data-menu = kunci menu (sama dengan hash halaman dan kunci di tabel hak_akses). core.js applyMenus() menampilkan hanya yang boleh dibuka
            peran akun ini; kelompok (details) yang semua isinya tersembunyi ikut disembunyikan. Daftar kunci: bop.sql (menu_keys) dan js/akses.js. -->
@@ -67,7 +70,6 @@
         <a class="nav-link sub d-none" href="#sert-masjid" data-menu="sert-masjid"><i class="bx bx-building-house"></i>Masjid / Musala</a>
         <a class="nav-link sub d-none" href="#sert-kiblat" data-menu="sert-kiblat"><i class="bx bx-compass"></i>Arah Kiblat</a>
         <a class="nav-link sub d-none" href="#sert-pengaturan" data-menu="sert-pengaturan"><i class="bx bx-slider-alt"></i>Pengaturan Sertifikat</a>
-        <a class="nav-link sub d-none" href="#sert-status" data-menu="sert-status"><i class="bx bx-plug"></i>Status Apps Script</a>
       </details>
       <a class="nav-link d-none" href="#jaspro" data-menu="jaspro"><i class="bx bx-id-card"></i>Jaspro Transport</a>
       <a class="nav-link d-none" href="#akses" data-menu="akses"><i class="bx bx-lock-open-alt"></i>Hak Akses Menu</a>
@@ -92,15 +94,15 @@
 <dialog id="dlg"></dialog>
 <dialog id="vdlg"></dialog>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/config.js?v=2026.10.29.23.54"></script>
-<script src="js/core.js?v=2026.10.29.23.54"></script>
-<script src="js/bop.js?v=2026.10.29.23.54"></script>
-<script src="js/akun.js?v=2026.10.29.23.54"></script>
-<script src="js/akses.js?v=2026.10.29.23.54"></script>
-<script src="js/jaspro.js?v=2026.10.29.23.54"></script>
-<script src="js/bast.js?v=2026.10.29.23.54"></script>
-<script src="js/sertifikat.js?v=2026.10.29.23.54"></script>
-<script src="js/app.js?v=2026.10.29.23.54"></script>
+<script src="js/config.js?v=2026.11.01.04.09"></script>
+<script src="js/core.js?v=2026.11.01.04.09"></script>
+<script src="js/bop.js?v=2026.11.01.04.09"></script>
+<script src="js/akun.js?v=2026.11.01.04.09"></script>
+<script src="js/akses.js?v=2026.11.01.04.09"></script>
+<script src="js/jaspro.js?v=2026.11.01.04.09"></script>
+<script src="js/bast.js?v=2026.11.01.04.09"></script>
+<script src="js/sertifikat.js?v=2026.11.01.04.09"></script>
+<script src="js/app.js?v=2026.11.01.04.09"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=tsReady&render=explicit" async defer></script>
 </body>
 </html>

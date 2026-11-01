@@ -60,6 +60,10 @@ Isi folder proyek ini (lihat `README.md` bagian 2 untuk penjelasan tiap berkas):
    - **Jangan unggah `.env`** ke GitHub (sudah masuk `.gitignore`).
    - Berkas harus bernama persis `.env` dan berada di folder yang sama dengan `bop.mjs`; `bop.mjs` membacanya otomatis (tidak perlu `--env-file`). Format tiap baris `NAMA=nilai`, tanpa spasi di sekitar `=`.
 3. `node bop.mjs akun` membuat 1 admin + 31 Operator KUA. Hasilnya **`akun.csv`** berisi username dan password awal. Username operator berpola `kua_<kecamatan>` (mis. `kua_anjatan`, `kua_kedokanbunder`). Bagikan password ke tiap KUA, lalu **hapus `akun.csv`** dari komputer (jangan diunggah). Setiap akun dapat mengganti passwordnya sendiri di menu Pengaturan; admin dapat mereset password akun peran **mana pun**.
+   - **PERINGATAN: jangan pernah mengunggah `akun.csv` ke GitHub.** `.gitignore` sudah memuat `*.csv`, tetapi aturan itu **tidak berlaku untuk berkas yang sudah pernah di-commit**. Buka halaman repositori Anda dan periksa apakah `akun.csv` ada di daftar berkas. Bila ada dan repositori Anda publik, anggap semua password awal (admin dan 31 Operator KUA) **sudah bocor**:
+     1. **Ganti password semua akun** (inilah langkah yang menentukan): login admin > **Pengaturan > Daftar akun** > **Reset password** untuk admin dan setiap Operator KUA, dengan password baru yang berbeda-beda, lalu bagikan lewat jalur tertutup.
+     2. **Hapus berkas dari repositori** (berkas di komputer Anda tetap ada): `git rm --cached akun.csv`, lalu `git commit -m "hapus akun.csv"` dan `git push`. Setelah itu `.gitignore` mencegahnya ter-commit lagi.
+     3. Riwayat commit lama masih menyimpan isi berkas itu. Karena passwordnya sudah diganti (langkah 1), isinya tidak lagi berguna. Bila ingin riwayatnya ikut bersih: `git filter-repo --path akun.csv --invert-paths`, lalu `git push --force` (semua yang pernah mengunduh repositori harus mengunduh ulang).
 4. Akun peran lain (**Bendahara BOP, Verifikator BOP, BAST NR, Kemasjidan, PNBP NR**) dibuat admin di aplikasi, bukan lewat `bop.mjs`: login sebagai admin > **Pengaturan > Daftar akun > Tambah akun** (username, nama, peran, password; untuk Operator KUA pilih KUA-nya). Menu yang dapat dibuka tiap peran diatur di menu **Hak Akses Menu** (lihat bagian 9).
 
 ## 5. Google Drive (dokumen LPJ dan arsip BAST NR)
@@ -111,9 +115,10 @@ Dengan **akun Google yang sama** seperti bagian 5.
    - `turnstile`: **Site Key** Cloudflare (bagian 3).
    - `gas`: URL Web App Apps Script (bagian 7).
    - `domain`: sama dengan `EMAIL_DOMAIN` di `.env`.
-2. (Opsional) letakkan `assets/logo-kemenag.png` agar PDF BAST NR memuat logo.
-3. Unggah semua berkas ke repositori GitHub (kecuali yang ada di `.gitignore`). **Settings > Pages** > *Deploy from a branch* > `main` / `(root)`. Alamat situs: `https://<akun>.github.io/<repositori>/`.
-4. Uji di komputer sendiri (bila perlu) lewat server statis, bukan dobel klik: `npx serve .` lalu buka alamat `localhost` yang tampil. Peta dan GPS membutuhkan `https://` atau `localhost`.
+2. Tambahkan **`assets/b-logo.png`**: logo dan ikon website (ikon tab peramban, ikon layar utama iOS, logo di halaman masuk dan sidebar). Cukup **satu berkas**; ukuran tampil diatur otomatis oleh aplikasi (tinggi 48 px di halaman masuk, 36 px di sidebar), jadi tidak perlu membuat beberapa ukuran. Saran: PNG persegi 512 x 512 piksel, latar transparan, di bawah sekitar 100 KB (lihat `assets/README.md`). Tanpa berkas ini aplikasi tetap berjalan dengan ikon tautan bawaan.
+3. (Opsional) letakkan `assets/logo-kemenag.png` agar PDF BAST NR memuat logo.
+4. Unggah semua berkas ke repositori GitHub (kecuali yang ada di `.gitignore`). **Settings > Pages** > *Deploy from a branch* > `main` / `(root)`. Alamat situs: `https://<akun>.github.io/<repositori>/`.
+5. Uji di komputer sendiri (bila perlu) lewat server statis, bukan dobel klik: `npx serve .` lalu buka alamat `localhost` yang tampil. Peta dan GPS membutuhkan `https://` atau `localhost`.
 
 Bila `js/config.js` masih berisi nilai contoh, halaman menampilkan pita merah "js/config.js belum lengkap" yang menyebut bagian mana yang kurang.
 
@@ -121,7 +126,7 @@ Bila `js/config.js` masih berisi nilai contoh, halaman menampilkan pita merah "j
 
 Login sebagai admin (username dan password dari `akun.csv`), lalu:
 
-1. **Sertifikat > Status Apps Script**: harus "Tersambung" dengan peran admin. Bila gagal, lihat bagian 12.
+1. **Sertifikat > Masjid / Musala**: daftar harus termuat tanpa galat (ini sekaligus menguji sambungan ke Apps Script dan Spreadsheet). Bila gagal, lihat bagian 12. Cara cepat lain: buka URL Web App (`CFG.gas`) di tab baru; harus tampil JSON `{"status":"ok", ...}`.
 2. **BOP**: menu *Config* (buka/tutup RPD dan Realisasi, batas ukuran/jumlah file), lalu **Anggaran** tahun berjalan per KUA. Operator baru bisa menyusun RPD setelah anggaran ada.
 3. **BAST NR**: *Pengaturan BAST* (nama dan NIP Kepala Seksi, nomor awal surat, kode kantor, kode klasifikasi, alamat), lalu *Pegawai* (pegawai Bimas Islam dan pegawai tiap KUA). Buat satu BA uji, unggah satu arsip, dan buka pratinjaunya. Di Google Drive, arsip itu harus berada di `BIMASATU / BAST NR / <tahun> / <MM Bulan>`, satu folder induk dengan `BOP / LPJ`.
 4. **Sertifikat > Pengaturan Sertifikat**: nama dan NIP Kepala Kantor, Kepala Seksi Bimas Islam, Petugas Ukur, dan tanda tangan (PNG/JPEG). Lalu tambah satu masjid dan cetak Piagam; tambah satu pengukuran Arah Kiblat dan cetak dokumennya.
@@ -142,10 +147,16 @@ Login sebagai admin (username dan password dari `akun.csv`), lalu:
 | Yang berubah | Langkah |
 |---|---|
 | Berkas website (`index.html`, `js/`, `views/`, `css/`) | Ganti berkasnya, **`node bump-versi.mjs`**, commit dan push. Jangan menimpa `js/config.js` Anda. |
+| Logo dan ikon (`assets/b-logo.png`) | Ganti berkasnya, **`node bump-versi.mjs`**, commit dan push. Ikon tab paling lambat berganti: tutup lalu buka lagi tabnya. |
 | Apps Script | Tempel kode baru, **Manage deployments > Edit > New version**. |
 | Edge Function | `npx supabase functions deploy bop --no-verify-jwt` |
 | Database | Jalankan ulang `bop.sql` (aman). |
 | Hak akses menu | Diatur di aplikasi (menu **Hak Akses Menu**), tanpa deploy. Tampilan mengikuti saat pengguna memuat ulang halaman atau login ulang; Apps Script paling lama 5 menit; database dan Edge Function langsung. |
+
+**Memperbarui dari versi tujuh peran ke versi ini** (menu Status Apps Script dihapus, penampil dokumen baru, total di Verifikasi, semua POS di detail Verifikasi, logo dan ikon). **Tanpa** deploy ulang Apps Script maupun Edge Function:
+1. **Database**: jalankan ulang `bop.sql` di SQL Editor (aman diulang). Menghapus kunci menu Status Apps Script dari daftar menu dan dari hak akses semua peran; tidak ada data yang hilang.
+2. **Website**: ganti berkas yang ada di paket ini (paket sengaja **tidak** memuat `js/config.js` dan `js/sertifikat-dokumen-pdf.js` Anda), **tambahkan `assets/b-logo.png`**, jalankan `node bump-versi.mjs`, commit, dan push.
+Bila website diperbarui sebelum `bop.sql` dijalankan, aplikasi tetap berjalan (kunci menu yang sudah tidak dikenal diabaikan); jalankan `bop.sql` sesudahnya.
 
 **Memperbarui dari versi sebelum tujuh peran dan Hak Akses Menu** (satu jendela pemeliharaan, sekitar 30 menit). Data tidak berubah dan akun lama (admin dan operator) tetap berlaku. Ikuti urutan ini:
 1. **Cadangan**: ekspor data Supabase (bagian 13) dan buat salinan Spreadsheet (*File > Make a copy*).

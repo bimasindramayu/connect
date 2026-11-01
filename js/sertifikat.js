@@ -1,6 +1,6 @@
 /* =====================================================================================
-   sertifikat.js: pintu masuk menu Sertifikat dan pemuat modulnya (menu sert-masjid, sert-kiblat, sert-pengaturan, sert-status)
-   Berisi halaman Status Apps Script dan pemuat: modul berat (sertifikat-masjid, arah-kiblat, pengaturan-sertifikat, mesin PDF)
+   sertifikat.js: pintu masuk menu Sertifikat dan pemuat modulnya (menu sert-masjid, sert-kiblat, sert-pengaturan)
+   Berisi pemuat: modul berat (sertifikat-masjid, arah-kiblat, pengaturan-sertifikat, mesin PDF)
    baru diunduh saat menu Sertifikat pertama kali dibuka. Data di Spreadsheet lewat Apps Script, yang memeriksa sendiri menu mana
    yang dimiliki peran pemanggil (Hak Akses Menu), jadi data hanya dimuat untuk menu yang diberikan ke akun ini.
    ===================================================================================== */
@@ -99,26 +99,5 @@ window.sertPage = async function (view) {   // dipanggil router untuk sert-masji
   }
 };
 
-async function pageSertStatus() {   // periksa sambungan ke Apps Script dan peran/menu yang dikenali di sana
-  const ep = EP;
-  $('view').innerHTML = `
-    <h4 class="mb-1">Status Apps Script</h4>
-    <p class="text-body-secondary">Memeriksa sambungan ke Apps Script dan Spreadsheet yang dipakai ${esc(CFG.nama)} untuk Sertifikat dan BAST NR.</p>
-    <div class="card"><div class="card-body" id="sertStatus">Memeriksa…</div></div>
-    <button class="btn btn-outline-primary btn-sm mt-3" id="sertCek"><i class="bx bx-refresh"></i> Periksa lagi</button>`;
-  const cek = async () => {
-    $('sertStatus').textContent = 'Memeriksa…';
-    try {
-      const j = await gas('whoami');
-      if (live(ep)) $('sertStatus').innerHTML = `<span class="badge bg-label-success me-2">Tersambung</span>Akun <b>${esc(j.nama)}</b> dikenali Apps Script sebagai <b>${esc(peranLabel(j.role))}</b>.`;
-    } catch (e) {
-      if (live(ep)) $('sertStatus').innerHTML = `<span class="badge bg-label-danger me-2">Gagal</span>${esc(e.message)}`;
-    }
-  };
-  $('sertCek').onclick = cek;
-  cek();
-}
-
-
 // ---- Daftarkan halaman ke router (core.js) ----
-Object.assign(pages, { "sert-status": pageSertStatus, "sert-masjid": () => window.sertPage('masjid'), "sert-kiblat": () => window.sertPage('kiblat'), "sert-pengaturan": () => window.sertPage('pengaturan') });
+Object.assign(pages, { "sert-masjid": () => window.sertPage('masjid'), "sert-kiblat": () => window.sertPage('kiblat'), "sert-pengaturan": () => window.sertPage('pengaturan') });

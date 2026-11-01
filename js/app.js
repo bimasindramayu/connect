@@ -6,6 +6,11 @@
 /* =================================================== */
 document.title = `${CFG.nama} · Bimas Islam Indramayu`;   // judul tab dan logo mengikuti CFG.nama (mengganti nama cukup di sini)
 document.querySelectorAll('.brand').forEach(b => { b.lastChild.textContent = ' ' + CFG.nama; });
+// Logo (assets/b-logo.png) belum ada atau gagal dimuat: kembali ke ikon bawaan supaya merek tetap rapi.
+document.querySelectorAll('.brand-logo').forEach(img => {
+  const rusak = () => { const i = document.createElement('i'); i.className = 'bx bx-link-alt'; img.replaceWith(i); };
+  if (img.complete && !img.naturalWidth) rusak(); else img.addEventListener('error', rusak, { once: true });
+});
 
 window.tsReady = () => {
   wid = turnstile.render('#ts', { sitekey: CFG.turnstile, callback: t => token = t, 'expired-callback': () => token = null });

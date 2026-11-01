@@ -174,7 +174,7 @@ create trigger profiles_admin_guard before update of role on public.profiles
 -- diberikan ke peran ini; menu realisasi (mengisi Realisasi per KUA) hanya untuk Operator KUA.
 create or replace function public.menu_keys() returns text[] language sql immutable as $$
   select array['bop','anggaran','rpd','realisasi','verifikasi','metode','sakti','config','impor','laporan',
-               'bast','bast-buat','bast-pegawai','bast-setting','sert-masjid','sert-kiblat','sert-pengaturan','sert-status','jaspro','akses'];
+               'bast','bast-buat','bast-pegawai','bast-setting','sert-masjid','sert-kiblat','sert-pengaturan','jaspro','akses'];
 $$;
 
 create or replace function public.peran_label(p_role text) returns text language sql immutable as $$
@@ -355,12 +355,15 @@ begin
       ('bendahara_bop','bop'),('bendahara_bop','rpd'),('bendahara_bop','verifikasi'),('bendahara_bop','sakti'),('bendahara_bop','laporan'),
       ('verifikator_bop','bop'),('verifikator_bop','rpd'),('verifikator_bop','verifikasi'),('verifikator_bop','laporan'),
       ('bast_nr','bast'),('bast_nr','bast-buat'),('bast_nr','bast-pegawai'),('bast_nr','bast-setting'),
-      ('kemasjidan','sert-masjid'),('kemasjidan','sert-kiblat'),('kemasjidan','sert-pengaturan'),('kemasjidan','sert-status'),
+      ('kemasjidan','sert-masjid'),('kemasjidan','sert-kiblat'),('kemasjidan','sert-pengaturan'),
       ('pnbp_nr','jaspro')
     on conflict do nothing;
     insert into public.config (key, value) values ('hak_akses_awal', 'true') on conflict (key) do nothing;
   end if;
 end $$;
+-- Bersihkan hak untuk menu yang sudah dihapus dari aplikasi (mis. "Status Apps Script" = sert-status): baris yang kuncinya tidak ada lagi
+-- di menu_keys() tidak berguna dan tidak dapat diberikan lagi. Aman diulang.
+delete from public.hak_akses where not (menu = any (public.menu_keys()));
 
 -- 6) ANGGARAN TAHUNAN: 1 baris = 1 TAHUN ----------------------------------------------------------
 -- items = {"<id KUA>": nominal} untuk semua KUA; total dihitung trigger. Operator tidak membaca tabel ini langsung
