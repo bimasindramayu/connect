@@ -115,7 +115,7 @@ Dengan **akun Google yang sama** seperti bagian 5.
    - `turnstile`: **Site Key** Cloudflare (bagian 3).
    - `gas`: URL Web App Apps Script (bagian 7).
    - `domain`: sama dengan `EMAIL_DOMAIN` di `.env`.
-2. Tambahkan **`assets/b-logo.png`**: logo dan ikon website (ikon tab peramban, ikon layar utama iOS, logo di halaman masuk dan sidebar). Cukup **satu berkas**; ukuran tampil diatur otomatis oleh aplikasi (tinggi 48 px di halaman masuk, 36 px di sidebar), jadi tidak perlu membuat beberapa ukuran. Saran: PNG persegi 512 x 512 piksel, latar transparan, di bawah sekitar 100 KB (lihat `assets/README.md`). Tanpa berkas ini aplikasi tetap berjalan dengan ikon tautan bawaan.
+2. Logo dan ikon website ada di folder `assets/`: **`b-logo.png`** (logo di halaman masuk dan sidebar, serta ikon tab; persegi 192 x 192 px, sudah dipangkas dari ruang kosong) dan **`apple-touch-icon.png`** (ikon layar utama iOS, 180 x 180 px, latar putih). Ukuran tampil diatur otomatis oleh aplikasi (tinggi 48 px di halaman masuk, 36 px di sidebar), jadi cukup satu berkas untuk logo dan ikon tab. Untuk mengganti logo, ikuti `assets/README.md` (pangkas ruang kosong, persegi, 192 sampai 512 px). Tanpa berkas ini aplikasi tetap berjalan dengan ikon tautan bawaan.
 3. (Opsional) letakkan `assets/logo-kemenag.png` agar PDF BAST NR memuat logo.
 4. Unggah semua berkas ke repositori GitHub (kecuali yang ada di `.gitignore`). **Settings > Pages** > *Deploy from a branch* > `main` / `(root)`. Alamat situs: `https://<akun>.github.io/<repositori>/`.
 5. Uji di komputer sendiri (bila perlu) lewat server statis, bukan dobel klik: `npx serve .` lalu buka alamat `localhost` yang tampil. Peta dan GPS membutuhkan `https://` atau `localhost`.
@@ -155,7 +155,7 @@ Login sebagai admin (username dan password dari `akun.csv`), lalu:
 
 **Memperbarui dari versi tujuh peran ke versi ini** (menu Status Apps Script dihapus, penampil dokumen baru, total di Verifikasi, semua POS di detail Verifikasi, logo dan ikon). **Tanpa** deploy ulang Apps Script maupun Edge Function:
 1. **Database**: jalankan ulang `bop.sql` di SQL Editor (aman diulang). Menghapus kunci menu Status Apps Script dari daftar menu dan dari hak akses semua peran; tidak ada data yang hilang.
-2. **Website**: ganti berkas yang ada di paket ini (paket sengaja **tidak** memuat `js/config.js` dan `js/sertifikat-dokumen-pdf.js` Anda), **tambahkan `assets/b-logo.png`**, jalankan `node bump-versi.mjs`, commit, dan push.
+2. **Website**: ganti berkas yang ada di paket ini (paket sengaja **tidak** memuat `js/config.js` dan `js/sertifikat-dokumen-pdf.js` Anda). Logo di paket (`assets/b-logo.png`) sudah dipangkas dari gambar asli Anda, yang tetap tersimpan sebagai `assets/b-logo-asli.png`. Jalankan `node bump-versi.mjs`, commit, dan push.
 Bila website diperbarui sebelum `bop.sql` dijalankan, aplikasi tetap berjalan (kunci menu yang sudah tidak dikenal diabaikan); jalankan `bop.sql` sesudahnya.
 
 **Memperbarui dari versi sebelum tujuh peran dan Hak Akses Menu** (satu jendela pemeliharaan, sekitar 30 menit). Data tidak berubah dan akun lama (admin dan operator) tetap berlaku. Ikuti urutan ini:

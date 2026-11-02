@@ -35,8 +35,9 @@ dialog::backdrop{background:rgba(67,89,113,.5)}
 .ms-menu li.hl{background:#696cff;color:#fff}.ms-menu li.empty{color:#a1acb8;cursor:default}
 dialog.wide{width:min(1100px,calc(100% - 1rem));height:calc(100% - 1rem);max-width:none;max-height:none;overflow:hidden}
 dialog.wide.xl{width:min(1400px,calc(100% - 1rem))}
-#vwa{width:300px;max-width:45%;flex:none;overflow:auto;background:#fff;border-right:1px solid #dee2e6}
-@media(max-width:767px){#vwa{position:absolute;z-index:5;left:0;top:0;bottom:0;width:min(320px,88%);max-width:none;box-shadow:0 0 1rem rgba(0,0,0,.25)}}
+#vwa{width:370px;max-width:45%;flex:none;overflow:auto;background:#fff;border-right:1px solid #dee2e6}
+#vwa table{font-size:.875rem}   /* tiga kolom (POS, RPD, Realisasi) harus muat di panel yang sempit */
+@media(max-width:767px){#vwa{position:absolute;z-index:5;left:0;top:0;bottom:0;width:min(400px,94%);max-width:none;box-shadow:0 0 1rem rgba(0,0,0,.25)}}
 @media(max-width:575px){dialog.wide{width:100%;height:100%;border-radius:0}}
 @media(max-width:991px){#side{transform:translateX(-100%);visibility:hidden;transition:transform .2s,visibility 0s .2s}#side.open{transform:none;visibility:visible;transition:transform .2s,visibility 0s}#main{margin-left:0}#topbar{margin:.75rem}}
 @media(min-width:992px){body.side-off #side{transform:translateX(-100%);visibility:hidden;transition:transform .2s,visibility 0s .2s}body.side-off #main{margin-left:0}}   /* menu samping disembunyikan (layar lebar) */

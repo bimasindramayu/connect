@@ -2,7 +2,39 @@
 
 Ringkasan untuk Anda yang memasang. Penjelasan teknis lengkap ada di `README.md` dan langkah pemasangan rinci di `PANDUAN-INSTALASI.md` (bagian 11).
 
-## Pembaruan terbaru: Status Apps Script dihapus, penampil dokumen, Verifikasi, dan logo
+## Pembaruan terbaru (patch kedua): kolom RPD di panel Rincian, dan logo disesuaikan
+
+### Ringkasan per permintaan
+
+#### 1) Penampil dokumen Realisasi: nominal RPD tiap POS di panel Rincian (`id="vwa"`)
+- Panel **Rincian** di kiri dokumen kini punya kolom **RPD (Rp)** di samping **Realisasi (Rp)** untuk setiap POS, jadi Anda dapat membandingkan RPD dan Realisasi langsung sambil membaca dokumen LPJ. Berlaku di dua tempat: halaman **Realisasi** (Operator KUA, memakai isian form saat ini) dan **Detail Verifikasi**.
+- Baris **Total** memuat total RPD dan total Realisasi. Ringkasan di bawah tabel tetap ada (Manual, SAKTI, RPD bulan ini).
+- Realisasi yang **melebihi RPD POS itu** (dan totalnya bila melebihi RPD bulan itu) ditandai **merah**, dengan keterangan di bawah tabel. Ini hanya penanda untuk membantu membandingkan, bukan aturan baru (aturan batas tetap seperti sebelumnya). Realisasi yang di bawah atau sama dengan RPD tidak ditandai.
+- Semua POS tetap tampil (RPD dan Realisasi 0 bila tidak ada). Panel dilebarkan dari 300 ke 370 px agar tiga kolom muat; di layar sempit dan ponsel panel menimpa dokumen (lebar sampai 94%). Nominal tidak pernah turun baris.
+
+#### 2) Logo asli disesuaikan ukurannya
+- Setelah `assets/b-logo.png` ada di repositori, terlihat gambarnya 450 x 360 px dengan **ruang transparan yang besar**: lambang "B" hanya sekitar sepertiga lebarnya, sehingga tampil sangat kecil (sekitar 22 px di halaman masuk dan 16 px di sidebar) dan nyaris tak terlihat di tab.
+- Perbaikan: `assets/b-logo.png` kini berisi lambang yang **dipangkas** (ukuran asli, tanpa diperbesar) di kanvas persegi **192 x 192 px**; di layar lambangnya sekarang sekitar 41 px dari kotak 48 px (halaman masuk) dan 31 px dari 36 px (sidebar). **Gambar asli Anda disimpan utuh sebagai `assets/b-logo-asli.png`** (boleh dihapus; hanya arsip).
+- Ikon iOS: `assets/apple-touch-icon.png` baru (180 x 180 px, **latar putih**, karena iOS mengisi bagian transparan dengan hitam). `index.html` menunjuk ke berkas ini untuk ikon layar utama.
+- Gambar asli hanya 450 x 360 px (lambang 146 x 166 px), jadi 192 x 192 px sudah resolusi aslinya. Bila Anda punya versi yang lebih besar atau vektor, pangkas rapat, buat persegi, dan simpan 192 sampai 512 px sebagai `b-logo.png` (lihat `assets/README.md`).
+
+### Berkas
+**Diubah**: `js/bop.js` (panel Rincian), `css/app.css` (lebar panel), `index.html` (rujukan ikon iOS dan nomor versi), `assets/b-logo.png` (dipangkas), `assets/README.md`, `README.md`, `PANDUAN-INSTALASI.md`, `PERUBAHAN.md`.
+**Baru**: `assets/apple-touch-icon.png`, `assets/b-logo-asli.png`.
+**Tidak ada perubahan** pada database, Apps Script, maupun Edge Function: tidak perlu menjalankan `bop.sql` atau deploy ulang apa pun. `js/config.js` dan berkas milik Anda lainnya tidak ada di paket.
+
+### Cara memasang (sekitar 5 menit)
+1. Salin berkas paket ke folder website Anda (timpa yang lama).
+2. Jalankan `node bump-versi.mjs`, lalu commit dan push.
+3. Cek: buka dokumen LPJ di Realisasi (Operator KUA) atau Detail Verifikasi, tekan **Rincian**, dan lihat kolom RPD; buka halaman masuk dan lihat logo yang lebih besar. Ikon tab paling lambat berganti: tutup lalu buka lagi tabnya.
+
+### Pengujian
+Semua lulus (924 pemeriksaan otomatis): logika Jaspro 35; SQL 194; Edge Function 143; Apps Script 58; Chromium ujung ke ujung 370 (Jaspro 44, peran 137, BOP 94, BAST 41, Sertifikat 24, logo 30); penampil dokumen 124. Yang baru: kolom RPD di panel Rincian pada halaman Realisasi dan Detail Verifikasi (angka tiap POS, total, penanda merah, tata letak di layar 1440, 800, dan 375 px) dan uji logo asli proyek. Kontrol negatif: kode panel patch pertama gagal di 11 pemeriksaan baru, dan gambar logo asli yang belum dipangkas gagal di 5 pemeriksaan logo, jadi ujinya terbukti menangkap masalahnya.
+Yang belum dapat diuji di sini: perangkat sentuh sungguhan (iPhone/Android) dan Google Drive asli.
+
+---
+
+## Pembaruan sebelumnya (patch pertama): Status Apps Script dihapus, penampil dokumen, Verifikasi, dan logo
 
 ### Ringkasan per permintaan
 
@@ -22,7 +54,7 @@ Ringkasan untuk Anda yang memasang. Penjelasan teknis lengkap ada di `README.md`
 
 #### 4) Logo dan ikon dari `assets/b-logo.png`
 - Satu berkas dipakai untuk ikon tab peramban, ikon layar utama iOS (`apple-touch-icon`), logo di halaman masuk (tinggi 48 px), dan logo di sidebar (36 px). Ukuran diatur oleh CSS: gambar persegi maupun lebar tidak terpotong dan tidak melar, jadi **tidak perlu membuat banyak ukuran**.
-- **`assets/b-logo.png` belum ada di repositori Anda dan tidak ada di paket ini** (berkasnya tidak dapat saya akses): **tambahkan sendiri**. Saran: PNG persegi 512 x 512 piksel, latar transparan, di bawah sekitar 100 KB (lihat `assets/README.md`). Sebelum berkas itu ada, aplikasi tetap rapi dengan ikon tautan bawaan.
+- `assets/b-logo.png` kemudian Anda tambahkan ke repositori. Gambarnya ternyata berruang kosong besar sehingga lambang tampak kecil; itu diperbaiki di patch kedua (di atas): gambar dipangkas dan disimpan ulang sebagai `b-logo.png`.
 - Nomor versi cache ikon ikut dinaikkan oleh `node bump-versi.mjs`.
 
 #### 5) Verifikasi: total nominal di tabel
@@ -48,7 +80,7 @@ Repositori GitHub Anda (publik) memuat `akun.csv` berisi username dan password a
 
 ---
 
-## Pembaruan sebelumnya: tujuh peran, Hak Akses Menu, arsip BAST di folder master, tarif Jaspro/Transport menurut tanggal, SAKTI melebihi RPD, dan pop-up di depan
+## Pembaruan sebelum itu: tujuh peran, Hak Akses Menu, arsip BAST di folder master, tarif Jaspro/Transport menurut tanggal, SAKTI melebihi RPD, dan pop-up di depan
 
 Ringkasan untuk Anda yang memasang. Penjelasan teknis lengkap ada di `README.md` (bagian 3, 5, 6, 8, 14-17) dan langkah pemasangan rinci di `PANDUAN-INSTALASI.md` (bagian 11).
 

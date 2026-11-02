@@ -100,19 +100,24 @@ async function showDocs(el, ctx, opt = {}) {   // ctx = { kua, tahun, bulan }; o
   } catch (e) { el.innerHTML = note(e.message); if (opt.onCount) opt.onCount(null); }
 }
 
-// Rincian Realisasi per POS untuk panel kiri penampil dokumen, pembanding dengan isi dokumen LPJ.
-// man = {id POS: nominal manual}, sak = {id POS: nominal SAKTI}, flagged = Set id POS yang dibayar lewat SAKTI (baris diwarnai biru).
-// SEMUA POS ditampilkan (yang tidak ada Realisasinya bernilai 0), supaya pemeriksa melihat daftar POS yang utuh dan tidak ada yang terlewat.
-function realisasiSide(judul, sub, pos, man, sak, flagged, rpdTotal) {
-  const rows = pos, tm = isum(man), ts = isum(sak);
+// Rincian Realisasi per POS untuk panel kiri penampil dokumen, pembanding dengan isi dokumen LPJ dan dengan RPD bulan itu.
+// man = {id POS: nominal manual}, sak = {id POS: nominal SAKTI}, flagged = Set id POS yang dibayar lewat SAKTI (baris diwarnai biru),
+// ri = {id POS: RPD bulan itu} (kolom RPD berada di sebelah kolom Realisasi; Realisasi yang melebihi RPD POS itu, dan totalnya, berwarna merah).
+// SEMUA POS ditampilkan (yang tidak ada RPD atau Realisasinya bernilai 0), supaya pemeriksa melihat daftar POS yang utuh dan tidak ada yang terlewat.
+function realisasiSide(judul, sub, pos, man, sak, flagged, ri) {
+  ri = ri || {};
+  const rows = pos, tm = isum(man), ts = isum(sak), tr = isum(ri), tot = tm + ts, lebih = (v, r) => v > r ? ' text-danger fw-semibold' : '';
+  const nilai = p => ({ r: ri[p.id] || 0, v: (man[p.id] || 0) + (sak[p.id] || 0) });
+  const adaLebih = tot > tr || rows.some(p => { const n = nilai(p); return n.v > n.r; });
   return `<div class="fw-semibold">${esc(judul)}</div><div class="small mb-2">${esc(sub)}</div>
-    <table class="table table-sm align-middle mb-2"><thead><tr><th>POS</th><th class="text-end">Realisasi (Rp)</th></tr></thead><tbody>${rows.length ? rows.map(p => {
-      const s = flagged.has(p.id), v = (man[p.id] || 0) + (sak[p.id] || 0);
-      return `<tr${s ? ' class="table-info"' : ''}><td>${esc(posLabel(p))}${s ? ' <span class="badge bg-label-primary">SAKTI</span>' : ''}</td><td class="text-end">${rp(v)}</td></tr>`; }).join('')
-      : '<tr><td colspan="2" class="small">Daftar POS belum dimuat.</td></tr>'}</tbody>
-      <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end">${rp(tm + ts)}</td></tr></tfoot></table>
-    <div class="small">Manual: <b>Rp ${rp(tm)}</b>${flagged.size || ts ? `<br>SAKTI: <b>Rp ${rp(ts)}</b>` : ''}${rpdTotal != null ? `<br>RPD bulan ini: <b>Rp ${rp(rpdTotal)}</b>` : ''}</div>
-    ${rows.some(p => flagged.has(p.id)) ? '<div class="small mt-2">Baris biru: dibayar lewat SAKTI.</div>' : ''}`;
+    <table class="table table-sm align-middle mb-2"><thead><tr><th>POS</th><th class="text-end" title="RPD bulan ini">RPD (Rp)</th><th class="text-end">Realisasi (Rp)</th></tr></thead><tbody>${rows.length ? rows.map(p => {
+      const s = flagged.has(p.id), { r, v } = nilai(p);
+      return `<tr${s ? ' class="table-info"' : ''}><td>${esc(posLabel(p))}${s ? ' <span class="badge bg-label-primary">SAKTI</span>' : ''}</td><td class="text-end text-nowrap">${rp(r)}</td><td class="text-end text-nowrap${lebih(v, r)}">${rp(v)}</td></tr>`; }).join('')
+      : '<tr><td colspan="3" class="small">Daftar POS belum dimuat.</td></tr>'}</tbody>
+      <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end text-nowrap">${rp(tr)}</td><td class="text-end text-nowrap${lebih(tot, tr)}">${rp(tot)}</td></tr></tfoot></table>
+    <div class="small">Manual: <b>Rp ${rp(tm)}</b>${flagged.size || ts ? `<br>SAKTI: <b>Rp ${rp(ts)}</b>` : ''}<br>RPD bulan ini: <b>Rp ${rp(tr)}</b></div>
+    ${rows.some(p => flagged.has(p.id)) ? '<div class="small mt-2">Baris biru: dibayar lewat SAKTI.</div>' : ''}
+    ${adaLebih ? '<div class="small mt-2 text-danger">Merah: Realisasi melebihi RPD bulan ini (per POS atau total).</div>' : ''}`;
 }
 
 /* ====== RPD: daftar dulu (peran pusat: filter semua kecamatan), Detail membuka rincian per POS. 1 record = 1 bulan.
@@ -263,7 +268,7 @@ async function pageRealisasi() {
       const man = {}, sak = {}, flagged = new Set();
       m.pos.forEach(p => { if (mt[p.id] === 'SAKTI') { flagged.add(p.id); if (au[p.id]) sak[p.id] = au[p.id]; if (cur[p.id]) man[p.id] = cur[p.id]; } });
       $('lbody').querySelectorAll('[data-p]').forEach(i => { const pid = +i.dataset.p, v = num(i.value); if (mt[pid] !== 'SAKTI' && v > 0) man[pid] = v; });
-      return realisasiSide(`Realisasi ${BULAN[b - 1]} ${t}`, me.kua || '', m.pos, man, sak, flagged, rpdOf(b)?.total || 0);
+      return realisasiSide(`Realisasi ${BULAN[b - 1]} ${t}`, me.kua || '', m.pos, man, sak, flagged, ri);
     };
     if (lpj) showDocs($('ldocs'), { kua: me.kua_id, tahun: t, bulan: b }, { del: edit, onCount: n => nDocs = n, side });
     const calc = () => {
@@ -407,7 +412,7 @@ async function pageVerifikasi() {
         <div id="vperr"></div>
         <button class="btn btn-primary" id="vsave">Simpan status</button>
         <div class="form-text mt-2">Status dapat diubah kapan saja, tetapi nominal dan dokumen LPJ tidak dapat diubah dari sini.</div></div>`;
-    showDocs($('vdocs'), { kua: f.kua_id, tahun: f.tahun, bulan: f.bulan }, { side: () => realisasiSide(kn(f.kua_id), `${BULAN[f.bulan - 1]} ${f.tahun}`, m.pos, f.items, sk, flagged, isum(ri)) });
+    showDocs($('vdocs'), { kua: f.kua_id, tahun: f.tahun, bulan: f.bulan }, { side: () => realisasiSide(kn(f.kua_id), `${BULAN[f.bulan - 1]} ${f.tahun}`, m.pos, f.items, sk, flagged, ri) });
     $('vback').onclick = list;
     $('vst').onchange = () => { $('vnote').classList.toggle('d-none', $('vst').value !== 'rejected'); $('vpaidbox').classList.toggle('d-none', $('vst').value !== 'paid'); };
     $('vpaid').oninput = () => fmtIn($('vpaid'));

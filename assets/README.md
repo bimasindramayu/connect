@@ -1,22 +1,21 @@
 # assets/
 
-## b-logo.png — logo dan ikon website
+## Logo dan ikon website
 
-Letakkan **b-logo.png** di folder ini (`assets/b-logo.png`). Satu berkas dipakai untuk semuanya:
-
-| Dipakai di | Ukuran tampil |
+| Berkas | Dipakai untuk |
 |---|---|
-| Ikon tab peramban (favicon) | mengikuti peramban (16–32 px) |
-| Ikon layar utama iOS (apple-touch-icon) | mengikuti iOS (sekitar 180 px) |
-| Logo di halaman masuk | tinggi 48 px |
-| Logo di sidebar | tinggi 36 px |
+| `b-logo.png` | Ikon tab peramban (favicon), logo di halaman masuk (tinggi 48 px) dan logo di sidebar (tinggi 36 px). **Persegi 192 x 192 px, latar transparan, lambang dipangkas dari ruang kosong.** |
+| `apple-touch-icon.png` | Ikon layar utama iOS ("Tambah ke Layar Utama"). 180 x 180 px dengan **latar putih** (iOS mengisi bagian transparan dengan hitam). |
+| `b-logo-asli.png` | Gambar asli (450 x 360 px) sebelum dipangkas. Hanya arsip: tidak dipakai aplikasi, boleh dihapus. |
 
-Ukuran tampil diatur oleh CSS (`css/app.css`, kelas `.brand-logo`), bukan oleh berkas, sehingga **tidak perlu membuat beberapa ukuran**. Yang perlu diperhatikan:
+**Mengapa dipangkas?** Gambar asli punya ruang transparan yang besar di sekelilingnya: lambang "B" hanya sekitar sepertiga lebarnya. Ditampilkan apa adanya, lambang tampak sangat kecil di sidebar (sekitar 16 px) dan nyaris tak terlihat di tab. Karena itu `b-logo.png` kini berisi lambangnya saja (146 x 166 px, ukuran asli, tanpa diperbesar) di tengah kanvas persegi 192 x 192 px. Ukuran tampil diatur CSS (`css/app.css`, kelas `.brand-logo`), jadi satu berkas cukup untuk logo dan ikon tab.
 
-- **Saran: PNG persegi 512 × 512 piksel, latar transparan, di bawah ± 100 KB.** Gambar yang jauh lebih besar (misalnya 3000 piksel, beberapa MB) tetap tampil benar tetapi membuat halaman masuk dan ikon tab lambat dimuat; kecilkan dulu (mis. di squoosh.app) bila lebih besar dari 1024 piksel.
-- **Logo lebar juga aman**: tinggi dikunci, lebar mengikuti gambar tetapi dibatasi 80 px (halaman masuk) dan 64 px (sidebar). Gambar tidak pernah terpotong atau melar. Untuk hasil terbaik sediakan versi persegi (lambangnya saja) karena logo lebar jadi kecil.
-- **Berkas belum ada atau rusak**: aplikasi otomatis kembali ke ikon tautan bawaan (tidak muncul gambar rusak) dan nama aplikasi tetap tampil.
-- **Setelah mengganti gambar**: jalankan `node bump-versi.mjs` lalu unggah ulang `index.html`, supaya peramban memuat ikon baru dan bukan versi lama dari cache. Ikon tab biasanya paling lambat berganti; tutup dan buka lagi tabnya.
+**Mengganti logo** (agar tetap pas):
+- Pangkas ruang kosong di sekeliling lambang, buat kanvas **persegi**, latar transparan, **192 x 192 px atau lebih** (disarankan 192 sampai 512 px, di bawah sekitar 100 KB), lalu simpan sebagai `b-logo.png`. Gambar yang jauh lebih besar (mis. 3000 px, beberapa MB) tetap tampil benar tetapi memperlambat halaman masuk. Gambar yang masih berisi ruang kosong akan tampak kecil.
+- Buat juga `apple-touch-icon.png` (180 x 180 px, latar putih, lambang sekitar 70% tinggi kanvas).
+- Logo lebar tetap aman (tinggi dikunci, lebar dibatasi 80 px di halaman masuk dan 64 px di sidebar; tidak terpotong dan tidak melar), tetapi akan tampak kecil. Untuk hasil terbaik pakai versi persegi (lambangnya saja).
+- Berkas belum ada atau rusak: aplikasi otomatis kembali ke ikon tautan bawaan (tidak muncul gambar rusak) dan nama aplikasi tetap tampil.
+- Setelah mengganti gambar: jalankan `node bump-versi.mjs` lalu unggah ulang `index.html`, supaya peramban memuat ikon baru dan bukan versi lama dari cache. Ikon tab paling lambat berganti; tutup dan buka lagi tabnya.
 
 ## logo-kemenag.png — kop surat PDF BAST NR
 
