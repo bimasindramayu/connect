@@ -10,9 +10,11 @@
 --
 -- Isi: 0 Persiapan | 1 Profil dan peran | 2 KUA | 2b Hak akses menu per peran | 3 Fungsi bantu | 4 POS | 5 Config |
 --      6 Anggaran | 7 (kosong) | 8 RPD | 9 Realisasi | 9b Pembayaran SAKTI | 9c Impor data lama | 10 Salin data lama |
---      11 Pembersihan | 12 Jaspro Transport
+--      11 Pembersihan | 12 Jaspro Transport | 13 Pegawai KUA, riwayat mutasi, alamat KUA (dashboard Operator KUA)
 --
 -- BAST NR, Sertifikat Masjid/Musala, dan Arah Kiblat tidak memakai database ini (Spreadsheet + Apps Script).
+-- Pegawai KUA (bagian 13): data kepegawaian tiap KUA (nama + gelar, NIP, jenis ASN, pangkat/golongan, jabatan, HP/WA). Operator KUA
+--   mengelola pegawai KUA-nya sendiri (tambah, ubah, hapus, transfer ke KUA lain); Admin melihat dan mengelola semua KUA.
 --
 -- Model data: Anggaran = 1 baris per TAHUN (items = {"<id KUA>": nominal}). RPD dan Realisasi = 1 record per KUA per bulan;
 --   rincian POS disimpan di kolom JSON items = {"<id POS>": nominal, ...}. Total dihitung otomatis oleh trigger.
@@ -172,8 +174,10 @@ create trigger profiles_admin_guard before update of role on public.profiles
 -- Menu khusus Admin (tidak dapat diberikan): akses (Hak Akses Menu) dan impor (Impor Data Lama).
 -- Operator KUA hanya mengakses data KUA-nya sendiri, jadi menu lintas KUA (anggaran, verifikasi, metode, sakti, config) tidak dapat
 -- diberikan ke peran ini; menu realisasi (mengisi Realisasi per KUA) hanya untuk Operator KUA.
+-- Menu dashboard (halaman awal: ringkasan KUA sendiri) juga hanya untuk Operator KUA. Menu pegawai (Pegawai KUA): Operator KUA
+-- mengelola pegawai KUA-nya sendiri; peran lain yang diberi menu ini oleh admin hanya MELIHAT pegawai semua KUA (bagian 13).
 create or replace function public.menu_keys() returns text[] language sql immutable as $$
-  select array['bop','anggaran','rpd','realisasi','verifikasi','metode','sakti','config','impor','laporan',
+  select array['dashboard','pegawai','bop','anggaran','rpd','realisasi','verifikasi','metode','sakti','config','impor','laporan',
                'bast','bast-buat','bast-pegawai','bast-setting','sert-masjid','sert-kiblat','sert-pengaturan','jaspro','akses'];
 $$;
 
@@ -215,7 +219,7 @@ $$;
 create or replace function public.akses_saya() returns jsonb
 language sql security definer stable set search_path = public as $$
   select jsonb_build_object('id', p.id, 'nama', p.nama, 'kua', p.kua, 'kua_id', p.kua_id, 'role', p.role,
-           'menus', case when p.role = 'admin' then to_jsonb(array_remove(public.menu_keys(), 'realisasi'))   -- Admin tidak mengisi Realisasi (khusus Operator KUA)
+           'menus', case when p.role = 'admin' then to_jsonb(array_remove(array_remove(public.menu_keys(), 'realisasi'), 'dashboard'))   -- Admin tidak mengisi Realisasi dan tidak punya dashboard KUA (keduanya khusus Operator KUA)
                          else coalesce((select jsonb_agg(h.menu order by h.menu) from public.hak_akses h where h.role = p.role), '[]'::jsonb) end)
     from public.profiles p where p.id = auth.uid();
 $$;
@@ -241,6 +245,8 @@ begin
         raise exception 'Menu % tidak dapat diberikan ke Operator KUA: operator hanya boleh mengakses data KUA-nya sendiri.', m; end if;
       if r <> 'operator' and m = 'realisasi' then
         raise exception 'Menu realisasi hanya untuk Operator KUA (mengisi Realisasi KUA sendiri).'; end if;
+      if r <> 'operator' and m = 'dashboard' then
+        raise exception 'Menu dashboard hanya untuk Operator KUA (ringkasan KUA-nya sendiri).'; end if;
     end loop;
     delete from public.hak_akses where role = r;
     insert into public.hak_akses (role, menu, updated_by) select r, x, auth.uid() from unnest(menus) x;
@@ -1069,3 +1075,227 @@ create policy jaspro_menu on public.jaspro_data for all to authenticated
 revoke all on public.jaspro_data from anon;
 grant select, insert, update on public.jaspro_data to authenticated;
 insert into public.jaspro_data (id) values (1) on conflict (id) do nothing;
+
+-- 13) PEGAWAI KUA, RIWAYAT MUTASI, ALAMAT KUA (dashboard Operator KUA) -------------------------------------------------------
+-- Dua menu baru (Hak Akses Menu): "dashboard" (halaman awal Operator KUA; khusus Operator KUA) dan "pegawai" (Pegawai KUA).
+--   Admin            : melihat dan mengelola pegawai SEMUA KUA (tambah, ubah, hapus, transfer).
+--   Operator KUA     : (menu pegawai) tambah, ubah, hapus, dan transfer pegawai KUA-nya SENDIRI.
+--   Peran lain       : bila admin memberi menu pegawai, hanya MELIHAT pegawai semua KUA.
+-- Data pokok: nama lengkap + gelar, NIP (18 angka; wajib untuk PNS dan PPPK, kosong untuk Honor), jenis ASN (PNS | PPPK | Honor),
+--   pangkat/golongan (PNS: I/a sampai IV/e; PPPK: I sampai XVII; Honor: kosong), jabatan (teks bebas; usulan jabatan KUA ada di
+--   tampilan), nomor HP/WA aktif (disimpan 08xxxxxxxxxx). NIP unik di seluruh KUA: pegawai yang pindah tugas DIPINDAHKAN
+--   (pegawai_transfer), bukan dibuat ulang. KUA pegawai hanya berubah lewat pegawai_transfer().
+-- Semua aturan ditegakkan di sini (trigger pegawai_guard dan RLS), tampilan hanya mengikuti. Tambah/ubah/transfer/hapus dicatat
+-- otomatis di pegawai_riwayat (siapa, kapan, apa; baris "hapus" menyimpan salinan lengkap supaya dapat dipulihkan).
+-- Alamat KUA disimpan di kolom kua.alamat (dikelola Operator KUA lewat dashboard atau Admin) lewat set_alamat_kua().
+
+alter table public.kua add column if not exists alamat text;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conrelid = 'public.kua'::regclass and conname = 'kua_alamat_panjang') then
+    alter table public.kua add constraint kua_alamat_panjang check (alamat is null or char_length(alamat) <= 300);
+  end if;
+end $$;
+
+-- Boleh membaca pegawai SEMUA KUA? Admin, atau peran selain Operator KUA yang diberi menu pegawai (hanya baca).
+create or replace function public.pegawai_baca_semua() returns boolean
+language sql security definer stable set search_path = public as $$
+  select exists (select 1 from public.profiles p where p.id = auth.uid()
+    and (p.role = 'admin' or (p.role <> 'operator' and exists (select 1 from public.hak_akses h where h.role = p.role and h.menu = 'pegawai'))));
+$$;
+revoke execute on function public.pegawai_baca_semua() from public, anon;
+grant execute on function public.pegawai_baca_semua() to authenticated;
+
+create table if not exists public.pegawai (
+  id bigint generated by default as identity primary key,
+  kua_id int not null references public.kua(id),
+  nama text not null,                                   -- nama lengkap beserta gelar
+  nip text,                                             -- 18 angka (tanpa spasi); kosong untuk Honor
+  jenis_asn text not null check (jenis_asn in ('PNS','PPPK','Honor')),
+  pangkat_golongan text,                                -- PNS: 'III/b'; PPPK: 'IX'; Honor: kosong
+  jabatan text not null,
+  no_hp text not null,                                  -- 08xxxxxxxxxx
+  created_by uuid references auth.users(id) on delete set null, created_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id) on delete set null, updated_at timestamptz not null default now()
+);
+create unique index if not exists pegawai_nip_unik on public.pegawai (nip) where nip is not null;
+create index if not exists pegawai_kua on public.pegawai (kua_id);
+
+create table if not exists public.pegawai_riwayat (
+  id bigint generated by default as identity primary key,
+  waktu timestamptz not null default now(),
+  aksi text not null check (aksi in ('tambah','ubah','transfer','hapus')),
+  pegawai_id bigint not null,                           -- tanpa foreign key: riwayat tetap ada setelah pegawainya dihapus
+  nama text not null, nip text,
+  dari_kua int references public.kua(id), ke_kua int references public.kua(id),
+  oleh uuid references auth.users(id) on delete set null, oleh_nama text,
+  rincian jsonb not null default '{}'::jsonb            -- ubah: {"kolom": [lama, baru]}; hapus: salinan lengkap baris
+);
+create index if not exists pegawai_riwayat_waktu on public.pegawai_riwayat (waktu desc);
+create index if not exists pegawai_riwayat_dari on public.pegawai_riwayat (dari_kua);
+create index if not exists pegawai_riwayat_ke on public.pegawai_riwayat (ke_kua);
+
+-- Penjaga: siapa yang boleh, merapikan dan memvalidasi isian (pesan galat berbahasa Indonesia), dan menjaga NIP tidak kembar.
+-- Sesi tanpa akun (editor SQL, service role) dipercaya tetapi isinya tetap divalidasi; transfer sudah diperiksa pegawai_transfer().
+create or replace function public.pegawai_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare tr boolean := coalesce(current_setting('bop.pegawai_transfer', true), '') = 'on';
+        gk int; kn text; gn text;
+        romawi text[] := array['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV','XV','XVI','XVII'];
+begin
+  if tg_op = 'UPDATE' and new.kua_id is distinct from old.kua_id and not tr then
+    raise exception 'KUA pegawai tidak dapat diubah langsung. Gunakan Transfer.'; end if;
+  if auth.uid() is not null and not tr and not public.is_admin() then
+    if not public.can_menu('pegawai') then raise exception 'Anda tidak berhak mengelola data pegawai.'; end if;
+    if public.my_kua() is null or public.my_kua() is distinct from new.kua_id
+       or (tg_op = 'UPDATE' and public.my_kua() is distinct from old.kua_id) then
+      raise exception 'Anda hanya dapat mengelola pegawai KUA Anda sendiri.'; end if;
+  end if;
+
+  new.nama := btrim(regexp_replace(coalesce(new.nama, ''), '\s+', ' ', 'g'));
+  if new.nama = '' then raise exception 'Nama lengkap wajib diisi.'; end if;
+  if char_length(new.nama) > 150 then raise exception 'Nama lengkap maksimal 150 karakter.'; end if;
+  new.jabatan := btrim(regexp_replace(coalesce(new.jabatan, ''), '\s+', ' ', 'g'));
+  if new.jabatan = '' then raise exception 'Jabatan wajib diisi.'; end if;
+  if char_length(new.jabatan) > 100 then raise exception 'Jabatan maksimal 100 karakter.'; end if;
+  if new.jenis_asn is null or new.jenis_asn not in ('PNS','PPPK','Honor') then
+    raise exception 'Jenis ASN harus PNS, PPPK, atau Honor.'; end if;
+
+  -- nomor HP/WA: boleh ditulis dengan spasi, strip, atau awalan +62/62; disimpan sebagai 08xxxxxxxxxx (10 sampai 14 angka)
+  new.no_hp := regexp_replace(coalesce(new.no_hp, ''), '[\s().-]', '', 'g');
+  new.no_hp := regexp_replace(new.no_hp, '^\+?62', '0');
+  if new.no_hp ~ '^8' then new.no_hp := '0' || new.no_hp; end if;
+  if new.no_hp !~ '^08[0-9]{8,12}$' then
+    raise exception 'Nomor HP/WA tidak valid. Isi nomor aktif 10 sampai 14 angka yang diawali 08 (contoh 081234567890) atau +62.'; end if;
+
+  -- NIP: PNS dan PPPK wajib 18 angka (spasi diabaikan) dan tidak boleh kembar; Honor tidak punya NIP
+  new.nip := nullif(regexp_replace(coalesce(new.nip, ''), '\s', '', 'g'), '');
+  new.pangkat_golongan := nullif(btrim(coalesce(new.pangkat_golongan, '')), '');
+  if new.jenis_asn = 'Honor' then
+    if new.nip is not null then raise exception 'Pegawai Honor tidak memiliki NIP. Kosongkan kolom NIP.'; end if;
+    if new.pangkat_golongan is not null then raise exception 'Pegawai Honor tidak memiliki pangkat/golongan.'; end if;
+  else
+    if new.nip is null then raise exception 'NIP wajib diisi untuk pegawai %.', new.jenis_asn; end if;
+    if new.nip !~ '^[0-9]{18}$' then raise exception 'NIP harus 18 angka (spasi diabaikan). Yang diisi: % angka.', char_length(new.nip); end if;
+    select g.kua_id, k.nama_kua, g.nama into gk, kn, gn
+      from public.pegawai g join public.kua k on k.id = g.kua_id where g.nip = new.nip and g.id is distinct from new.id;
+    if found then
+      if gk = new.kua_id then raise exception 'NIP % sudah terdaftar di KUA ini atas nama %.', new.nip, gn; end if;
+      raise exception 'NIP % sudah terdaftar di %. Bila pegawai ini pindah tugas, minta Operator KUA tersebut memindahkannya (Transfer) ke KUA Anda.', new.nip, kn;
+    end if;
+    if new.jenis_asn = 'PNS' and (new.pangkat_golongan is null or new.pangkat_golongan !~ '^((I|II|III)/[a-d]|IV/[a-e])$') then
+      raise exception 'Pangkat/golongan PNS wajib dipilih (I/a sampai IV/e).'; end if;
+    if new.jenis_asn = 'PPPK' and (new.pangkat_golongan is null or not (new.pangkat_golongan = any (romawi))) then
+      raise exception 'Golongan PPPK wajib dipilih (I sampai XVII).'; end if;
+  end if;
+
+  if tg_op = 'INSERT' then new.created_by := auth.uid(); new.created_at := now(); end if;
+  new.updated_by := auth.uid(); new.updated_at := now();
+  return new;
+end $$;
+drop trigger if exists pegawai_guard on public.pegawai;
+create trigger pegawai_guard before insert or update on public.pegawai for each row execute function public.pegawai_guard();
+
+-- Riwayat otomatis (tidak dapat ditulis klien): tambah, ubah (hanya bila ada kolom yang berubah), transfer, hapus.
+create or replace function public.pegawai_log() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare d jsonb := '{}'::jsonb; f text; o jsonb; n jsonb; who text := (select p.nama from public.profiles p where p.id = auth.uid());
+begin
+  if tg_op = 'INSERT' then
+    insert into public.pegawai_riwayat (aksi, pegawai_id, nama, nip, ke_kua, oleh, oleh_nama)
+    values ('tambah', new.id, new.nama, new.nip, new.kua_id, auth.uid(), who);
+  elsif tg_op = 'UPDATE' then
+    o := to_jsonb(old); n := to_jsonb(new);
+    foreach f in array array['nama','nip','jenis_asn','pangkat_golongan','jabatan','no_hp'] loop
+      if o -> f is distinct from n -> f then d := d || jsonb_build_object(f, jsonb_build_array(o -> f, n -> f)); end if;
+    end loop;
+    if new.kua_id is distinct from old.kua_id then
+      insert into public.pegawai_riwayat (aksi, pegawai_id, nama, nip, dari_kua, ke_kua, oleh, oleh_nama, rincian)
+      values ('transfer', new.id, new.nama, new.nip, old.kua_id, new.kua_id, auth.uid(), who, d);
+    elsif d <> '{}'::jsonb then
+      insert into public.pegawai_riwayat (aksi, pegawai_id, nama, nip, dari_kua, ke_kua, oleh, oleh_nama, rincian)
+      values ('ubah', new.id, new.nama, new.nip, new.kua_id, new.kua_id, auth.uid(), who, d);
+    end if;
+  else
+    insert into public.pegawai_riwayat (aksi, pegawai_id, nama, nip, dari_kua, oleh, oleh_nama, rincian)
+    values ('hapus', old.id, old.nama, old.nip, old.kua_id, auth.uid(), who, to_jsonb(old));
+  end if;
+  return null;
+end $$;
+drop trigger if exists pegawai_log on public.pegawai;
+create trigger pegawai_log after insert or update or delete on public.pegawai for each row execute function public.pegawai_log();
+
+-- Baca: pegawai KUA sendiri (menu pegawai atau dashboard) atau semua KUA (pegawai_baca_semua). Tulis: Admin (semua KUA) dan Operator
+-- KUA bermenu pegawai untuk KUA-nya sendiri. Peran pusat selain Admin hanya membaca. Pindah KUA hanya lewat pegawai_transfer().
+alter table public.pegawai enable row level security;
+drop policy if exists pg_read on public.pegawai;
+create policy pg_read on public.pegawai for select to authenticated
+  using ((select public.pegawai_baca_semua())
+         or (kua_id = (select public.my_kua()) and ((select public.can_menu('pegawai')) or (select public.can_menu('dashboard')))));
+drop policy if exists pg_ins on public.pegawai;
+create policy pg_ins on public.pegawai for insert to authenticated
+  with check ((select public.is_admin()) or (kua_id = (select public.my_kua()) and (select public.can_menu('pegawai'))));
+drop policy if exists pg_upd on public.pegawai;
+create policy pg_upd on public.pegawai for update to authenticated
+  using ((select public.is_admin()) or (kua_id = (select public.my_kua()) and (select public.can_menu('pegawai'))))
+  with check ((select public.is_admin()) or (kua_id = (select public.my_kua()) and (select public.can_menu('pegawai'))));
+drop policy if exists pg_del on public.pegawai;
+create policy pg_del on public.pegawai for delete to authenticated
+  using ((select public.is_admin()) or (kua_id = (select public.my_kua()) and (select public.can_menu('pegawai'))));
+revoke all on public.pegawai from anon;
+revoke truncate on public.pegawai from authenticated;
+
+alter table public.pegawai_riwayat enable row level security;
+drop policy if exists pr_read on public.pegawai_riwayat;
+create policy pr_read on public.pegawai_riwayat for select to authenticated
+  using ((select public.pegawai_baca_semua())
+         or ((dari_kua = (select public.my_kua()) or ke_kua = (select public.my_kua())) and (select public.can_menu('pegawai'))));
+revoke all on public.pegawai_riwayat from anon;
+revoke insert, update, delete, truncate on public.pegawai_riwayat from authenticated;
+
+-- Transfer pegawai ke KUA lain (berlaku langsung dan tercatat di riwayat). Admin: pegawai KUA mana pun. Operator KUA bermenu pegawai:
+-- hanya pegawai KUA-nya sendiri. Penerima dapat memindahkannya lagi bila salah alamat.
+create or replace function public.pegawai_transfer(p_id bigint, p_kua int) returns void
+language plpgsql security definer set search_path = public as $$
+declare g public.pegawai; tujuan public.kua;
+begin
+  select * into g from public.pegawai where id = p_id for update;
+  if not found then raise exception 'Pegawai tidak ditemukan (mungkin sudah dihapus atau dipindahkan).'; end if;
+  -- coalesce: peran pusat tidak punya KUA (my_kua() null), sehingga "my_kua() = g.kua_id" bernilai null, bukan false
+  if auth.uid() is not null and not public.is_admin()
+     and not coalesce(public.can_menu('pegawai') and public.my_kua() = g.kua_id, false) then
+    raise exception 'Anda hanya dapat memindahkan pegawai KUA Anda sendiri.'; end if;
+  select * into tujuan from public.kua where id = p_kua;
+  if not found then raise exception 'KUA tujuan tidak ditemukan.'; end if;
+  if tujuan.status <> 'aktif' then raise exception '% tidak aktif sehingga tidak dapat menerima pegawai.', tujuan.nama_kua; end if;
+  if g.kua_id = p_kua then raise exception '% sudah berada di %.', g.nama, tujuan.nama_kua; end if;
+  perform set_config('bop.pegawai_transfer', 'on', true);
+  update public.pegawai set kua_id = p_kua where id = p_id;
+  perform set_config('bop.pegawai_transfer', 'off', true);
+end $$;
+revoke execute on function public.pegawai_transfer(bigint, int) from public, anon;
+grant execute on function public.pegawai_transfer(bigint, int) to authenticated;
+
+-- Alamat KUA: Admin (KUA mana pun) atau Operator KUA (KUA-nya sendiri, bermenu dashboard atau pegawai). Kosong = hapus alamat.
+create or replace function public.set_alamat_kua(p_kua int, p_alamat text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  -- coalesce: peran pusat tidak punya KUA (my_kua() null), sehingga perbandingan KUA bernilai null, bukan false
+  if not coalesce(public.is_admin() or (public.my_kua() = p_kua and (public.can_menu('dashboard') or public.can_menu('pegawai'))), false) then
+    raise exception 'Anda hanya dapat mengubah alamat KUA Anda sendiri.'; end if;
+  p_alamat := nullif(btrim(regexp_replace(coalesce(p_alamat, ''), '\s+', ' ', 'g')), '');
+  if char_length(p_alamat) > 300 then raise exception 'Alamat maksimal 300 karakter.'; end if;
+  update public.kua set alamat = p_alamat where id = p_kua;
+  if not found then raise exception 'KUA tidak ditemukan.'; end if;
+end $$;
+revoke execute on function public.set_alamat_kua(int, text) from public, anon;
+grant execute on function public.set_alamat_kua(int, text) to authenticated;
+
+-- Isi awal hak menu baru (HANYA SEKALI, ditandai config.hak_akses_pegawai_awal; sama dengan cara bagian 5): Operator KUA mendapat
+-- dashboard dan pegawai. Menjalankan ulang file ini tidak mengembalikan menu yang sudah dicabut admin.
+do $$
+begin
+  if not exists (select 1 from public.config where key = 'hak_akses_pegawai_awal') then
+    insert into public.hak_akses (role, menu) values ('operator','dashboard'), ('operator','pegawai') on conflict do nothing;
+    insert into public.config (key, value) values ('hak_akses_pegawai_awal', 'true') on conflict (key) do nothing;
+  end if;
+end $$;

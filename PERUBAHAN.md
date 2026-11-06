@@ -2,7 +2,64 @@
 
 Ringkasan untuk Anda yang memasang. Penjelasan teknis lengkap ada di `README.md` dan langkah pemasangan rinci di `PANDUAN-INSTALASI.md` (bagian 11).
 
-## Pembaruan terbaru (patch kedua): kolom RPD di panel Rincian, dan logo disesuaikan
+## Pembaruan terbaru (patch ketiga): menu Pegawai KUA dan Dashboard Operator KUA
+
+### Ringkasan per permintaan
+
+#### 1) Menu baru **Pegawai KUA** (pendataan pegawai KUA)
+- **Data pokok** tiap pegawai: **nama lengkap + gelar**, **NIP**, **jenis ASN** (PNS, PPPK, Honor), **pangkat/golongan**, **jabatan**, dan **nomor HP/WA aktif**.
+  - **Jabatan** berupa combobox: klik kolomnya untuk memilih jabatan yang biasa ada di KUA (Kepala KUA, Plt. Kepala KUA, Penghulu Ahli Pertama/Muda/Madya, Penyuluh Agama Islam Ahli Pertama/Muda/Madya/Non PNS, Penata dan Pengelola Layanan Operasional, Pengadministrasi Perkantoran, Pengelola Keuangan, Bendahara Pengeluaran Pembantu, Operator SIMKAH, Pranata Komputer, Arsiparis, Pelaksana, Pramubakti, Petugas Kebersihan, Petugas Keamanan, Pengemudi), atau **ketik jabatan lain sendiri**.
+  - **NIP**: 18 angka (spasi boleh; tampil berkelompok), wajib untuk PNS dan PPPK, dikosongkan untuk Honor, dan **tidak boleh sama** dengan pegawai lain di KUA mana pun.
+  - **Pangkat/golongan**: PNS dari I/a sampai IV/e (dengan nama pangkatnya, mis. "Penata Muda Tk. I (III/b)"); PPPK golongan I sampai XVII; Honor tidak memakainya.
+  - **HP/WA**: boleh ditulis `0812...`, `+62812...`, atau dengan spasi/strip; disimpan sebagai `08xxxxxxxxxx` dan di daftar menjadi tautan WhatsApp.
+- **Admin** melihat pegawai **seluruh KUA**: daftar dengan pencarian dan penyaring KUA/jenis ASN, serta tab **Rekap per KUA** (Kepala KUA, jumlah PNS/PPPK/Honor, total, dan penanda KUA yang belum mengisi; klik nama KUA untuk melihat daftarnya).
+- **Operator KUA** mengelola pegawai **KUA-nya sendiri**: tambah (ada "Simpan dan tambah lagi"), **ubah**, **hapus**, dan **transfer** pegawai ke KUA lain.
+- **Transfer** berlaku langsung: pegawai pindah ke KUA tujuan dan hilang dari daftar KUA asal; operator KUA tujuan langsung melihatnya (dan dapat memindahkannya kembali bila salah alamat).
+- **Riwayat**: setiap tambah, ubah, transfer, dan hapus tercatat otomatis (siapa, kapan, apa; yang dihapus menyimpan salinan lengkap datanya). Operator KUA melihat riwayat yang menyangkut KUA-nya ("Pindah masuk dari ..." dan "Dipindahkan ke ...").
+- Tombol **Unduh Excel** (mengikuti pencarian dan penyaring yang sedang dipakai; NIP dan HP berformat teks supaya tidak berubah menjadi angka ilmiah).
+- Peran lain (mis. Bendahara) tidak mendapat menu ini kecuali Admin memberinya di Hak Akses Menu, dan itu **hanya-lihat** (semua KUA).
+
+#### 2) **Dashboard Operator KUA** (halaman awal Operator KUA)
+- **Realisasi bulan ini**: "Sudah realisasi", "Belum realisasi", atau "Realisasi ditolak" (dengan catatan verifikator), beserta status verifikasinya (menunggu, disetujui, dibayar), RPD dan Realisasi bulan ini, nominal yang sudah dibayar, dan tombol langsung ke halaman Realisasi. Sebelum tanggal 10 tertulis bahwa Realisasi baru dapat dikirim mulai tanggal 10; bila Admin menutup pengisian, tertulis demikian.
+- **Realisasi dibanding anggaran BOP tahun ini**: total Realisasi tahun ini (Realisasi manual semua status ditambah SAKTI), persentase terhadap anggaran, batang progres, sisa anggaran (bila melebihi: batang penuh berwarna merah dan tertulis "Melebihi anggaran"), dan rincian per status. Bila anggaran belum ditetapkan Admin, tampil peringatan, bukan persentase.
+- **Profil KUA**: nama KUA, **nama Kepala KUA** (diambil dari pegawai berjabatan Kepala KUA; Plt. diberi tanda; lengkap dengan NIP dan tautan WhatsApp), dan **alamat KUA**, yang diisi dan diubah operator lewat tombol di kartu itu (maksimal 300 karakter).
+- **Statistik SDM**: total pegawai, jumlah dan persentase PNS/PPPK/Honor (angka dan batang), jabatan terbanyak, dan sebaran golongan PNS.
+- Setiap Operator KUA hanya melihat angka KUA-nya sendiri (dijaga di database, bukan hanya di tampilan). Admin tidak memiliki Dashboard.
+
+#### 3) Hak Akses Menu
+- Dua kunci menu baru: `dashboard` (khusus Operator KUA) dan `pegawai`, di kelompok baru **KUA** pada matriks Hak Akses Menu. Operator KUA mendapat keduanya **satu kali** saat `bop.sql` dijalankan; bila Admin kemudian mencabutnya, menjalankan ulang `bop.sql` tidak mengembalikannya.
+- Tautan logo di sidebar kini membuka halaman awal akun yang sedang masuk (Dashboard untuk Operator KUA).
+
+### Tafsiran yang saya pakai (mohon dicek; semuanya mudah diubah)
+- **Admin juga dapat menambah, mengubah, menghapus, dan memindahkan pegawai KUA mana pun** (tercatat di Riwayat), bukan hanya melihat. Permintaan hanya menyebut Admin "melihat keseluruhan"; bila Anda ingin Admin hanya-lihat, beri tahu saya.
+- **Transfer langsung berlaku** tanpa persetujuan KUA tujuan, dan tercatat di Riwayat. Kalau Anda ingin alur "diajukan, lalu diterima atau ditolak operator tujuan", itu dapat ditambahkan.
+- **Kepala KUA** diambil dari pegawai yang jabatannya "Kepala KUA" (yang bukan Plt. diutamakan). Bila belum ada, Dashboard menampilkan "Belum diisi" dengan petunjuknya. Karena berdasar teks jabatan, pilih jabatan dari daftar.
+- **Honor** tidak memakai NIP dan pangkat/golongan; **PPPK** memakai golongan I sampai XVII.
+- **"Sudah realisasi"** berarti ada Realisasi bulan ini yang sudah dikirim (menunggu, disetujui, atau dibayar). Realisasi yang ditolak ditampilkan sebagai "Realisasi ditolak". **Total tahun ini** menjumlahkan Realisasi manual semua status (yang ditolak diberi lencana sendiri di rincian) ditambah SAKTI, angka yang sama dengan halaman Realisasi.
+- **Daftar usulan jabatan** adalah jabatan yang umum di KUA (Permenag tidak memberi nomenklatur baku untuk daftar ini); ubah di `PEG_JABATAN` pada `js/pegawai.js` bila perlu. Isian bebas tetap diterima.
+
+### Berkas
+**Diubah**: `bop.sql` (bagian 13 baru), `index.html`, `css/app.css`, `js/core.js`, `js/akses.js`, `README.md`, `PANDUAN-INSTALASI.md`, `PERUBAHAN.md`.
+**Baru**: `js/pegawai.js`, `js/dashboard.js`.
+**Tidak ada perubahan** pada Apps Script maupun Edge Function: tidak perlu deploy ulang. **Sengaja tidak ada di paket (milik Anda, jangan sampai tertimpa)**: `js/config.js`, `js/sertifikat-dokumen-pdf.js`, `.gitignore`, `logo-data.js`, `assets/logo-kemenag.png`.
+
+### Cara memasang (sekitar 10 menit)
+1. **Database**: Supabase > SQL Editor > jalankan ulang seluruh `bop.sql` (aman diulang; data tidak berubah). Ini menambah kolom alamat KUA, tabel pegawai dan riwayatnya, dan dua menu baru.
+2. **Website**: salin berkas paket ke folder website Anda (timpa yang lama), jalankan `node bump-versi.mjs`, lalu commit dan push.
+3. Tidak perlu deploy ulang Apps Script maupun Edge Function. Urutan 1 dan 2 tidak kritis: bila website lebih dulu, aplikasi berjalan seperti sebelumnya dan menu baru baru muncul setelah `bop.sql` dijalankan.
+4. Cek cepat: login sebagai satu operator (mis. `kua_anjatan`): halaman awalnya Dashboard; buka **Pegawai KUA**, tambahkan Kepala KUA dan satu pegawai lain, isi **Alamat KUA** di Dashboard, lalu lihat Dashboard terisi. Login sebagai admin: **Pegawai KUA** menampilkan semua KUA dan tab Rekap.
+5. Beri tahu para Operator KUA agar mengisi Pegawai KUA (mulai dari Kepala KUA) dan alamat KUA mereka.
+
+### Pengujian
+Semua lulus (1.237 pemeriksaan otomatis): logika Jaspro 35; SQL 330; Edge Function 143; Apps Script 58; Chromium ujung ke ujung 547 (Pegawai KUA dan Dashboard 166, website baru di atas database lama 9, Jaspro 44, peran 139, BOP 94, BAST 41, Sertifikat 24, logo 30); penampil dokumen 124. Yang baru diuji: semua aturan isian pegawai (NIP 18 angka dan unik antar KUA, Honor tanpa NIP/pangkat, HP dalam berbagai tulisan, pangkat PNS/PPPK), hak akses tiap peran di **database** (operator KUA sendiri dan KUA lain, bendahara dengan dan tanpa menu, akun tanpa login), transfer beserta batas kewenangannya (termasuk formulir basi dan KUA tujuan nonaktif), riwayat otomatis, alamat KUA, upgrade dari database versi sebelumnya (operator mendapat dua menu baru satu kali), serta tampilan: Rekap, Excel, dan **Dashboard** pada tiap keadaan (kosong, sebelum tanggal 10, pengisian ditutup, tiap status Realisasi, melebihi anggaran, Kepala KUA/Plt., banyak jabatan, menu dicabut, tanpa KUA) termasuk layar ponsel 390 px. **Kontrol negatif**: saya sengaja merusak tiga aturan (cek KUA pada transfer, kebijakan baca data pegawai, dan hitungan SAKTI di total dashboard) dan uji langsung gagal, jadi ujinya terbukti menangkap masalahnya. Uji Pegawai KUA juga diulang berkali-kali, termasuk di bawah beban CPU, tanpa hasil yang berubah.
+Database diuji di PostgreSQL 16 + PostgREST (mesin yang sama dengan Supabase), bukan di proyek Supabase Anda. Yang belum dapat diuji di sini: perangkat sentuh sungguhan (iPhone/Android) dan data pegawai asli Anda (diuji dengan data contoh).
+
+### Pengingat keamanan
+`akun.csv` (username dan password awal admin dan 31 Operator KUA) masih ikut tercatat di repositori GitHub Anda yang **publik**. Reset semua password lewat Pengaturan > Daftar akun, lalu `git rm --cached akun.csv`, commit, dan push (langkah lengkap di bagian "Penting: keamanan `akun.csv`" di bawah dan `PANDUAN-INSTALASI.md` bagian 4 langkah 3).
+
+---
+
+## Pembaruan sebelumnya (patch kedua): kolom RPD di panel Rincian, dan logo disesuaikan
 
 ### Ringkasan per permintaan
 
@@ -34,7 +91,7 @@ Yang belum dapat diuji di sini: perangkat sentuh sungguhan (iPhone/Android) dan 
 
 ---
 
-## Pembaruan sebelumnya (patch pertama): Status Apps Script dihapus, penampil dokumen, Verifikasi, dan logo
+## Pembaruan sebelumnya lagi (patch pertama): Status Apps Script dihapus, penampil dokumen, Verifikasi, dan logo
 
 ### Ringkasan per permintaan
 

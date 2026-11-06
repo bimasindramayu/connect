@@ -30,13 +30,15 @@ const live = ep => ep === EP;
 const PERAN = { admin: 'Admin', operator: 'Operator KUA', bendahara_bop: 'Bendahara BOP', verifikator_bop: 'Verifikator BOP', bast_nr: 'BAST NR', kemasjidan: 'Kemasjidan', pnbp_nr: 'PNBP NR' };
 const peranLabel = r => PERAN[r] || r;
 const can = menu => !!me && Array.isArray(me.menus) && me.menus.includes(menu);   // menu = kunci menu (sama dengan hash halaman, mis. 'rpd', 'bast-buat')
-// Urutan mencari halaman awal bila alamat kosong atau menunya tidak boleh dibuka akun ini.
-const HOME_ORDER = ['bop', 'rpd', 'realisasi', 'verifikasi', 'sakti', 'metode', 'anggaran', 'laporan', 'config', 'impor',
-  'bast', 'bast-buat', 'bast-pegawai', 'bast-setting', 'sert-masjid', 'sert-kiblat', 'sert-pengaturan', 'jaspro', 'akses'];
+// Urutan mencari halaman awal bila alamat kosong atau menunya tidak boleh dibuka akun ini. Dashboard (khusus Operator KUA) menjadi halaman awal
+// operator; Pegawai KUA paling akhir supaya halaman awal peran lain tidak berubah.
+const HOME_ORDER = ['dashboard', 'bop', 'rpd', 'realisasi', 'verifikasi', 'sakti', 'metode', 'anggaran', 'laporan', 'config', 'impor',
+  'bast', 'bast-buat', 'bast-pegawai', 'bast-setting', 'sert-masjid', 'sert-kiblat', 'sert-pengaturan', 'jaspro', 'akses', 'pegawai'];
 const homeMenu = () => HOME_ORDER.find(can) || 'pengaturan';
 // Hanya dipakai bila database belum diperbarui (fungsi akses_saya belum ada): perilaku lama, admin semua menu dan operator 4 menu.
+// Dashboard dan Pegawai KUA butuh tabel baru di bop.sql, jadi tidak ikut.
 const MENU_LAMA = {
-  admin: HOME_ORDER.filter(k => k !== 'realisasi' && k !== 'akses'),
+  admin: HOME_ORDER.filter(k => !['realisasi', 'akses', 'dashboard', 'pegawai'].includes(k)),
   operator: ['bop', 'rpd', 'realisasi', 'laporan']
 };
 let menuLama = false;   // true = database belum diperbarui (jalankan bop.sql versi terbaru)

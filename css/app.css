@@ -141,3 +141,27 @@ dialog::before{content:'';position:absolute;inset:0 0 auto 0;height:5px;border-r
 dialog>.p-4>h5:first-child,dialog>form.p-4>h5:first-child{margin:-1.5rem -1.5rem 1rem!important;padding:1.15rem 1.5rem .9rem;background:linear-gradient(135deg,rgba(105,108,255,.16),rgba(3,195,236,.10));border-bottom:1px solid rgba(105,108,255,.2);border-radius:.9rem .9rem 0 0;color:#3f41b8;font-weight:700}
 dialog.wide .border-bottom{background:linear-gradient(135deg,rgba(105,108,255,.10),rgba(3,195,236,.07))!important}
 #vwa{border-right:3px solid rgba(105,108,255,.25)}
+
+/* ===================================================================================================
+   Pegawai KUA dan Dashboard Operator KUA (js/pegawai.js, js/dashboard.js)
+   Penanda jenis ASN: warna hanya pada titik kecil, teks tetap berwarna biasa. Batang: pangkal rata, ujung data membulat 4px,
+   jarak 2px antarbagian, jalur batang berwarna netral. Angka selalu ditulis di dekat batang (batang bukan satu-satunya pembawa nilai).
+   =================================================================================================== */
+dialog.dlg-md{width:min(640px,calc(100% - 1.5rem))}
+dialog.dlg-lg{width:min(1000px,calc(100% - 1rem))}
+.peg-sw{display:inline-block;width:.7rem;height:.7rem;border-radius:50%;flex:none}
+.peg-jenis{display:inline-flex;align-items:center;gap:.45rem;white-space:nowrap;font-weight:600;color:#3d4465}
+.peg-act .btn{padding:.25rem .5rem;line-height:1}
+.peg-act .btn+.btn{margin-left:.25rem}
+.dash-meter{height:12px;border-radius:50rem;background:rgba(105,108,255,.16);overflow:hidden}
+.dash-meter>span{display:block;height:100%;border-radius:50rem;background:#696cff}
+.dash-meter.over{background:rgba(255,62,29,.16)}.dash-meter.over>span{background:#ff3e1d}
+.dash-seg{display:flex;gap:2px;height:8px;border-radius:50rem;overflow:hidden;background:rgba(133,146,163,.16)}
+.dash-seg>span{display:block;height:100%;min-width:4px}
+.dash-rank{display:grid;grid-template-columns:minmax(0,11rem) minmax(2.5rem,1fr) 1.75rem;gap:.5rem .75rem;align-items:center}
+.dash-num{color:#3d4465}
+.dash-rl{color:#566a7f;line-height:1.25;overflow-wrap:anywhere}   /* label panjang turun ke baris berikutnya (tidak dipotong) */
+.dash-rb{height:10px;background:rgba(133,146,163,.14);border-radius:0 4px 4px 0}
+.dash-rb>span{display:block;height:100%;border-radius:0 4px 4px 0}
+.dash-rv{text-align:right;font-weight:600;color:#3d4465;font-variant-numeric:tabular-nums}
+@media(prefers-reduced-motion:no-preference){.dash-meter>span,.dash-rb>span{transition:width .35s ease-out}}

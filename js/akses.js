@@ -9,8 +9,9 @@
 const AKSES_PERAN = ['operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr'];   // peran yang hak aksesnya dapat diubah (Admin selalu semua menu)
 const AKSES_ADMIN = ['akses', 'impor'];                                                                      // khusus Admin, tidak dapat diberikan
 const AKSES_TAK_OPERATOR = ['anggaran', 'verifikasi', 'metode', 'sakti', 'config'];                          // Operator KUA hanya boleh mengakses data KUA-nya sendiri
+const AKSES_HANYA_OPERATOR = { realisasi: 'Khusus Operator KUA (mengisi Realisasi KUA sendiri)', dashboard: 'Khusus Operator KUA (ringkasan KUA-nya sendiri)' };   // menu yang hanya dapat diberikan ke Operator KUA
 const AKSES_BAWAAN = {   // isi awal di bop.sql (tombol "Kembalikan ke bawaan" hanya mencentang ulang; tersimpan bila Simpan ditekan)
-  operator: ['bop', 'rpd', 'realisasi', 'laporan'],
+  operator: ['dashboard', 'pegawai', 'bop', 'rpd', 'realisasi', 'laporan'],
   bendahara_bop: ['bop', 'rpd', 'verifikasi', 'sakti', 'laporan'],
   verifikator_bop: ['bop', 'rpd', 'verifikasi', 'laporan'],
   bast_nr: ['bast', 'bast-buat', 'bast-pegawai', 'bast-setting'],
@@ -19,6 +20,9 @@ const AKSES_BAWAAN = {   // isi awal di bop.sql (tombol "Kembalikan ke bawaan" h
 };
 // [kunci, nama menu, keterangan]
 const MENU_DEF = [
+  ['KUA', [
+    ['dashboard', 'Dashboard', 'Halaman awal Operator KUA: sudah/belum Realisasi bulan ini, Realisasi dibanding anggaran BOP, kepala dan alamat KUA, statistik SDM. Khusus Operator KUA.'],
+    ['pegawai', 'Pegawai KUA', 'Data pegawai KUA (nama + gelar, NIP, jenis ASN, pangkat/golongan, jabatan, HP/WA). Operator KUA: menambah, mengubah, menghapus, dan memindahkan (transfer) pegawai KUA-nya sendiri. Admin: semua KUA. Peran lain: hanya melihat semua KUA.']]],
   ['BOP', [
     ['bop', 'Halaman BOP', 'Halaman depan BOP: kartu pilihan modul dan ringkasan SAKTI.'],
     ['anggaran', 'Anggaran', 'Menetapkan anggaran tahunan tiap KUA. Tidak untuk Operator KUA.'],
@@ -49,11 +53,11 @@ const MENU_INFO = Object.fromEntries(MENU_DEF.flatMap(([, ms]) => ms).map(([k, n
 const aksesBoleh = (peran, menu) => {
   if (AKSES_ADMIN.includes(menu)) return false;
   if (peran === 'operator' && AKSES_TAK_OPERATOR.includes(menu)) return false;
-  if (peran !== 'operator' && menu === 'realisasi') return false;
+  if (peran !== 'operator' && menu in AKSES_HANYA_OPERATOR) return false;
   return true;
 };
 const aksesAlasan = (peran, menu) => AKSES_ADMIN.includes(menu) ? 'Khusus Admin'
-  : peran === 'operator' ? 'Operator KUA hanya mengakses data KUA-nya sendiri' : 'Khusus Operator KUA (mengisi Realisasi KUA sendiri)';
+  : peran === 'operator' ? 'Operator KUA hanya mengakses data KUA-nya sendiri' : AKSES_HANYA_OPERATOR[menu];
 
 async function pageAkses() {
   const ep = EP;
@@ -82,7 +86,7 @@ async function pageAkses() {
       <input type="checkbox" class="form-check-input" data-all="${r}" aria-label="Centang semua menu untuk ${esc(peranLabel(r))}" title="Centang / kosongkan semua"></label></th>`).join('')}</tr></thead>
     <tbody>${MENU_DEF.map(([grup, ms]) => `<tr class="table-light"><th colspan="${AKSES_PERAN.length + 2}" class="small text-uppercase">${esc(grup)}</th></tr>${ms.map(([m, nama, ket]) => `<tr>
       <td><b>${esc(nama)}</b><div class="small">${esc(ket)}</div></td>
-      <td class="text-center">${m === 'realisasi' ? '<span class="text-muted" title="Admin tidak mengisi Realisasi"><i class="bx bx-block"></i></span>' : '<i class="bx bx-check text-success fs-5" title="Admin selalu boleh"></i>'}</td>
+      <td class="text-center">${m in AKSES_HANYA_OPERATOR ? `<span class="text-muted" title="${esc(m === 'realisasi' ? 'Admin tidak mengisi Realisasi' : 'Dashboard khusus Operator KUA')}"><i class="bx bx-block"></i></span>` : '<i class="bx bx-check text-success fs-5" title="Admin selalu boleh"></i>'}</td>
       ${AKSES_PERAN.map(r => cell(r, m)).join('')}</tr>`).join('')}`).join('')}</tbody></table></div>
     <div class="d-flex flex-wrap gap-2 mt-3"><button class="btn btn-primary" id="hsave">Simpan Hak Akses</button>
       <button class="btn btn-outline-secondary" id="hdef" type="button">Kembalikan ke bawaan</button>
