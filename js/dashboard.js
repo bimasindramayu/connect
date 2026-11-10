@@ -4,8 +4,8 @@
    dan statistik SDM (dari data Pegawai KUA). Khusus Operator KUA (database menolak menu ini untuk peran lain): data yang dibaca
    hanya milik KUA-nya sendiri (RLS). Admin tidak punya dashboard.
    - Realisasi memakai angka yang sama dengan halaman Realisasi: Realisasi manual (semua status) ditambah Realisasi SAKTI.
-   - Kepala KUA diambil dari pegawai yang jabatannya "Kepala KUA" (pegKepala di pegawai.js); alamat KUA di kolom kua.alamat
-     (diubah lewat set_alamat_kua).
+   - Kepala KUA = pegawai yang memegang jabatan TAMBAHAN Kepala KUA (bila belum ada: Plt. Kepala KUA); jabatan pokoknya (mis. Penghulu)
+     ditampilkan di bawah namanya (pegKepala di pegawai.js). Alamat KUA di kolom kua.alamat (diubah lewat set_alamat_kua).
    Memakai PEG_ dan peg... dari pegawai.js, serta master, rp, ST, BULAN dari bop.js.
    ===================================================================================== */
 
@@ -17,7 +17,7 @@ const dashBars = (items, warna = '#696cff') => {
   return `<div class="dash-rank">${items.map(([l, n]) => `<div class="dash-rl" title="${esc(l)}">${esc(l)}</div>
     <div class="dash-rb" aria-hidden="true"><span style="width:${n ? Math.max(3, n / mx * 100) : 0}%;background:${warna}"></span></div><div class="dash-rv">${n}</div>`).join('')}</div>`;
 };
-// Batang tipis terbagi (PNS, PPPK, Honor); angkanya ada di sebelahnya sehingga tidak dicetak di batang
+// Batang tipis terbagi (PNS, PPPK, PPPK PW, Honor); angkanya ada di sebelahnya sehingga tidak dicetak di batang
 const dashSeg = c => {
   const tot = PEG_JENIS.reduce((s, j) => s + c[j], 0);
   return `<div class="dash-seg" role="img" aria-label="${esc(PEG_JENIS.map(j => `${j} ${c[j]}`).join(', '))}">${PEG_JENIS.filter(j => c[j]).map(j =>
@@ -46,12 +46,12 @@ async function pageDashboard() {
     aman(() => sb.from('realisasi_sakti').select('bulan,nominal').eq('kua_id', me.kua_id).eq('tahun', y)),
     aman(() => sb.rpc('anggaran_tahun', { p_tahun: y })),
     aman(() => sb.from('rpd').select('bulan,total').eq('kua_id', me.kua_id).eq('tahun', y)),
-    aman(() => sb.from('pegawai').select('nama,nip,jenis_asn,pangkat_golongan,jabatan,no_hp').eq('kua_id', me.kua_id)),
+    aman(() => sb.from('pegawai').select('nama,nip,jenis_asn,pangkat_golongan,jabatan,jabatan_tambahan,no_hp').eq('kua_id', me.kua_id)),
     aman(() => sb.from('kua').select('id,nama_kua,alamat').eq('id', me.kua_id).maybeSingle())
   ]);
   if (!live(ep)) return;
   const cfg = m?.cfg || {}, galat = (...r) => r.map(x => x?.error).find(Boolean);
-  const bantu = e => /pegawai|alamat|schema cache|column/i.test(e.message || '') ? 'Data belum tersedia. Jalankan bop.sql versi terbaru di SQL Editor Supabase, lalu muat ulang halaman ini.' : (e.message || String(e));
+  const bantu = e => pegDbLama(e) ? PEG_DB_LAMA : /pegawai|alamat|schema cache|column/i.test(e.message || '') ? 'Data belum tersedia. Jalankan bop.sql versi terbaru di SQL Editor Supabase, lalu muat ulang halaman ini.' : (e.message || String(e));
 
   // ---- 1. Sudah atau belum Realisasi bulan ini ----
   {
@@ -111,13 +111,15 @@ async function pageDashboard() {
   const profil = () => {
     const e = galat(pg, ku);
     if (e && !ku.data) return $('dprof').innerHTML = `${dashJudul('Profil KUA')}${note(bantu(e))}`;
-    const kp = pg.data ? pegKepala(pg.data) : null, alamat = ku.data?.alamat || '';
+    const kp = pg.data ? pegKepala(pg.data) : null, plt = pg.data?.find(pegPlt), alamat = ku.data?.alamat || '';
     $('dprof').innerHTML = `${dashJudul('Profil KUA')}
       <div class="mb-3"><div class="small">KUA</div><div class="fw-semibold" id="dkua">${esc(ku.data?.nama_kua || me.kua || '')}</div></div>
-      <div class="mb-3"><div class="small">Kepala KUA</div>${kp
-        ? `<div class="fw-semibold" id="dkepala">${esc(kp.nama)}${pegPlt(kp.jabatan) ? ' <span class="small fw-normal">(Plt.)</span>' : ''}</div>
-          <div class="small">${kp.nip ? 'NIP ' + esc(pegNip(kp.nip)) + ' · ' : ''}<a href="${esc(pegWa(kp.no_hp))}" target="_blank" rel="noopener noreferrer">${esc(kp.no_hp)}</a></div>`
-        : `<div id="dkepala" class="text-muted">Belum diisi.</div><div class="small">${can('pegawai') ? 'Tambahkan pegawai berjabatan <b>Kepala KUA</b> di menu <a href="#pegawai">Pegawai KUA</a>.' : 'Belum ada pegawai berjabatan Kepala KUA.'}</div>`}</div>
+      <div class="mb-3"><div class="small">Kepala KUA</div>${pg.error ? note(bantu(pg.error), 'warning') : kp
+        ? `<div class="fw-semibold" id="dkepala">${esc(kp.nama)}${pegPlt(kp) ? ' <span class="small fw-normal">(Plt.)</span>' : ''}</div>
+          ${pegJabatanLama(kp.jabatan) ? '' : `<div class="small" id="dkepala-jab">${esc(kp.jabatan)}</div>`}
+          <div class="small">${kp.nip ? 'NIP ' + esc(pegNip(kp.nip)) + ' · ' : ''}<a href="${esc(pegWa(kp.no_hp))}" target="_blank" rel="noopener noreferrer">${esc(kp.no_hp)}</a></div>
+          ${plt && plt !== kp ? `<div class="small mt-1" id="dplt">Plt. Kepala KUA: ${esc(plt.nama)}</div>` : ''}`
+        : `<div id="dkepala" class="text-muted">Belum diisi.</div><div class="small">${can('pegawai') ? 'Tetapkan <b>Kepala KUA</b> sebagai jabatan tambahan pegawai di menu <a href="#pegawai">Pegawai KUA</a>.' : 'Belum ada pegawai dengan jabatan tambahan Kepala KUA.'}</div>`}</div>
       <div><div class="small d-flex align-items-center gap-2">Alamat KUA <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="dalamat">${alamat ? 'Ubah' : 'Isi alamat'}</button></div>
         ${alamat ? `<div id="dalamat-teks">${esc(alamat)}</div>` : '<div id="dalamat-teks" class="text-muted">Belum diisi.</div>'}</div>`;
     $('dalamat').onclick = () => jpDlg(`<h5>Alamat KUA</h5>
@@ -163,8 +165,8 @@ async function pageDashboard() {
       const gol = ['IV', 'III', 'II', 'I'].map(g => [`Golongan ${g}`, L.filter(p => p.jenis_asn === 'PNS' && String(p.pangkat_golongan || '').split('/')[0] === g).length]);
       $('dsdm').innerHTML = kepala + `
         <div class="row g-3 mb-3">
-          <div class="col-6 col-sm-3"><div class="small">Total pegawai</div><div class="fs-3 fw-semibold lh-1 mt-1 dash-num" id="dsdm-total">${tot}</div></div>
-          ${PEG_JENIS.map(j => `<div class="col-6 col-sm-3"><div class="small d-flex align-items-center gap-2">${pegSw(j)}${j}</div><div class="fs-3 fw-semibold lh-1 mt-1 dash-num" id="dsdm-${j}">${c[j]}</div><div class="small">${dashFmtPct(dashPct(c[j], tot))}</div></div>`).join('')}</div>
+          <div class="col-6 col-sm"><div class="small">Total pegawai</div><div class="fs-3 fw-semibold lh-1 mt-1 dash-num" id="dsdm-total">${tot}</div></div>
+          ${PEG_JENIS.map(j => `<div class="col-6 col-sm"><div class="small d-flex align-items-center gap-2" title="${esc(j)}">${pegSw(j)}${esc(pegLabel(j))}</div><div class="fs-3 fw-semibold lh-1 mt-1 dash-num" id="dsdm-${PEG_KODE[j]}">${c[j]}</div><div class="small">${dashFmtPct(dashPct(c[j], tot))}</div></div>`).join('')}</div>
         ${dashSeg(c)}
         <div class="row g-4 mt-1">
           <div class="col-md-6"><div class="fw-semibold mb-2">Jabatan</div>${dashBars(jb)}</div>

@@ -13,8 +13,9 @@
 --      11 Pembersihan | 12 Jaspro Transport | 13 Pegawai KUA, riwayat mutasi, alamat KUA (dashboard Operator KUA)
 --
 -- BAST NR, Sertifikat Masjid/Musala, dan Arah Kiblat tidak memakai database ini (Spreadsheet + Apps Script).
--- Pegawai KUA (bagian 13): data kepegawaian tiap KUA (nama + gelar, NIP, jenis ASN, pangkat/golongan, jabatan, HP/WA). Operator KUA
---   mengelola pegawai KUA-nya sendiri (tambah, ubah, hapus, transfer ke KUA lain); Admin melihat dan mengelola semua KUA.
+-- Pegawai KUA (bagian 13): data kepegawaian tiap KUA (nama + gelar, NIP, jenis ASN: PNS/PPPK/PPPK Paruh Waktu/Honor, pangkat/golongan,
+--   jabatan, jabatan tambahan Kepala KUA/Plt. Kepala KUA, HP/WA). Operator KUA mengelola pegawai KUA-nya sendiri (tambah, ubah, hapus,
+--   transfer ke KUA lain); Admin melihat dan mengelola semua KUA.
 --
 -- Model data: Anggaran = 1 baris per TAHUN (items = {"<id KUA>": nominal}). RPD dan Realisasi = 1 record per KUA per bulan;
 --   rincian POS disimpan di kolom JSON items = {"<id POS>": nominal, ...}. Total dihitung otomatis oleh trigger.
@@ -1081,10 +1082,15 @@ insert into public.jaspro_data (id) values (1) on conflict (id) do nothing;
 --   Admin            : melihat dan mengelola pegawai SEMUA KUA (tambah, ubah, hapus, transfer).
 --   Operator KUA     : (menu pegawai) tambah, ubah, hapus, dan transfer pegawai KUA-nya SENDIRI.
 --   Peran lain       : bila admin memberi menu pegawai, hanya MELIHAT pegawai semua KUA.
--- Data pokok: nama lengkap + gelar, NIP (18 angka; wajib untuk PNS dan PPPK, kosong untuk Honor), jenis ASN (PNS | PPPK | Honor),
---   pangkat/golongan (PNS: I/a sampai IV/e; PPPK: I sampai XVII; Honor: kosong), jabatan (teks bebas; usulan jabatan KUA ada di
---   tampilan), nomor HP/WA aktif (disimpan 08xxxxxxxxxx). NIP unik di seluruh KUA: pegawai yang pindah tugas DIPINDAHKAN
---   (pegawai_transfer), bukan dibuat ulang. KUA pegawai hanya berubah lewat pegawai_transfer().
+-- Data pokok: nama lengkap + gelar, NIP (18 angka), jenis ASN (PNS | PPPK | PPPK Paruh Waktu | Honor), pangkat/golongan, jabatan
+--   (teks bebas; usulan jabatan KUA ada di tampilan), jabatan tambahan, nomor HP/WA aktif (disimpan 08xxxxxxxxxx).
+--   - NIP wajib untuk PNS dan PPPK; PPPK Paruh Waktu boleh belum punya NIP (bila diisi harus 18 angka); Honor tidak punya NIP.
+--   - Pangkat/golongan: PNS I/a sampai IV/e (wajib); PPPK I sampai XVII (wajib); PPPK Paruh Waktu I sampai XVII (boleh kosong); Honor kosong.
+--   - Jabatan tambahan: hanya Kepala KUA atau Plt. Kepala KUA, bagi PNS atau PPPK, satu orang untuk tiap jabatan di tiap KUA. Kepala KUA
+--     adalah tugas TAMBAHAN: jabatan pokok pegawainya tetap jabatan fungsional (Penghulu, Penyuluh, dan seterusnya), jadi kolom jabatan
+--     tidak boleh diisi Kepala KUA. Jabatan tambahan melekat pada KUA, sehingga dikosongkan saat pegawai dipindahkan (transfer).
+--   - NIP unik di seluruh KUA: pegawai yang pindah tugas DIPINDAHKAN (pegawai_transfer), bukan dibuat ulang. KUA pegawai hanya
+--     berubah lewat pegawai_transfer().
 -- Semua aturan ditegakkan di sini (trigger pegawai_guard dan RLS), tampilan hanya mengikuti. Tambah/ubah/transfer/hapus dicatat
 -- otomatis di pegawai_riwayat (siapa, kapan, apa; baris "hapus" menyimpan salinan lengkap supaya dapat dipulihkan).
 -- Alamat KUA disimpan di kolom kua.alamat (dikelola Operator KUA lewat dashboard atau Admin) lewat set_alamat_kua().
@@ -1110,14 +1116,35 @@ create table if not exists public.pegawai (
   kua_id int not null references public.kua(id),
   nama text not null,                                   -- nama lengkap beserta gelar
   nip text,                                             -- 18 angka (tanpa spasi); kosong untuk Honor
-  jenis_asn text not null check (jenis_asn in ('PNS','PPPK','Honor')),
-  pangkat_golongan text,                                -- PNS: 'III/b'; PPPK: 'IX'; Honor: kosong
-  jabatan text not null,
+  jenis_asn text not null,                              -- PNS | PPPK | PPPK Paruh Waktu | Honor (constraint pegawai_jenis_asn_cek di bawah)
+  pangkat_golongan text,                                -- PNS: 'III/b'; PPPK dan PPPK Paruh Waktu: 'IX'; Honor: kosong
+  jabatan text not null,                                -- jabatan pokok (fungsional/pelaksana), bukan Kepala KUA
+  jabatan_tambahan text,                                -- 'Kepala KUA' | 'Plt. Kepala KUA' | kosong (constraint pegawai_tambahan_cek)
   no_hp text not null,                                  -- 08xxxxxxxxxx
   created_by uuid references auth.users(id) on delete set null, created_at timestamptz not null default now(),
   updated_by uuid references auth.users(id) on delete set null, updated_at timestamptz not null default now()
 );
+-- Untuk database yang sudah memakai versi sebelumnya (jenis ASN hanya PNS/PPPK/Honor dan belum ada jabatan tambahan).
+alter table public.pegawai add column if not exists jabatan_tambahan text;
+do $$
+declare c record;
+begin
+  -- aturan jenis ASN lama (bernama otomatis dari pembuatan tabel) diganti aturan baru yang bernama tetap
+  for c in select conname from pg_constraint
+            where conrelid = 'public.pegawai'::regclass and contype = 'c' and conname <> 'pegawai_jenis_asn_cek'
+              and pg_get_constraintdef(oid) like '%jenis_asn%' loop
+    execute format('alter table public.pegawai drop constraint %I', c.conname);
+  end loop;
+  if not exists (select 1 from pg_constraint where conrelid = 'public.pegawai'::regclass and conname = 'pegawai_jenis_asn_cek') then
+    alter table public.pegawai add constraint pegawai_jenis_asn_cek check (jenis_asn in ('PNS','PPPK','PPPK Paruh Waktu','Honor'));
+  end if;
+  if not exists (select 1 from pg_constraint where conrelid = 'public.pegawai'::regclass and conname = 'pegawai_tambahan_cek') then
+    alter table public.pegawai add constraint pegawai_tambahan_cek check (jabatan_tambahan is null or jabatan_tambahan in ('Kepala KUA','Plt. Kepala KUA'));
+  end if;
+end $$;
 create unique index if not exists pegawai_nip_unik on public.pegawai (nip) where nip is not null;
+create unique index if not exists pegawai_kepala_unik on public.pegawai (kua_id) where jabatan_tambahan = 'Kepala KUA';
+create unique index if not exists pegawai_plt_unik on public.pegawai (kua_id) where jabatan_tambahan = 'Plt. Kepala KUA';
 create index if not exists pegawai_kua on public.pegawai (kua_id);
 
 create table if not exists public.pegawai_riwayat (
@@ -1139,7 +1166,7 @@ create index if not exists pegawai_riwayat_ke on public.pegawai_riwayat (ke_kua)
 create or replace function public.pegawai_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare tr boolean := coalesce(current_setting('bop.pegawai_transfer', true), '') = 'on';
-        gk int; kn text; gn text;
+        gk int; kn text; gn text; tb text;
         romawi text[] := array['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV','XV','XVI','XVII'];
 begin
   if tg_op = 'UPDATE' and new.kua_id is distinct from old.kua_id and not tr then
@@ -1157,8 +1184,22 @@ begin
   new.jabatan := btrim(regexp_replace(coalesce(new.jabatan, ''), '\s+', ' ', 'g'));
   if new.jabatan = '' then raise exception 'Jabatan wajib diisi.'; end if;
   if char_length(new.jabatan) > 100 then raise exception 'Jabatan maksimal 100 karakter.'; end if;
-  if new.jenis_asn is null or new.jenis_asn not in ('PNS','PPPK','Honor') then
-    raise exception 'Jenis ASN harus PNS, PPPK, atau Honor.'; end if;
+  -- Kepala KUA adalah jabatan TAMBAHAN. Data lama yang masih bertuliskan Kepala KUA di kolom jabatan tidak ditolak selama jabatannya
+  -- tidak diubah (agar tetap dapat disimpan sampai dilengkapi), tetapi pengisian baru dan perubahan jabatan wajib jabatan fungsional.
+  if (tg_op = 'INSERT' or new.jabatan is distinct from old.jabatan) and new.jabatan ~* 'kepala\s+(kua\y|kantor\s+urusan\s+agama\y)' then
+    raise exception 'Kepala KUA dan Plt. Kepala KUA adalah jabatan tambahan. Isi kolom Jabatan dengan jabatan fungsional pegawai (mis. Penghulu atau Penyuluh), lalu pilih Kepala KUA di Jabatan Tambahan.'; end if;
+  if new.jenis_asn is null or new.jenis_asn not in ('PNS','PPPK','PPPK Paruh Waktu','Honor') then
+    raise exception 'Jenis ASN harus PNS, PPPK, PPPK Paruh Waktu, atau Honor.'; end if;
+
+  -- jabatan tambahan: hanya Kepala KUA atau Plt. Kepala KUA (huruf besar/kecil, spasi, dan titik dirapikan), khusus PNS atau PPPK
+  new.jabatan_tambahan := nullif(btrim(regexp_replace(coalesce(new.jabatan_tambahan, ''), '\s+', ' ', 'g')), '');
+  if new.jabatan_tambahan is not null then
+    tb := lower(regexp_replace(new.jabatan_tambahan, '[\s.]+', '', 'g'));
+    new.jabatan_tambahan := case tb when 'kepalakua' then 'Kepala KUA' when 'pltkepalakua' then 'Plt. Kepala KUA' else null end;
+    if new.jabatan_tambahan is null then raise exception 'Jabatan tambahan hanya boleh Kepala KUA atau Plt. Kepala KUA.'; end if;
+    if new.jenis_asn not in ('PNS','PPPK') then
+      raise exception 'Jabatan tambahan % hanya untuk pegawai PNS atau PPPK.', new.jabatan_tambahan; end if;
+  end if;
 
   -- nomor HP/WA: boleh ditulis dengan spasi, strip, atau awalan +62/62; disimpan sebagai 08xxxxxxxxxx (10 sampai 14 angka)
   new.no_hp := regexp_replace(coalesce(new.no_hp, ''), '[\s().-]', '', 'g');
@@ -1167,25 +1208,40 @@ begin
   if new.no_hp !~ '^08[0-9]{8,12}$' then
     raise exception 'Nomor HP/WA tidak valid. Isi nomor aktif 10 sampai 14 angka yang diawali 08 (contoh 081234567890) atau +62.'; end if;
 
-  -- NIP: PNS dan PPPK wajib 18 angka (spasi diabaikan) dan tidak boleh kembar; Honor tidak punya NIP
+  -- NIP: PNS dan PPPK wajib 18 angka (spasi diabaikan); PPPK Paruh Waktu boleh belum punya NIP, tetapi bila diisi harus 18 angka;
+  -- NIP tidak boleh kembar; Honor tidak punya NIP
   new.nip := nullif(regexp_replace(coalesce(new.nip, ''), '\s', '', 'g'), '');
   new.pangkat_golongan := nullif(btrim(coalesce(new.pangkat_golongan, '')), '');
   if new.jenis_asn = 'Honor' then
     if new.nip is not null then raise exception 'Pegawai Honor tidak memiliki NIP. Kosongkan kolom NIP.'; end if;
     if new.pangkat_golongan is not null then raise exception 'Pegawai Honor tidak memiliki pangkat/golongan.'; end if;
   else
-    if new.nip is null then raise exception 'NIP wajib diisi untuk pegawai %.', new.jenis_asn; end if;
-    if new.nip !~ '^[0-9]{18}$' then raise exception 'NIP harus 18 angka (spasi diabaikan). Yang diisi: % angka.', char_length(new.nip); end if;
-    select g.kua_id, k.nama_kua, g.nama into gk, kn, gn
-      from public.pegawai g join public.kua k on k.id = g.kua_id where g.nip = new.nip and g.id is distinct from new.id;
-    if found then
-      if gk = new.kua_id then raise exception 'NIP % sudah terdaftar di KUA ini atas nama %.', new.nip, gn; end if;
-      raise exception 'NIP % sudah terdaftar di %. Bila pegawai ini pindah tugas, minta Operator KUA tersebut memindahkannya (Transfer) ke KUA Anda.', new.nip, kn;
+    if new.nip is null then
+      if new.jenis_asn <> 'PPPK Paruh Waktu' then raise exception 'NIP wajib diisi untuk pegawai %.', new.jenis_asn; end if;
+    else
+      if new.nip !~ '^[0-9]{18}$' then raise exception 'NIP harus 18 angka (spasi diabaikan). Yang diisi: % angka.', char_length(new.nip); end if;
+      select g.kua_id, k.nama_kua, g.nama into gk, kn, gn
+        from public.pegawai g join public.kua k on k.id = g.kua_id where g.nip = new.nip and g.id is distinct from new.id;
+      if found then
+        if gk = new.kua_id then raise exception 'NIP % sudah terdaftar di KUA ini atas nama %.', new.nip, gn; end if;
+        raise exception 'NIP % sudah terdaftar di %. Bila pegawai ini pindah tugas, minta Operator KUA tersebut memindahkannya (Transfer) ke KUA Anda.', new.nip, kn;
+      end if;
     end if;
     if new.jenis_asn = 'PNS' and (new.pangkat_golongan is null or new.pangkat_golongan !~ '^((I|II|III)/[a-d]|IV/[a-e])$') then
       raise exception 'Pangkat/golongan PNS wajib dipilih (I/a sampai IV/e).'; end if;
     if new.jenis_asn = 'PPPK' and (new.pangkat_golongan is null or not (new.pangkat_golongan = any (romawi))) then
       raise exception 'Golongan PPPK wajib dipilih (I sampai XVII).'; end if;
+    if new.jenis_asn = 'PPPK Paruh Waktu' and new.pangkat_golongan is not null and not (new.pangkat_golongan = any (romawi)) then
+      raise exception 'Golongan PPPK Paruh Waktu tidak valid (I sampai XVII). Kosongkan bila belum ada.'; end if;
+  end if;
+
+  -- satu orang untuk tiap jabatan tambahan di tiap KUA (indeks unik pegawai_kepala_unik dan pegawai_plt_unik menjaga balapan simpan bersamaan)
+  if new.jabatan_tambahan is not null then
+    select g.nama into gn from public.pegawai g
+      where g.kua_id = new.kua_id and g.jabatan_tambahan = new.jabatan_tambahan and g.id is distinct from new.id limit 1;
+    if found then
+      -- titik penutup nama (gelar "M.Ag.") dibuang di kalimat pertama supaya tidak menjadi dua titik
+      raise exception '% di KUA ini sudah dijabat oleh %. Lepaskan jabatan tambahan itu dari % terlebih dahulu (ubah data pegawainya), lalu tetapkan di sini.', new.jabatan_tambahan, regexp_replace(gn, '\.+$', ''), gn; end if;
   end if;
 
   if tg_op = 'INSERT' then new.created_by := auth.uid(); new.created_at := now(); end if;
@@ -1205,7 +1261,7 @@ begin
     values ('tambah', new.id, new.nama, new.nip, new.kua_id, auth.uid(), who);
   elsif tg_op = 'UPDATE' then
     o := to_jsonb(old); n := to_jsonb(new);
-    foreach f in array array['nama','nip','jenis_asn','pangkat_golongan','jabatan','no_hp'] loop
+    foreach f in array array['nama','nip','jenis_asn','pangkat_golongan','jabatan','jabatan_tambahan','no_hp'] loop
       if o -> f is distinct from n -> f then d := d || jsonb_build_object(f, jsonb_build_array(o -> f, n -> f)); end if;
     end loop;
     if new.kua_id is distinct from old.kua_id then
@@ -1253,7 +1309,8 @@ revoke all on public.pegawai_riwayat from anon;
 revoke insert, update, delete, truncate on public.pegawai_riwayat from authenticated;
 
 -- Transfer pegawai ke KUA lain (berlaku langsung dan tercatat di riwayat). Admin: pegawai KUA mana pun. Operator KUA bermenu pegawai:
--- hanya pegawai KUA-nya sendiri. Penerima dapat memindahkannya lagi bila salah alamat.
+-- hanya pegawai KUA-nya sendiri. Penerima dapat memindahkannya lagi bila salah alamat. Jabatan tambahan (Kepala/Plt. Kepala KUA)
+-- melekat pada KUA, sehingga dikosongkan saat transfer (terlihat di Riwayat); KUA tujuan menetapkannya kembali bila perlu.
 create or replace function public.pegawai_transfer(p_id bigint, p_kua int) returns void
 language plpgsql security definer set search_path = public as $$
 declare g public.pegawai; tujuan public.kua;
@@ -1269,7 +1326,7 @@ begin
   if tujuan.status <> 'aktif' then raise exception '% tidak aktif sehingga tidak dapat menerima pegawai.', tujuan.nama_kua; end if;
   if g.kua_id = p_kua then raise exception '% sudah berada di %.', g.nama, tujuan.nama_kua; end if;
   perform set_config('bop.pegawai_transfer', 'on', true);
-  update public.pegawai set kua_id = p_kua where id = p_id;
+  update public.pegawai set kua_id = p_kua, jabatan_tambahan = null where id = p_id;
   perform set_config('bop.pegawai_transfer', 'off', true);
 end $$;
 revoke execute on function public.pegawai_transfer(bigint, int) from public, anon;
@@ -1298,4 +1355,35 @@ begin
     insert into public.hak_akses (role, menu) values ('operator','dashboard'), ('operator','pegawai') on conflict do nothing;
     insert into public.config (key, value) values ('hak_akses_pegawai_awal', 'true') on conflict (key) do nothing;
   end if;
+end $$;
+
+-- Konversi data lama (HANYA SEKALI, ditandai config.pegawai_tambahan_awal): sebelum Kepala KUA menjadi jabatan tambahan, Kepala dan
+-- Plt. Kepala KUA ditulis sebagai teks di kolom jabatan. Pegawai PNS/PPPK yang jabatannya mengandung "Kepala KUA" diberi jabatan
+-- tambahan Kepala KUA (atau Plt. Kepala KUA bila ada awalan Plt/Plh/Pj), satu orang tiap jabatan di tiap KUA. Teks di kolom jabatan
+-- TIDAK diubah (jabatan fungsionalnya tidak diketahui dari data lama): Operator KUA melengkapinya lewat menu Pegawai KUA, tempat
+-- baris itu ditandai "Perlu dilengkapi". Baris yang tidak memenuhi syarat (Honor, PPPK Paruh Waktu, atau kembar) dilewati, dan baris
+-- yang gagal tidak menghentikan pembaruan ini. Menjalankan ulang file ini tidak menimpa perubahan yang dibuat sesudahnya.
+do $$
+declare r record;
+begin
+  if exists (select 1 from public.config where key = 'pegawai_tambahan_awal') then return; end if;
+  for r in
+    select x.id, x.tb from (
+      select g.id, g.kua_id,
+             case when g.jabatan ~* '\y(plt|plh|pj)\y\.?\s*kepala\s' then 'Plt. Kepala KUA' else 'Kepala KUA' end as tb,
+             row_number() over (partition by g.kua_id, (g.jabatan ~* '\y(plt|plh|pj)\y\.?\s*kepala\s') order by g.id) as rn
+        from public.pegawai g
+       where g.jabatan_tambahan is null and g.jenis_asn in ('PNS','PPPK')
+         and g.jabatan ~* 'kepala\s+(kua\y|kantor\s+urusan\s+agama\y)') x
+     where x.rn = 1
+       and not exists (select 1 from public.pegawai h where h.kua_id = x.kua_id and h.jabatan_tambahan = x.tb)
+     order by x.id
+  loop
+    begin
+      update public.pegawai set jabatan_tambahan = r.tb where id = r.id;
+    exception when others then
+      raise notice 'Pegawai % dilewati (%): tetapkan jabatan tambahannya lewat menu Pegawai KUA.', r.id, sqlerrm;
+    end;
+  end loop;
+  insert into public.config (key, value) values ('pegawai_tambahan_awal', 'true') on conflict (key) do nothing;
 end $$;

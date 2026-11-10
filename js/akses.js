@@ -22,7 +22,7 @@ const AKSES_BAWAAN = {   // isi awal di bop.sql (tombol "Kembalikan ke bawaan" h
 const MENU_DEF = [
   ['KUA', [
     ['dashboard', 'Dashboard', 'Halaman awal Operator KUA: sudah/belum Realisasi bulan ini, Realisasi dibanding anggaran BOP, kepala dan alamat KUA, statistik SDM. Khusus Operator KUA.'],
-    ['pegawai', 'Pegawai KUA', 'Data pegawai KUA (nama + gelar, NIP, jenis ASN, pangkat/golongan, jabatan, HP/WA). Operator KUA: menambah, mengubah, menghapus, dan memindahkan (transfer) pegawai KUA-nya sendiri. Admin: semua KUA. Peran lain: hanya melihat semua KUA.']]],
+    ['pegawai', 'Pegawai KUA', 'Data pegawai KUA (nama + gelar, NIP, jenis ASN: PNS, PPPK, PPPK Paruh Waktu, Honor; pangkat/golongan, jabatan, jabatan tambahan Kepala/Plt. Kepala KUA, HP/WA). Operator KUA: menambah, mengubah, menghapus, dan memindahkan (transfer) pegawai KUA-nya sendiri. Admin: semua KUA. Peran lain: hanya melihat semua KUA.']]],
   ['BOP', [
     ['bop', 'Halaman BOP', 'Halaman depan BOP: kartu pilihan modul dan ringkasan SAKTI.'],
     ['anggaran', 'Anggaran', 'Menetapkan anggaran tahunan tiap KUA. Tidak untuk Operator KUA.'],

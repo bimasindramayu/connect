@@ -2,7 +2,58 @@
 
 Ringkasan untuk Anda yang memasang. Penjelasan teknis lengkap ada di `README.md` dan langkah pemasangan rinci di `PANDUAN-INSTALASI.md` (bagian 11).
 
-## Pembaruan terbaru (patch ketiga): menu Pegawai KUA dan Dashboard Operator KUA
+## Pembaruan terbaru (patch keempat): PPPK Paruh Waktu dan jabatan tambahan Kepala/Plt. Kepala KUA
+
+Paket ini **kumulatif**: berisi semua berkas yang diubah patch ketiga juga, jadi dapat dipasang baik sudah maupun belum memasang patch ketiga.
+
+### Ringkasan per permintaan
+
+#### 1) Jenis pegawai baru: **PPPK Paruh Waktu (PW)**
+- Jenis ASN kini empat: **PNS, PPPK, PPPK Paruh Waktu, Honor**. Keempatnya muncul di formulir (empat pilihan), kartu angka, penyaring, tab **Rekap per KUA**, Excel, dan Statistik SDM di Dashboard. Di tabel dan kartu ditulis singkat **PPPK PW** (nama lengkapnya tampil saat kursor diarahkan) dan diberi warna ungu sendiri.
+- **NIP boleh belum ada** (banyak PPPK Paruh Waktu belum memilikinya). Bila diisi, tetap harus 18 angka dan tidak boleh sama dengan pegawai lain di KUA mana pun.
+- **Golongan boleh dikosongkan**; bila diisi, golongan PPPK I sampai XVII.
+- PPPK Paruh Waktu tidak dapat diberi jabatan tambahan (lihat nomor 2).
+
+#### 2) **Kepala KUA dan Plt. Kepala KUA adalah jabatan tambahan**
+- Jabatan pokok pegawai (kolom **Jabatan**) kini jabatan fungsional: Penghulu, Penyuluh, dan seterusnya. Kepala KUA atau Plt. Kepala KUA dipilih di isian baru **Jabatan Tambahan** (Tidak ada / Kepala KUA / Plt. Kepala KUA) dan tampil sebagai lencana di bawah jabatan pokok pada daftar.
+- **Aturannya**: hanya untuk PNS dan PPPK (tidak untuk PPPK Paruh Waktu dan Honor); **satu orang untuk tiap jabatan di tiap KUA** (satu Kepala dan satu Plt. boleh ada bersamaan); mengetik "Kepala KUA" di kolom Jabatan **ditolak** dengan petunjuk yang jelas; daftar usulan jabatan tidak lagi memuat Kepala KUA dan Plt. Kepala KUA.
+- **Formulir**: di bawah pilihan Jabatan Tambahan tertulis siapa yang kini menjabat di KUA itu ("(pegawai ini)" bila yang sedang diubah adalah pemegangnya). Bila bentrok dengan orang lain, tampil peringatan merah beserta langkahnya ("Lepaskan jabatan tambahan itu dari ... terlebih dahulu").
+- **Daftar dan Dashboard**: daftar diurut Kepala KUA, Plt. Kepala KUA, lalu jenis, golongan tertinggi, dan nama. Nama Kepala KUA di Profil KUA (Dashboard) dan di Rekap per KUA kini diambil dari jabatan tambahan (Plt. dipakai bila belum ada Kepala dan diberi tanda). Statistik "Jabatan" di Dashboard menghitung jabatan fungsional.
+- **Transfer**: jabatan tambahan melekat pada KUA, bukan pada orangnya, jadi **dikosongkan** saat pegawai dipindahkan (dialog Transfer memberi peringatan, Riwayat mencatat "jabatan tambahan ... dilepas"). Operator KUA asal menetapkan penggantinya.
+- **Data lama otomatis dikonversi satu kali**: pegawai PNS/PPPK yang jabatannya tertulis "Kepala KUA" atau "Plt. Kepala KUA" diberi jabatan tambahan itu saat `bop.sql` dijalankan. Teks di kolom Jabatan **tidak diubah** karena jabatan fungsionalnya tidak diketahui dari data lama: barisnya diberi tanda **Perlu dilengkapi**; Operator KUA tinggal klik **Ubah**, mengisi jabatan fungsionalnya (formulir sudah membantu: kolom Jabatan dikosongkan dan jabatan tambahan sudah terpilih), lalu menyimpan.
+
+### Tafsiran yang saya pakai (mohon dicek; semuanya mudah diubah)
+- **Jabatan tambahan hanya dua**: Kepala KUA dan Plt. Kepala KUA. Bila ada jabatan tambahan lain (mis. Bendahara), tambahkan di `PEG_TAMBAHAN` (`js/pegawai.js`) dan constraint `pegawai_tambahan_cek` (`bop.sql`); beri tahu saya bila ingin saya yang menambahkan.
+- **Satu orang per jabatan per KUA**, jadi satu Kepala dan satu Plt. boleh bersamaan, tetapi tidak dua Kepala. Untuk mengganti, lepaskan dari pegawai lama (Ubah > Tidak ada), lalu tetapkan pada pegawai baru.
+- **Plt. dari KUA lain** (pegawai KUA A yang menjabat Plt. di KUA B) **belum didukung**, sebab satu pegawai hanya terdaftar di satu KUA. Bila ini umum di Indramayu, itu perlu kolom tambahan "KUA tugas tambahan"; beri tahu saya.
+- **Honor dan PPPK Paruh Waktu tidak dapat menjabat Kepala/Plt.** (hanya PNS dan PPPK): ini tafsiran saya, bukan kutipan aturan; ubah di `PEG_TAMBAHAN_JENIS` (`js/pegawai.js`) dan `pegawai_guard` (`bop.sql`) bila kenyataannya berbeda.
+- **Konversi data lama berjalan sekali**, memilih pegawai yang tercatat lebih dulu bila ada dua yang tertulis Kepala di satu KUA; yang kedua dan yang berstatus Honor dilewati dan tetap bertanda "Perlu dilengkapi" (tetapkan jabatan tambahannya sendiri lewat **Ubah**). Menjalankan ulang `bop.sql` tidak mengulang konversi dan tidak menimpa perubahan Operator KUA.
+- **PPPK Paruh Waktu**: NIP dan golongan boleh kosong tetapi tetap divalidasi bila diisi; kode di tabel "PPPK PW" dan warna ungu hanya tampilan.
+
+### Berkas
+**Diubah dibanding patch ketiga**: `bop.sql` (bagian 13), `js/pegawai.js`, `js/dashboard.js`, `js/akses.js` (keterangan menu), `css/app.css`, `index.html` (nomor versi untuk cache), `README.md`, `PANDUAN-INSTALASI.md`, `PERUBAHAN.md`. `js/core.js` sama dengan patch ketiga dan tetap disertakan supaya paket ini lengkap.
+**Tidak ada perubahan** pada Apps Script maupun Edge Function: tidak perlu deploy ulang. **Sengaja tidak ada di paket (milik Anda, jangan sampai tertimpa)**: `js/config.js`, `js/sertifikat-dokumen-pdf.js`, `.gitignore`, `logo-data.js`, `assets/logo-kemenag.png`, `akun.csv`.
+
+### Cara memasang (sekitar 10 menit)
+1. **Database lebih dulu**: Supabase > SQL Editor > jalankan ulang seluruh `bop.sql` (aman diulang; tidak ada data yang hilang). Ini menambah kolom jabatan tambahan, jenis PPPK Paruh Waktu, aturan baru, dan mengonversi data lama satu kali.
+2. **Website**: salin berkas paket ke folder website Anda (timpa yang lama), jalankan `node bump-versi.mjs`, lalu commit dan push.
+3. Tidak perlu deploy ulang Apps Script maupun Edge Function. Bila website terlanjur lebih dulu, halaman Pegawai KUA serta kartu Statistik SDM dan Profil KUA di Dashboard menampilkan pesan "Database belum diperbarui ..." (kartu Realisasi dan anggaran tetap normal, tidak ada data yang rusak) sampai `bop.sql` dijalankan dan halaman dimuat ulang.
+4. Cek cepat: login sebagai satu operator (mis. `kua_anjatan`) dan buka **Pegawai KUA**. Pegawai yang dulu tertulis Kepala KUA kini bertanda **Perlu dilengkapi**: klik **Ubah**, isi jabatan fungsionalnya (mis. Penghulu Ahli Muda), lalu simpan; lencana Kepala KUA tetap menempel. Tambahkan satu pegawai **PPPK Paruh Waktu** tanpa NIP, lalu lihat Dashboard: nama Kepala dan statistik keempat jenis terisi.
+5. Beri tahu para Operator KUA agar melengkapi baris bertanda "Perlu dilengkapi" dan menambahkan pegawai PPPK Paruh Waktu KUA mereka.
+
+### Pengujian
+Semua lulus (1.408 pemeriksaan otomatis): logika Jaspro 35; SQL 404; Edge Function 143; Apps Script 58; Chromium ujung ke ujung 644 (Pegawai KUA dan Dashboard 248, website baru di atas database patch ketiga 15, website baru di atas database lama 9, Jaspro 44, peran 139, BOP 94, BAST 41, Sertifikat 24, logo 30); penampil dokumen 124.
+Yang baru diuji: empat jenis ASN di database dan tampilan (formulir, kartu angka, penyaring, Rekap, Excel, Dashboard); PPPK Paruh Waktu dengan dan tanpa NIP/golongan; semua aturan jabatan tambahan (dua nilai saja, hanya PNS/PPPK, satu orang per jabatan per KUA termasuk simpan bersamaan, penulisan dirapikan, Kepala KUA di kolom Jabatan ditolak hanya pada isian baru atau saat jabatan diubah); transfer yang melepas jabatan tambahan beserta peringatan dan Riwayatnya; urutan daftar; label "PPPK PW" yang tetap muat di layar 1440 px; **upgrade dari database patch ketiga** (data utuh, Kepala/Plt. terkonversi sekali, menjalankan ulang tidak menimpa perubahan, baris kembar dan Honor dilewati); dan **website baru di atas database patch ketiga** (halaman tidak rusak dan hanya menampilkan pesan "Database belum diperbarui").
+**Kontrol negatif**: saya sengaja merusak aturan-aturan baru itu satu per satu, **16 kali di database** (mis. indeks unik Plt. dibuang, penanda sekali-jalan konversi dibuang, transfer tidak melepas jabatan tambahan) dan **16 kali di tampilan** (mis. urutan daftar, petunjuk pemegang jabatan, label pendek), dan semuanya langsung membuat uji gagal; tiga celah uji yang sempat lolos (penanda sekali-jalan, indeks unik Plt., dan urutan daftar) saya perkuat dulu.
+**Temuan saat menguji yang sudah diperbaiki**: pesan bentrok jabatan sempat berakhir dengan dua titik setelah gelar "M.Ag."; petunjuk di formulir sempat menyebut jabatan "belum ada" padahal yang sedang diubah adalah pemegangnya; label "PPPK Paruh Waktu" sempat menyorong tombol Hapus keluar layar 1440 px (kini "PPPK PW"); dan Dashboard di database lama sempat menulis "Belum diisi" untuk Kepala (kini pesan "Database belum diperbarui").
+Database diuji di PostgreSQL 16 + PostgREST (mesin yang sama dengan Supabase), bukan di proyek Supabase Anda. Yang belum dapat diuji di sini: perangkat sentuh sungguhan (iPhone/Android) dan data pegawai asli Anda (diuji dengan data contoh).
+
+### Pengingat keamanan
+`akun.csv` (username dan password awal admin dan 31 Operator KUA) masih ikut tercatat di repositori GitHub Anda yang **publik**. Reset semua password lewat Pengaturan > Daftar akun, lalu `git rm --cached akun.csv`, commit, dan push (langkah lengkap di bagian "Penting: keamanan `akun.csv`" di bawah dan `PANDUAN-INSTALASI.md` bagian 4 langkah 3).
+
+---
+
+## Pembaruan sebelumnya (patch ketiga): menu Pegawai KUA dan Dashboard Operator KUA
 
 ### Ringkasan per permintaan
 

@@ -151,6 +151,9 @@ dialog.dlg-md{width:min(640px,calc(100% - 1.5rem))}
 dialog.dlg-lg{width:min(1000px,calc(100% - 1rem))}
 .peg-sw{display:inline-block;width:.7rem;height:.7rem;border-radius:50%;flex:none}
 .peg-jenis{display:inline-flex;align-items:center;gap:.45rem;white-space:nowrap;font-weight:600;color:#3d4465}
+.peg-tb{background:#e8e9ff;color:#3b3fb8;font-weight:600;white-space:normal;text-align:left}   /* jabatan tambahan (Kepala KUA/Plt.): teks lebih gelap dari bg-label-primary agar terbaca */
+.peg-lengkapi{background:#fff0cf;color:#7a4f00;font-weight:600;white-space:normal;text-align:left}   /* data lama yang jabatannya masih tertulis Kepala KUA */
+.peg-jab{min-width:9.5rem}   /* kolom Jabatan: cukup lebar agar lencana "Plt. Kepala KUA" tidak terpotong dua baris */
 .peg-act .btn{padding:.25rem .5rem;line-height:1}
 .peg-act .btn+.btn{margin-left:.25rem}
 .dash-meter{height:12px;border-radius:50rem;background:rgba(105,108,255,.16);overflow:hidden}
