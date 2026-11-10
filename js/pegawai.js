@@ -29,8 +29,8 @@ const PEG_GOL_PNS = [['I/a', 'Juru Muda'], ['I/b', 'Juru Muda Tingkat I'], ['I/c
 const PEG_GOL_PPPK = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII'];
 // Usulan jabatan pokok yang biasa ada di KUA (Kepala KUA bukan di sini: itu jabatan tambahan). Isian jabatan berupa combobox: pilih dari
 // daftar ini atau ketik sendiri (jabatan lain tetap boleh).
-const PEG_JABATAN = ['Penghulu Ahli Pertama', 'Penghulu Ahli Muda', 'Penghulu Ahli Madya',
-  'Penyuluh Agama Islam Ahli Pertama', 'Penyuluh Agama Islam Ahli Muda', 'Penyuluh Agama Islam Ahli Madya', 'Penyuluh Agama Islam Non PNS',
+const PEG_JABATAN = ['Penghulu Ahli Pertama', 'Penghulu Ahli Muda', 'Penghulu Ahli Madya', 'Penghulu Ahli Utama',
+  'Penyuluh Agama Islam Ahli Pertama', 'Penyuluh Agama Islam Ahli Muda', 'Penyuluh Agama Islam Ahli Madya', 'Penyuluh Agama Islam Ahli Utama', 'Penyuluh Agama Islam Non PNS',
   'Penata Layanan Operasional', 'Pengelola Layanan Operasional', 'Pengadministrasi Perkantoran', 'Pengelola Keuangan', 'Bendahara Pengeluaran Pembantu',
   'Operator SIMKAH', 'Pranata Komputer', 'Arsiparis', 'Pelaksana',
   'Pramubakti', 'Petugas Kebersihan', 'Petugas Keamanan', 'Pengemudi'];
