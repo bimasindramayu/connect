@@ -44,7 +44,7 @@ const SUPABASE_KEY = 'sb_publishable_AfVmUT86ttPMaiO3iUmJew_u3l3IBPF';
 
 /* ========================================================================== */
 
-const VERSI_ = '1.3 (modul BMN; spreadsheet BIMASATU; Drive master)';
+const VERSI_ = '1.4 (Operator KUA kelola BMN sendiri)';
 
 const SHEET_MASJID = 'DataMasjid';
 const SHEET_PENGATURAN = 'Pengaturan';
@@ -272,7 +272,10 @@ function periksaToken_(token) {
   if (!badan || Array.isArray(badan) || typeof badan !== 'object' || !badan.role) throw galat_('FORBIDDEN', 'Profil akun tidak ditemukan.');
 
   const menus = Array.isArray(badan.menus) ? badan.menus.map(String) : [];
-  const info = { id: isi.sub, nama: String(badan.nama || ''), role: String(badan.role || ''), menus: menus };
+  const info = {
+    id: isi.sub, nama: String(badan.nama || ''), role: String(badan.role || ''),
+    kua: String(badan.kua || ''), kua_id: badan.kua_id || null, menus: menus
+  };
   const ttl = Math.min(CACHE_LOGIN_DETIK_, (Number(isi.exp) || 0) - sekarang - 5);
   if (ttl >= 5) cache.put(kunci, JSON.stringify(info), ttl);
   return info;
