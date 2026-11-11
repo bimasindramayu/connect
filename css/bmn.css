@@ -10,3 +10,8 @@
  #view.bmn .table{min-width:1050px}
  #dlg.wide{width:100%;max-width:100%;max-height:96vh;margin:auto 0}
 }
+#view.bmn .bmn-migration-step{border:1px solid var(--bs-border-color);border-radius:.65rem;padding:1rem;background:var(--bs-body-bg)}
+#view.bmn .bmn-step-number{display:inline-flex;align-items:center;justify-content:center;flex:0 0 2rem;width:2rem;height:2rem;border-radius:50%;background:var(--bs-primary-bg-subtle);color:var(--bs-primary);font-weight:700}
+#view.bmn .bmn-migration-stat{background:var(--bs-tertiary-bg);border-radius:.5rem;padding:.55rem .7rem}
+#view.bmn #bmnMigrationResult .alert{overflow-wrap:anywhere}
+#view.bmn #bmnPhotoProgress{transition:width .2s ease}
