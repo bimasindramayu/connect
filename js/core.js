@@ -36,7 +36,7 @@ const can = menu => !!me && Array.isArray(me.menus) && me.menus.includes(menu); 
 // operator; Pegawai KUA paling akhir supaya halaman awal peran lain tidak berubah.
 const HOME_ORDER = ['dashboard', 'bop', 'rpd', 'realisasi', 'verifikasi', 'sakti', 'metode', 'anggaran', 'laporan', 'config', 'impor',
   'bast', 'bast-buat', 'bast-pegawai', 'bast-setting', 'bmn', 'sert-masjid', 'sert-kiblat', 'sert-pengaturan', 'jaspro', 'akses', 'pegawai'];
-const homeMenu = () => HOME_ORDER.find(can) || 'pengaturan';
+const homeMenu = () => HOME_ORDER.find(can) || 'profil';
 // Hanya dipakai bila database belum diperbarui (fungsi akses_saya belum ada): perilaku lama, admin semua menu dan operator 4 menu.
 // Dashboard dan Pegawai KUA butuh tabel baru di bop.sql, jadi tidak ikut.
 const MENU_LAMA = {
@@ -74,6 +74,8 @@ async function loadMenus(profil) {
 function applyMenus() {
   const side = $('side');
   side.querySelectorAll('[data-menu]').forEach(a => a.classList.toggle('d-none', !can(a.dataset.menu)));
+  const profileLink = side.querySelector('[data-profile]'); if (profileLink) profileLink.classList.remove('d-none');
+  const userAdminLink = side.querySelector('[data-admin-only]'); if (userAdminLink) userAdminLink.classList.toggle('d-none', me.role !== 'admin');
   side.querySelectorAll('details').forEach(g => g.classList.toggle('d-none', !g.querySelector('[data-menu]:not(.d-none)')));
 
   // Label tooltip + nama aksesibel tetap tersedia saat sidebar dipadatkan menjadi ikon.
@@ -138,7 +140,8 @@ function route() {
   if (!me) return;
   const h = location.hash.slice(1);
   let k = h in pages ? h : homeMenu();
-  if (k !== 'pengaturan' && !can(k)) {   // menu ini tidak diberikan ke peran akun ini: ke halaman awal. Server tetap menolak bila diakali lewat alamat.
+  if (k === 'pengaturan' && me.role !== 'admin') { k = 'profil'; if (location.hash !== '#profil') history.replaceState(null, '', '#profil'); }
+  if (k !== 'pengaturan' && k !== 'profil' && !can(k)) {   // menu ini tidak diberikan ke peran akun ini: ke halaman awal. Server tetap menolak bila diakali lewat alamat.
     k = homeMenu();
     if (h && location.hash !== '#' + k) history.replaceState(null, '', '#' + k);
   }
