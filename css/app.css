@@ -168,3 +168,27 @@ dialog.dlg-lg{width:min(1000px,calc(100% - 1rem))}
 .dash-rb>span{display:block;height:100%;border-radius:0 4px 4px 0}
 .dash-rv{text-align:right;font-weight:600;color:#3d4465;font-variant-numeric:tabular-nums}
 @media(prefers-reduced-motion:no-preference){.dash-meter>span,.dash-rb>span{transition:width .35s ease-out}}
+
+
+/* Tombol global untuk mengambil ulang data halaman aktif. */
+#pageRefresh {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.25rem;
+  min-height:34px;
+  white-space:nowrap;
+  flex:none;
+  font-weight:600;
+}
+#pageRefresh i { font-size:1.05rem; line-height:1; }
+#pageRefresh:disabled { opacity:.7; cursor:wait; }
+#pageRefresh .bx-spin { animation:pageRefreshSpin .8s linear infinite; }
+@keyframes pageRefreshSpin { to { transform:rotate(360deg); } }
+@media(max-width:575.98px) {
+  #topbar { gap:.45rem!important; padding:.55rem .65rem; }
+  #pageRefresh { width:34px; min-width:34px; padding:0; }
+  #pageRefresh span { display:none!important; }
+  #topbar .avatar { width:32px; height:32px; }
+  #out { padding:.35rem .5rem; }
+}
