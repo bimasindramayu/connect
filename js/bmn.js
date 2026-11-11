@@ -96,7 +96,8 @@ async function pageBMN() {
       catch (err) { e.target.checked = !e.target.checked; bmnNotice(err.message, 'danger'); }
     };
     $('bmnImport').onclick = bmnImportLegacy;
-    $('bmnMigratePhotos').onclick = bmnMigrateLegacyPhotos;\n    bmnUpdateMigrationPanel();
+    $('bmnMigratePhotos').onclick = bmnMigrateLegacyPhotos;
+    bmnUpdateMigrationPanel();
   }
   await bmnLoad();
 }
