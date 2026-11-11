@@ -647,7 +647,7 @@ async function bnPdf(r) {
 /* ---- Riwayat (+ ringkasan) ---- */
 async function pageBast() {
   $('view').innerHTML = `<div class="jp" id="broot">${bnHead('BAST NR', 'Berita Acara Serah Terima Sarana Administrasi NR: riwayat, arsip, dan status SIMKAH.', '<a class="btn btn-primary" href="#bast-buat"><i class="bx bx-plus"></i> Buat Berita Acara</a>')}<div id="bst">Memuat…</div></div>`;
-  if (!await bnLoad()) return;
+  if (!await bnLoad(REFRESH_PAGE_DATA)) return;
   Object.assign(B, { q: '', thn: '', bln: '', kua: '', sim: '', pg: 1 });
   const r = $('broot'), now = new Date(), mn = BX.BULAN_ID[now.getMonth()].toUpperCase();
   r.onclick = bnClick; r.oninput = r.onchange = bnFilter;
@@ -754,7 +754,7 @@ function bnDetail(r) {
 /* ---- Buat Berita Acara ---- */
 async function pageBastBuat() {
   $('view').innerHTML = `<div class="jp" id="broot">${bnHead('Buat Berita Acara', 'Nomor urut diusulkan otomatis dan baru dipakai setelah Berita Acara disimpan.')}<div id="bbf">Memuat…</div></div>`;
-  if (!await bnLoad()) return;
+  if (!await bnLoad(REFRESH_PAGE_DATA)) return;
   const t = new Date(), p2 = n => String(n).padStart(2, '0'), today = `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`;
   const pg = (kat) => B.peg.filter(p => p.kategori === kat).map(p => `<option value="${esc(p.nip)}">${esc(p.nama)} — ${esc(p.jabatan)}</option>`).join('');
   const num = (id, l, ex = '') => `<div class="col-sm-6 col-lg-3"><label class="form-label">${l}</label><input type="number" min="0" id="${id}" class="form-control" ${ex}></div>`;
@@ -845,7 +845,7 @@ async function pageBastPegawai() {
     <div class="card"><div class="card-body"><div class="row g-2 mb-3"><div class="col-lg-5"><div class="input-group"><span class="input-group-text"><i class="bx bx-search"></i></span><input id="bpq" type="search" class="form-control" placeholder="Cari nama, NIP, jabatan, KUA…"></div></div>
       <div class="col-lg-3"><select id="bpk" class="form-select"><option value="">Semua Kategori</option><option>Bimas Islam</option><option>KUA</option></select></div></div>
       <div class="scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>Nama</th><th>NIP</th><th>Kategori</th><th>Jabatan</th><th>Unit Kerja</th><th></th></tr></thead><tbody id="bpt"></tbody></table></div><div id="bpc" class="mt-2"></div></div></div></div>`;
-  if (!await bnLoad()) return;
+  if (!await bnLoad(REFRESH_PAGE_DATA)) return;
   const r = $('broot'); r.oninput = r.onchange = bpRows;
   r.onclick = e => { const b = e.target.closest('[data-act]'); if (!b) return; const a = b.dataset.act; if (a === 'padd') bnPegForm(); else if (a === 'pedit') bnPegForm(b.dataset.k); else if (a === 'pdel') bnPegDel(b.dataset.k); };
   bpRows();
@@ -897,7 +897,7 @@ function bnPegDel(nip) {
 /* ---- Pengaturan BAST ---- */
 async function pageBastSetting() {
   $('view').innerHTML = `<div class="jp" id="broot">${bnHead('Pengaturan BAST NR', 'Format nomor surat, pejabat yang mengetahui, dan alamat kantor untuk PDF.')}<div id="bsf">Memuat…</div></div>`;
-  if (!await bnLoad()) return;
+  if (!await bnLoad(REFRESH_PAGE_DATA)) return;
   const F = [['KASI_NAMA', 'Nama Kepala Seksi (Mengetahui)'], ['KASI_NIP', 'NIP Kepala Seksi'], ['NOMOR_AWAL_SURAT', 'Nomor awal surat (tiap tahun)'], ['KODE_KANTOR', 'Kode kantor'], ['KODE_KLASIFIKASI', 'Kode klasifikasi'],
     ['NOMOR_FORMAT_TEMPLATE', 'Format nomor surat'], ['ALAMAT_BIMAS_LENGKAP', 'Alamat lengkap kantor Bimas Islam']];
   $('bsf').innerHTML = `<div class="card"><div class="card-body"><div class="row g-3">${F.map(([k, l]) => `<div class="${k.length > 16 ? 'col-12' : 'col-md-6'}"><label class="form-label">${l}</label><input class="form-control" data-k="${k}" value="${esc(B.set[k])}"></div>`).join('')}</div>
