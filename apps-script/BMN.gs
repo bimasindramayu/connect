@@ -252,7 +252,7 @@ function bmnSave_(data, user) {
     'keterangan': String(data.keterangan || '').trim(), 'fotosjson': JSON.stringify(photos),
     'createdat': created, 'updatedat': now
   };
-  var row = new Array(values[0].length).fill('');
+  var row = rowNo > 0 ? values[rowNo - 1].slice() : new Array(values[0].length).fill('');
   Object.keys(valuesByHeader).forEach(function (key) {
     var idx = bmnIndex_(map, [key]);
     if (idx >= 0) row[idx] = valuesByHeader[key];
@@ -330,4 +330,29 @@ function bmnImportLegacy_(spreadsheetId) {
     if (saved.success) { imported++; existing[id] = true; } else skipped++;
   }
   return { success: true, data: { imported: imported, skipped: skipped, fotoPending: fotoPending } };
+}
+
+
+function bmnExport_(p, user) {
+  var result = bmnList_({ filters: p.filters || {} }, user);
+  if (!result.success) return result;
+  var rows = result.data || [];
+  if (!rows.length) return { success: false, message: 'Tidak ada data BMN untuk diekspor.' };
+  var headers = ['No', 'Satker', 'Kode Barang', 'Nama Barang', 'Jenis', 'Tahun', 'Nilai Perolehan', 'Kondisi', 'Status', 'Lokasi'];
+  var data = rows.map(function (r, i) {
+    return [i + 1, r.satker, r.kodeBarang, r.namaBarang, r.jenis, r.tahunPerolehan, r.nilaiPerolehan, r.kondisi, r.status, r.lokasiBarang];
+  });
+  var safe = 'BMN_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Asia/Jakarta', 'yyyyMMdd_HHmm');
+  if (p.format === 'pdf') {
+    var esc = function (v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+    var table = data.map(function (r) { return '<tr>' + r.map(function (v) { return '<td>' + esc(v) + '</td>'; }).join('') + '</tr>'; }).join('');
+    var html = '<html><head><meta charset="utf-8"><style>body{font:10px Arial;padding:18px}h2{text-align:center}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:5px;text-align:left}th{background:#e8eef7}thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body><h2>LAPORAN BARANG MILIK NEGARA</h2><p>Kementerian Agama Kabupaten Indramayu</p><table><thead><tr>' + headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' + table + '</tbody></table></body></html>';
+    var pdf = Utilities.newBlob(html, MimeType.HTML, 'bmn.html').getAs(MimeType.PDF).setName(safe + '.pdf');
+    return { success: true, fileData: Utilities.base64Encode(pdf.getBytes()), fileName: pdf.getName(), mimeType: 'application/pdf' };
+  }
+  var tsv = [headers].concat(data).map(function (r) {
+    return r.map(function (v) { return String(v == null ? '' : v).replace(/[\t\r\n]/g, ' '); }).join('\t');
+  }).join('\n');
+  var blob = Utilities.newBlob('\uFEFF' + tsv, 'application/vnd.ms-excel', safe + '.xls');
+  return { success: true, fileData: Utilities.base64Encode(blob.getBytes()), fileName: blob.getName(), mimeType: 'application/vnd.ms-excel' };
 }
