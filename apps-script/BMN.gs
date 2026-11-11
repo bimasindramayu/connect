@@ -1,0 +1,333 @@
+/**
+ * BIMASATU - Modul Barang Milik Negara (BMN)
+ *
+ * Database: Spreadsheet aktif BIMASATU (sheet BMN_Data dan BMN_Setting).
+ * Dokumen: Edge Function bop menyimpan file di folder master Drive / BMN.
+ * Autentikasi: token Supabase diverifikasi Code.gs; hak menu "bmn" diperiksa router.
+ *
+ * Data lama dari entry dapat diimpor admin dengan bmnImportLegacy(spreadsheetId).
+ * Impor hanya membaca sheet BMN_Data, mencegah ID ganda, dan menandai foto lama
+ * sebagai pending agar disalin ke folder master melalui endpoint bmn-salin.
+ */
+
+var BMN_SHEET_ = 'BMN_Data';
+var BMN_SETTING_SHEET_ = 'BMN_Setting';
+var BMN_HEADERS_ = [
+  'ID', 'Satker', 'Kode Barang', 'Nama Barang', 'Jenis', 'Tahun Perolehan',
+  'Sumber Perolehan', 'Nilai Perolehan', 'Kondisi', 'Status', 'Lokasi Barang',
+  'ID BMN', 'Keterangan', 'Fotos (JSON)', 'Created At', 'Updated At'
+];
+var BMN_SETTING_HEADERS_ = ['Key', 'Value', 'Keterangan', 'Updated By', 'Updated At'];
+var BMN_MAX_FOTO_ = 12;
+var BMN_JENIS_ = ['Tanah', 'Gedung/Bangunan', 'Kendaraan', 'Peralatan & Mesin', 'Aset Lainnya'];
+var BMN_KONDISI_ = ['Baik', 'Rusak Ringan', 'Rusak Berat'];
+var BMN_STATUS_ = ['Digunakan', 'Tidak Digunakan', 'Diusulkan Penghapusan'];
+
+function bmnActions_() {
+  return {
+    bmnList: { menu: 'bmn', run: function (p, user) { return bmnList_(p || {}, user); } },
+    bmnStats: { menu: 'bmn', run: function (p, user) { return bmnStats_(user); } },
+    bmnSettings: { menu: 'bmn', run: function () { return bmnSettings_(); } },
+    bmnSave: { menu: 'bmn', write: true, run: function (p, user) { return bmnSave_(p.data || {}, user); } },
+    bmnDelete: { admin: true, write: true, run: function (p) { return bmnDelete_(p.id); } },
+    bmnSaveSetting: { admin: true, write: true, run: function (p, user) { return bmnSaveSetting_(p.key, p.value, user); } },
+    bmnImportLegacy: { admin: true, write: true, run: function (p) { return bmnImportLegacy_(p.spreadsheetId); } }
+  };
+}
+
+function ensureBMNSchemas_(ss) {
+  var sh = ss.getSheetByName(BMN_SHEET_);
+  if (!sh) sh = ss.insertSheet(BMN_SHEET_);
+  bmnEnsureHeaders_(sh, BMN_HEADERS_);
+  var setting = ss.getSheetByName(BMN_SETTING_SHEET_);
+  if (!setting) setting = ss.insertSheet(BMN_SETTING_SHEET_);
+  bmnEnsureHeaders_(setting, BMN_SETTING_HEADERS_);
+  if (sh.getFrozenRows() < 1) sh.setFrozenRows(1);
+  if (setting.getFrozenRows() < 1) setting.setFrozenRows(1);
+  bmnSetDefaultSetting_(setting, 'allowDataEntry', 'true', 'Mengizinkan Operator KUA menambah dan mengubah data BMN.');
+}
+
+function bmnEnsureHeaders_(sh, desired) {
+  if (sh.getLastRow() === 0 || sh.getLastColumn() === 0) {
+    sh.getRange(1, 1, 1, desired.length).setValues([desired]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    return;
+  }
+  var last = Math.max(1, sh.getLastColumn());
+  var existing = sh.getRange(1, 1, 1, last).getDisplayValues()[0].map(function (x) { return bmnNorm_(x); });
+  var missing = desired.filter(function (h) { return existing.indexOf(bmnNorm_(h)) < 0; });
+  if (missing.length) {
+    sh.getRange(1, last + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
+  }
+}
+
+function bmnNorm_(v) {
+  return String(v == null ? '' : v).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function bmnMap_(headers) {
+  var out = {};
+  headers.forEach(function (h, i) { out[bmnNorm_(h)] = i; });
+  return out;
+}
+
+function bmnIndex_(map, names) {
+  for (var i = 0; i < names.length; i++) {
+    var k = bmnNorm_(names[i]);
+    if (Object.prototype.hasOwnProperty.call(map, k)) return map[k];
+  }
+  return -1;
+}
+
+function bmnCell_(row, map, names) {
+  var i = bmnIndex_(map, names);
+  return i < 0 ? '' : row[i];
+}
+
+function bmnSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureBMNSchemas_(ss);
+  return ss.getSheetByName(BMN_SHEET_);
+}
+
+function bmnSettingSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureBMNSchemas_(ss);
+  return ss.getSheetByName(BMN_SETTING_SHEET_);
+}
+
+function bmnSetDefaultSetting_(sh, key, value, description) {
+  var rows = sh.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) if (String(rows[i][0]) === key) return;
+  sh.appendRow([key, value, description, 'system', new Date()]);
+}
+
+function bmnReadSettings_() {
+  var sh = bmnSettingSheet_(), rows = sh.getDataRange().getValues(), out = { allowDataEntry: true };
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === 'allowDataEntry') out.allowDataEntry = !/^(false|0|no)$/i.test(String(rows[i][1]).trim());
+  }
+  return out;
+}
+
+function bmnSettings_() {
+  return { success: true, data: bmnReadSettings_() };
+}
+
+function bmnSaveSetting_(key, value, user) {
+  if (key !== 'allowDataEntry') return { success: false, message: 'Pengaturan BMN tidak dikenal.' };
+  var sh = bmnSettingSheet_(), rows = sh.getDataRange().getValues(), rowNo = -1;
+  for (var i = 1; i < rows.length; i++) if (String(rows[i][0]) === key) { rowNo = i + 1; break; }
+  var val = value === true || String(value).toLowerCase() === 'true' ? 'true' : 'false';
+  var data = [key, val, 'Mengizinkan Operator KUA menambah dan mengubah data BMN.', user.nama || 'Admin', new Date()];
+  if (rowNo > 0) sh.getRange(rowNo, 1, 1, data.length).setValues([data]); else sh.appendRow(data);
+  return { success: true, data: { key: key, value: val === 'true' } };
+}
+
+function bmnNormalSatker_(v) {
+  return String(v || '').trim().toLowerCase()
+    .replace(/^kua\s*(kec\.?|kecamatan)?\s*/i, '')
+    .replace(/\s+/g, ' ');
+}
+
+function bmnIsOperator_(user) {
+  return String(user.role || '').toLowerCase() === 'operator';
+}
+
+function bmnOwnSatker_(user) {
+  return String(user.kua || '').trim();
+}
+
+function bmnRows_() {
+  var sh = bmnSheet_(), values = sh.getDataRange().getValues();
+  if (!values.length) return [];
+  var map = bmnMap_(values[0]);
+  var result = [];
+  for (var i = 1; i < values.length; i++) {
+    var r = values[i];
+    if (!bmnCell_(r, map, ['ID'])) continue;
+    var photos = [];
+    try {
+      var raw = bmnCell_(r, map, ['Fotos (JSON)', 'FotosJson', 'Fotos']);
+      photos = Array.isArray(raw) ? raw : JSON.parse(String(raw || '[]'));
+      if (!Array.isArray(photos)) photos = [];
+    } catch (e) { photos = []; }
+    result.push({
+      id: String(bmnCell_(r, map, ['ID']) || ''),
+      satker: String(bmnCell_(r, map, ['Satker', 'KUA']) || ''),
+      kodeBarang: String(bmnCell_(r, map, ['Kode Barang', 'KodeBarang']) || ''),
+      namaBarang: String(bmnCell_(r, map, ['Nama Barang', 'NamaBarang']) || ''),
+      jenis: String(bmnCell_(r, map, ['Jenis']) || ''),
+      tahunPerolehan: String(bmnCell_(r, map, ['Tahun Perolehan', 'TahunPerolehan']) || ''),
+      sumberPerolehan: String(bmnCell_(r, map, ['Sumber Perolehan', 'SumberPerolehan']) || ''),
+      nilaiPerolehan: Number(bmnCell_(r, map, ['Nilai Perolehan', 'NilaiPerolehan']) || 0),
+      kondisi: String(bmnCell_(r, map, ['Kondisi']) || ''),
+      status: String(bmnCell_(r, map, ['Status']) || ''),
+      lokasiBarang: String(bmnCell_(r, map, ['Lokasi Barang', 'LokasiBarang']) || ''),
+      idBMN: String(bmnCell_(r, map, ['ID BMN', 'IdBMN']) || ''),
+      keterangan: String(bmnCell_(r, map, ['Keterangan']) || ''),
+      fotos: photos,
+      createdAt: bmnCell_(r, map, ['Created At', 'CreatedAt']) || '',
+      updatedAt: bmnCell_(r, map, ['Updated At', 'UpdatedAt']) || '',
+      _row: i + 1
+    });
+  }
+  return result;
+}
+
+function bmnList_(p, user) {
+  var filters = p.filters || {}, rows = bmnRows_();
+  if (bmnIsOperator_(user)) {
+    var own = bmnNormalSatker_(bmnOwnSatker_(user));
+    if (!own) return { success: false, message: 'Profil Operator KUA belum memiliki KUA. Hubungi Admin.' };
+    rows = rows.filter(function (r) { return bmnNormalSatker_(r.satker) === own; });
+  } else if (filters.satker) {
+    rows = rows.filter(function (r) { return bmnNormalSatker_(r.satker) === bmnNormalSatker_(filters.satker); });
+  }
+  if (filters.jenis) rows = rows.filter(function (r) { return r.jenis === filters.jenis; });
+  if (filters.kondisi) rows = rows.filter(function (r) { return r.kondisi === filters.kondisi; });
+  if (filters.status) rows = rows.filter(function (r) { return r.status === filters.status; });
+  if (filters.search) {
+    var q = String(filters.search).toLowerCase();
+    rows = rows.filter(function (r) {
+      return [r.kodeBarang, r.namaBarang, r.idBMN, r.lokasiBarang, r.satker].join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+  }
+  rows.sort(function (a, b) { return String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)); });
+  return { success: true, data: rows.map(function (r) { delete r._row; return r; }) };
+}
+
+function bmnStats_(user) {
+  var list = bmnList_({}, user);
+  if (!list.success) return list;
+  var rows = list.data, stats = {
+    total: rows.length, baik: 0, rusakRingan: 0, rusakBerat: 0,
+    digunakan: 0, tidakDigunakan: 0, byJenis: {}
+  };
+  rows.forEach(function (r) {
+    if (r.kondisi === 'Baik') stats.baik++;
+    if (r.kondisi === 'Rusak Ringan') stats.rusakRingan++;
+    if (r.kondisi === 'Rusak Berat') stats.rusakBerat++;
+    if (r.status === 'Digunakan') stats.digunakan++;
+    if (r.status === 'Tidak Digunakan') stats.tidakDigunakan++;
+    stats.byJenis[r.jenis] = (stats.byJenis[r.jenis] || 0) + 1;
+  });
+  return { success: true, data: stats };
+}
+
+function bmnSave_(data, user) {
+  if (!data || typeof data !== 'object') return { success: false, message: 'Data BMN tidak valid.' };
+  if (!bmnIsOperator_(user) && user.role !== 'admin') return { success: false, message: 'Peran Anda hanya memiliki akses baca BMN.' };
+  if (bmnIsOperator_(user) && !bmnReadSettings_().allowDataEntry) {
+    return { success: false, message: 'Input Data BMN sedang ditutup oleh Admin.' };
+  }
+  var nama = String(data.namaBarang || '').trim();
+  var jenis = String(data.jenis || '').trim();
+  var satker = bmnIsOperator_(user) ? bmnOwnSatker_(user) : String(data.satker || '').trim();
+  if (!satker) return { success: false, message: 'Nama Satker/KUA wajib diisi.' };
+  if (!nama) return { success: false, message: 'Nama barang wajib diisi.' };
+  if (BMN_JENIS_.indexOf(jenis) < 0) return { success: false, message: 'Jenis barang tidak valid.' };
+  if (data.kondisi && BMN_KONDISI_.indexOf(String(data.kondisi)) < 0) return { success: false, message: 'Kondisi barang tidak valid.' };
+  if (data.status && BMN_STATUS_.indexOf(String(data.status)) < 0) return { success: false, message: 'Status penggunaan tidak valid.' };
+  var photos = Array.isArray(data.fotos) ? data.fotos : [];
+  if (photos.length > BMN_MAX_FOTO_) return { success: false, message: 'Maksimal ' + BMN_MAX_FOTO_ + ' foto/dokumen per barang.' };
+  var sh = bmnSheet_(), values = sh.getDataRange().getValues(), map = bmnMap_(values[0]), rowNo = -1, old = null;
+  if (data.id) {
+    var all = bmnRows_();
+    for (var i = 0; i < all.length; i++) if (all[i].id === String(data.id)) { old = all[i]; rowNo = all[i]._row; break; }
+    if (rowNo > 0 && bmnIsOperator_(user) && bmnNormalSatker_(old.satker) !== bmnNormalSatker_(satker)) {
+      return { success: false, message: 'Anda tidak berhak mengubah BMN Satker lain.' };
+    }
+    if (rowNo < 0) return { success: false, message: 'Data BMN tidak ditemukan.' };
+  }
+  var id = data.id ? String(data.id) : 'BMN-' + Utilities.getUuid().replace(/-/g, '').substring(0, 16).toUpperCase();
+  var created = old ? old.createdAt : new Date(), now = new Date();
+  var valuesByHeader = {
+    'id': id, 'satker': satker, 'kodebarang': String(data.kodeBarang || '').trim(),
+    'namabarang': nama, 'jenis': jenis, 'tahunperolehan': String(data.tahunPerolehan || '').trim(),
+    'sumberperolehan': String(data.sumberPerolehan || '').trim(),
+    'nilaiperolehan': Number(String(data.nilaiPerolehan || '0').replace(/[^\d.-]/g, '')) || 0,
+    'kondisi': String(data.kondisi || 'Baik'), 'status': String(data.status || 'Digunakan'),
+    'lokasibarang': String(data.lokasiBarang || '').trim(), 'idbmn': String(data.idBMN || '').trim(),
+    'keterangan': String(data.keterangan || '').trim(), 'fotosjson': JSON.stringify(photos),
+    'createdat': created, 'updatedat': now
+  };
+  var row = new Array(values[0].length).fill('');
+  Object.keys(valuesByHeader).forEach(function (key) {
+    var idx = bmnIndex_(map, [key]);
+    if (idx >= 0) row[idx] = valuesByHeader[key];
+  });
+  if (rowNo > 0) sh.getRange(rowNo, 1, 1, row.length).setValues([row]);
+  else sh.appendRow(row);
+  return { success: true, data: { id: id, satker: satker } };
+}
+
+function bmnDelete_(id) {
+  id = String(id || '');
+  if (!id) return { success: false, message: 'ID BMN tidak valid.' };
+  var sh = bmnSheet_(), all = bmnRows_();
+  for (var i = 0; i < all.length; i++) {
+    if (all[i].id === id) {
+      sh.deleteRow(all[i]._row);
+      return { success: true, data: { id: id } };
+    }
+  }
+  return { success: false, message: 'Data BMN tidak ditemukan.' };
+}
+
+/**
+ * Impor data lama dari spreadsheet project entry. File/foto lama tidak dijadikan
+ * lokasi aktif; setiap foto disimpan sebagai legacyUrl agar admin dapat menyalinnya
+ * ke folder master BIMASATU lewat fitur migrasi foto.
+ */
+function bmnImportLegacy_(spreadsheetId) {
+  spreadsheetId = String(spreadsheetId || '').trim();
+  if (!/^[a-zA-Z0-9_-]{20,}$/.test(spreadsheetId)) return { success: false, message: 'ID Spreadsheet lama tidak valid.' };
+  var target = SpreadsheetApp.getActiveSpreadsheet();
+  if (target.getId() === spreadsheetId) return { success: false, message: 'Spreadsheet sumber dan tujuan tidak boleh sama.' };
+  var source;
+  try { source = SpreadsheetApp.openById(spreadsheetId).getSheetByName('BMN_Data'); }
+  catch (e) { return { success: false, message: 'Spreadsheet lama tidak dapat dibuka. Pastikan akun Apps Script memiliki akses ke file tersebut.' }; }
+  if (!source) return { success: false, message: 'Sheet BMN_Data tidak ditemukan di spreadsheet lama.' };
+  var old = source.getDataRange().getValues();
+  if (old.length < 2) return { success: true, data: { imported: 0, skipped: 0, fotoPending: 0 } };
+  var sourceMap = bmnMap_(old[0]), existing = {};
+  var sh = bmnSheet_(), current = bmnRows_();
+  current.forEach(function (r) { existing[r.id] = true; });
+  var imported = 0, skipped = 0, fotoPending = 0;
+  for (var i = 1; i < old.length; i++) {
+    var r = old[i], id = String(bmnCell_(r, sourceMap, ['ID']) || '').trim();
+    if (!id) { skipped++; continue; }
+    if (existing[id]) { skipped++; continue; }
+    var rawPhotos = bmnCell_(r, sourceMap, ['Fotos (JSON)', 'FotosJson', 'Fotos']);
+    var photos = [];
+    try { photos = Array.isArray(rawPhotos) ? rawPhotos : JSON.parse(String(rawPhotos || '[]')); } catch (e) { photos = []; }
+    if (!Array.isArray(photos)) photos = [];
+    photos = photos.map(function (f) {
+      fotoPending++;
+      return {
+        legacyFileId: String(f.fileId || f.id || ''),
+        legacyUrl: String(f.fileUrl || f.url || (f.fileId ? 'https://drive.google.com/file/d/' + f.fileId + '/view' : '')),
+        fileName: String(f.fileName || f.name || 'Dokumen BMN'),
+        fileSize: Number(f.fileSize || 0), mimeType: String(f.mimeType || ''),
+        migrationStatus: 'pending'
+      };
+    });
+    var satker = String(bmnCell_(r, sourceMap, ['KUA', 'Satker']) || '').trim();
+    if (satker && !/^KUA\b/i.test(satker) && !/^(MIN|MTSN|MAN)\b/i.test(satker)) satker = 'KUA Kec. ' + satker;
+    var mapped = {
+      id: id, satker: satker, kodeBarang: bmnCell_(r, sourceMap, ['Kode Barang', 'KodeBarang']),
+      namaBarang: bmnCell_(r, sourceMap, ['Nama Barang', 'NamaBarang']),
+      jenis: bmnCell_(r, sourceMap, ['Jenis']), tahunPerolehan: bmnCell_(r, sourceMap, ['Tahun Perolehan', 'TahunPerolehan']),
+      sumberPerolehan: bmnCell_(r, sourceMap, ['Sumber Perolehan', 'SumberPerolehan']),
+      nilaiPerolehan: bmnCell_(r, sourceMap, ['Nilai Perolehan', 'NilaiPerolehan']),
+      kondisi: bmnCell_(r, sourceMap, ['Kondisi']), status: bmnCell_(r, sourceMap, ['Status']),
+      lokasiBarang: bmnCell_(r, sourceMap, ['Lokasi Barang', 'LokasiBarang']),
+      idBMN: bmnCell_(r, sourceMap, ['ID BMN', 'IdBMN']),
+      keterangan: bmnCell_(r, sourceMap, ['Keterangan']), fotos: photos
+    };
+    var saved = bmnSave_(mapped, { role: 'admin', nama: 'Migrasi BMN' });
+    if (saved.success) { imported++; existing[id] = true; } else skipped++;
+  }
+  return { success: true, data: { imported: imported, skipped: skipped, fotoPending: fotoPending } };
+}
