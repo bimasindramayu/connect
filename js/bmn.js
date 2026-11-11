@@ -219,33 +219,96 @@ function bmnOpenForm(row) {
   };
 }
 
-async function bmnView(id) {
-  const r=BMN_UI.rows.find(x=>x.id===id); if(!r)return;
-  const photos=bmnPhotoList(r);
-  $('dlg').className='wide';
-  $('dlg').innerHTML=`<div class="p-3 p-md-4">
-    <div class="d-flex justify-content-between align-items-center mb-3"><div><h5 class="mb-1">${esc(r.namaBarang)}</h5><div class="text-body-secondary small">${esc(r.satker)} · ${esc(r.kodeBarang)}</div></div><button class="btn-close" id="bmnDetailClose"></button></div>
-    <div class="row g-3 mb-3">
-      ${[['Jenis',r.jenis],['Tahun Perolehan',r.tahunPerolehan],['Sumber Perolehan',r.sumberPerolehan],['Nilai Perolehan',bmnMoney(r.nilaiPerolehan)],['Kondisi',r.kondisi],['Status',r.status],['Lokasi',r.lokasiBarang],['ID BMN',r.idBMN],['Keterangan',r.keterangan]].map(([k,v])=>`<div class="col-sm-6"><div class="bmn-detail-item"><div class="small text-body-secondary">${k}</div><div class="fw-semibold text-break">${esc(v||'-')}</div></div></div>`).join('')}
-    </div>
-    <h6>Foto / Dokumen (${photos.length})</h6><div class="d-flex flex-wrap gap-2" id="bmnPhotoButtons">${photos.length ? photos.map((p,i)=>`<button class="btn btn-sm btn-outline-primary" data-bmn-photo="${i}"><i class="bx ${(p.mimeType||'').includes('pdf')?'bx-file-pdf':'bx-image'}"></i> ${esc(p.fileName||'Dokumen '+(i+1))}${p.migrationStatus==='pending'?' (belum dipindahkan)':''}</button>`).join('') : '<span class="text-body-secondary small">Belum ada foto/dokumen.</span>'}</div>
-    <div class="d-flex justify-content-end mt-4"><button class="btn btn-secondary" id="bmnDetailDone">Tutup</button></div>
+function bmnDetailField(label, value, icon, tone = 'primary') {
+  return `<div class="bmn-detail-field">
+    <span class="bmn-detail-field-icon bg-label-${tone}"><i class="bx ${icon}"></i></span>
+    <div class="min-w-0"><div class="bmn-detail-field-label">${esc(label)}</div><div class="bmn-detail-field-value">${esc(value || '-')}</div></div>
   </div>`;
-  $('dlg').showModal(); const close=()=> $('dlg').close();
-  $('bmnDetailClose').onclick=close; $('bmnDetailDone').onclick=close;
-  $('bmnPhotoButtons').querySelectorAll('[data-bmn-photo]').forEach(btn=>btn.onclick=()=>bmnOpenFile(photos[Number(btn.dataset.bmnPhoto)]));
 }
 
-async function bmnOpenFile(photo) {
-  if (photo.migrationStatus==='pending' || photo.legacyUrl) return bmnNotice('Dokumen ini masih berada di lokasi lama. Admin dapat menjalankan migrasi ke folder BIMASATU.','warning');
-  try {
-    const response=await api({action:'bmn-file',id:photo.fileId});
-    const blob=await response.blob(), url=URL.createObjectURL(blob);
-    const a=Object.assign(document.createElement('a'),{href:url,target:'_blank',rel:'noopener',download:photo.fileName||'dokumen-bmn'});
-    document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000);
-  } catch(e){bmnNotice(e.message,'danger');}
+async function bmnView(id) {
+  const r = BMN_UI.rows.find(x => x.id === id);
+  if (!r) return;
+  const photos = bmnPhotoList(r);
+  const fields = [
+    ['Jenis Barang', r.jenis, 'bx-category', 'primary'],
+    ['Tahun Perolehan', r.tahunPerolehan, 'bx-calendar', 'info'],
+    ['Sumber Perolehan', r.sumberPerolehan, 'bx-purchase-tag', 'success'],
+    ['Lokasi Barang', r.lokasiBarang, 'bx-map', 'warning'],
+    ['ID BMN', r.idBMN, 'bx-barcode', 'secondary'],
+    ['Keterangan', r.keterangan, 'bx-notepad', 'primary']
+  ];
+  const fileHtml = photos.length ? photos.map((p, i) => {
+    const pending = p.migrationStatus === 'pending' || !p.fileId;
+    const isPdf = String(p.mimeType || '').toLowerCase().includes('pdf') || /\.pdf$/i.test(p.fileName || '');
+    const icon = isPdf ? 'bx-file-pdf' : 'bx-image';
+    const ext = isPdf ? 'PDF' : ((String(p.mimeType || '').split('/')[1] || (p.fileName || '').split('.').pop() || 'FILE').toUpperCase());
+    return `<button type="button" class="bmn-file-card text-start" data-bmn-photo="${i}" ${pending ? 'disabled' : ''}>
+      <span class="bmn-file-icon ${isPdf ? 'pdf' : 'image'}"><i class="bx ${icon}"></i></span>
+      <span class="bmn-file-meta"><strong title="${esc(p.fileName || 'Dokumen ' + (i + 1))}">${esc(p.fileName || 'Dokumen ' + (i + 1))}</strong>
+        <small>${esc(ext)} · ${pending ? 'Belum dipindahkan' : 'Tersimpan di Drive BIMASATU'}</small></span>
+      <span class="bmn-file-action">${pending ? '<i class="bx bx-time-five"></i>' : '<i class="bx bx-show"></i>'}</span>
+    </button>`;
+  }).join('') : '<div class="bmn-file-empty"><i class="bx bx-folder-open"></i><span>Belum ada foto atau dokumen untuk barang ini.</span></div>';
+
+  $('dlg').className = 'wide bmn-detail-dialog';
+  $('dlg').innerHTML = `<div class="bmn-detail-shell">
+    <div class="bmn-detail-hero">
+      <div class="d-flex align-items-start gap-3">
+        <span class="bmn-detail-hero-icon"><i class="bx bx-building-house"></i></span>
+        <div class="min-w-0 flex-grow-1">
+          <div class="bmn-detail-eyebrow">DETAIL BARANG MILIK NEGARA</div>
+          <h4>${esc(r.namaBarang || 'Barang tanpa nama')}</h4>
+          <div class="bmn-detail-subtitle">${esc(r.satker || '-')} <span>•</span> Kode: ${esc(r.kodeBarang || '-')}</div>
+          <div class="d-flex flex-wrap gap-2 mt-3">${bmnBadge(r.kondisi, 'kondisi')} ${bmnBadge(r.status, 'status')}</div>
+        </div>
+        <button type="button" class="btn-close btn-close-white" id="bmnDetailClose" aria-label="Tutup"></button>
+      </div>
+      <div class="bmn-detail-highlights">
+        <div class="bmn-detail-highlight"><span class="bmn-detail-highlight-icon"><i class="bx bx-wallet"></i></span><div><small>Nilai Perolehan</small><strong>${esc(bmnMoney(r.nilaiPerolehan))}</strong></div></div>
+        <div class="bmn-detail-highlight"><span class="bmn-detail-highlight-icon"><i class="bx bx-calendar-check"></i></span><div><small>Tahun Perolehan</small><strong>${esc(r.tahunPerolehan || '-')}</strong></div></div>
+        <div class="bmn-detail-highlight"><span class="bmn-detail-highlight-icon"><i class="bx bx-file"></i></span><div><small>Foto / Dokumen</small><strong>${photos.length.toLocaleString('id-ID')} berkas</strong></div></div>
+      </div>
+    </div>
+
+    <div class="bmn-detail-content">
+      <section class="bmn-detail-section">
+        <div class="bmn-detail-section-heading"><span class="bmn-detail-section-icon primary"><i class="bx bx-list-ul"></i></span><div><h6>Informasi Barang</h6><small>Rincian identitas dan kondisi aset</small></div></div>
+        <div class="bmn-detail-fields">${fields.map(f => bmnDetailField(f[0], f[1], f[2], f[3])).join('')}</div>
+      </section>
+      <section class="bmn-detail-section">
+        <div class="bmn-detail-section-heading"><span class="bmn-detail-section-icon info"><i class="bx bx-images"></i></span><div><h6>Foto dan Dokumen</h6><small>Pilih berkas untuk melihat pratinjau langsung</small></div></div>
+        <div class="bmn-detail-files" id="bmnPhotoButtons">${fileHtml}</div>
+        ${photos.some(p => p.migrationStatus === 'pending' || !p.fileId) ? '<div class="bmn-detail-file-note"><i class="bx bx-info-circle"></i> Berkas yang masih menunggu migrasi perlu disalin terlebih dahulu melalui Pusat Migrasi Data BMN.</div>' : ''}
+      </section>
+    </div>
+    <div class="bmn-detail-footer"><span><i class="bx bx-shield-quarter"></i> Data tersimpan di Spreadsheet BIMASATU</span><button type="button" class="btn btn-primary" id="bmnDetailDone"><i class="bx bx-check me-1"></i> Selesai</button></div>
+  </div>`;
+
+  $('dlg').showModal();
+  const close = () => $('dlg').close();
+  $('bmnDetailClose').onclick = close;
+  $('bmnDetailDone').onclick = close;
+  $('bmnPhotoButtons').querySelectorAll('[data-bmn-photo]').forEach(btn => {
+    btn.onclick = () => bmnOpenFile(photos[Number(btn.dataset.bmnPhoto)], photos);
+  });
 }
 
+function bmnOpenFile(photo, photos = [photo]) {
+  if (!photo || photo.migrationStatus === 'pending' || !photo.fileId) {
+    return bmnNotice('Dokumen ini masih berada di lokasi lama. Admin perlu menyelesaikan migrasi ke folder BIMASATU/BMN terlebih dahulu.', 'warning');
+  }
+  const files = photos
+    .filter(p => p && p.fileId && p.migrationStatus !== 'pending')
+    .map((p, i) => ({
+      id: p.fileId,
+      name: p.fileName || 'Dokumen BMN ' + (i + 1),
+      mimeType: p.mimeType || ''
+    }));
+  const index = files.findIndex(f => f.id === photo.fileId);
+  if (index < 0) return bmnNotice('Berkas BMN tidak ditemukan pada daftar.', 'danger');
+  openViewer(files, index, file => api({ action: 'bmn-file', id: file.id }));
+}
 async function bmnDelete(id) {
   const r=BMN_UI.rows.find(x=>x.id===id); if(!r || !confirm('Hapus data BMN "'+r.namaBarang+'"? Data yang dihapus tidak dapat dikembalikan dari aplikasi.'))return;
   try {
