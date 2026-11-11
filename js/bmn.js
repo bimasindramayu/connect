@@ -106,7 +106,7 @@ async function pageBMN() {
       <div><h4 class="mb-1"><i class="bx bx-building me-1"></i>Barang Milik Negara</h4>
         <div class="text-body-secondary small">Inventaris BMN Satker · Database Google Spreadsheet BIMASATU</div></div>
       <div class="d-flex gap-2 flex-wrap">
-        ${bmnIsAdmin() ? '<button class="btn btn-outline-primary btn-sm" id="bmnSettingsOpen"><i class="bx bx-cog me-1"></i> Pengaturan</button><button class="btn btn-outline-primary btn-sm" id="bmnSummaryToggle"><i class="bx bx-grid-alt me-1"></i> Summary KUA</button><button class="btn btn-outline-secondary btn-sm d-none" id="bmnBackSummary"><i class="bx bx-arrow-back me-1"></i> Kembali ke Summary</button>' : ''}
+        ${bmnIsAdmin() ? '<button class="btn btn-outline-primary btn-sm" id="bmnSettingsOpen" disabled><i class="bx bx-cog me-1"></i> Pengaturan</button><button class="btn btn-outline-primary btn-sm" id="bmnSummaryToggle"><i class="bx bx-grid-alt me-1"></i> Summary KUA</button><button class="btn btn-outline-secondary btn-sm d-none" id="bmnBackSummary"><i class="bx bx-arrow-back me-1"></i> Kembali ke Summary</button>' : ''}
         <button class="btn btn-outline-success btn-sm" id="bmnRefresh"><i class="bx bx-refresh"></i> Muat ulang</button>
         <button class="btn btn-primary btn-sm" id="bmnAdd" ${bmnCanWrite() ? '' : 'disabled'}><i class="bx bx-plus"></i> Tambah BMN</button>
       </div>
@@ -297,6 +297,7 @@ async function bmnLoad() {
     ]);
     BMN_UI.rows = list.data || [];
     BMN_UI.settings = settings.data || { allowDataEntry: true };
+    if (bmnIsAdmin() && $('bmnSettingsOpen')) $('bmnSettingsOpen').disabled = false;
     if (bmnIsAdmin() && $('bmnAllowEntry')) $('bmnAllowEntry').checked = BMN_UI.settings.allowDataEntry !== false;
     if ($('bmnAdd')) $('bmnAdd').disabled = !bmnCanWrite();
     bmnRenderSatkerFilter();
