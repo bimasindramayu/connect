@@ -28,8 +28,9 @@ function bmnActions_() {
     bmnList: { menu: 'bmn', run: function (p, user) { return bmnList_(p || {}, user); } },
     bmnStats: { menu: 'bmn', run: function (p, user) { return bmnStats_(user); } },
     bmnSettings: { menu: 'bmn', run: function () { return bmnSettings_(); } },
+    bmnCanWrite: { menu: 'bmn', run: function (p, user) { return { success: true, data: bmnCanWrite_(user) }; } },
     bmnSave: { menu: 'bmn', write: true, run: function (p, user) { return bmnSave_(p.data || {}, user); } },
-    bmnDelete: { admin: true, write: true, run: function (p) { return bmnDelete_(p.id); } },
+    bmnDelete: { menu: 'bmn', write: true, run: function (p, user) { return bmnDelete_(p.id, user); } },
     bmnSaveSetting: { admin: true, write: true, run: function (p, user) { return bmnSaveSetting_(p.key, p.value, user); } },
     bmnImportLegacy: { admin: true, write: true, run: function () { return bmnImportLegacy_(); } }
   };
@@ -138,6 +139,23 @@ function bmnOwnSatker_(user) {
   return String(user.kua || '').trim();
 }
 
+// Satu aturan izin dipakai bersama oleh menu, penyimpanan, penghapusan, dan unggah lampiran.
+function bmnCanWrite_(user) {
+  if (user && String(user.role || '').toLowerCase() === 'admin') {
+    return { allowed: true, message: '' };
+  }
+  if (!bmnIsOperator_(user)) {
+    return { allowed: false, message: 'Peran Anda hanya memiliki akses baca BMN.' };
+  }
+  if (!bmnOwnSatker_(user)) {
+    return { allowed: false, message: 'Profil Operator KUA belum memiliki KUA. Hubungi Admin.' };
+  }
+  if (!bmnReadSettings_().allowDataEntry) {
+    return { allowed: false, message: 'Input Data BMN sedang ditutup oleh Admin.' };
+  }
+  return { allowed: true, message: '' };
+}
+
 function bmnRows_() {
   var sh = bmnSheet_(), values = sh.getDataRange().getValues();
   if (!values.length) return [];
@@ -217,10 +235,8 @@ function bmnStats_(user) {
 
 function bmnSave_(data, user) {
   if (!data || typeof data !== 'object') return { success: false, message: 'Data BMN tidak valid.' };
-  if (!bmnIsOperator_(user) && user.role !== 'admin') return { success: false, message: 'Peran Anda hanya memiliki akses baca BMN.' };
-  if (bmnIsOperator_(user) && !bmnReadSettings_().allowDataEntry) {
-    return { success: false, message: 'Input Data BMN sedang ditutup oleh Admin.' };
-  }
+  var permission = bmnCanWrite_(user);
+  if (!permission.allowed) return { success: false, message: permission.message };
   var nama = String(data.namaBarang || '').trim();
   var jenis = String(data.jenis || '').trim();
   var satker = bmnIsOperator_(user) ? bmnOwnSatker_(user) : String(data.satker || '').trim();
@@ -262,14 +278,21 @@ function bmnSave_(data, user) {
   return { success: true, data: { id: id, satker: satker } };
 }
 
-function bmnDelete_(id) {
+function bmnDelete_(id, user) {
+  var permission = bmnCanWrite_(user);
+  if (!permission.allowed) return { success: false, message: permission.message };
   id = String(id || '');
   if (!id) return { success: false, message: 'ID BMN tidak valid.' };
   var sh = bmnSheet_(), all = bmnRows_();
   for (var i = 0; i < all.length; i++) {
     if (all[i].id === id) {
+      if (bmnIsOperator_(user) &&
+          bmnNormalSatker_(all[i].satker) !== bmnNormalSatker_(bmnOwnSatker_(user))) {
+        return { success: false, message: 'Anda tidak berhak menghapus BMN Satker lain.' };
+      }
+      // Lampiran Drive sengaja tidak ikut dihapus agar tidak kehilangan arsip.
       sh.deleteRow(all[i]._row);
-      return { success: true, data: { id: id } };
+      return { success: true, data: { id: id, satker: all[i].satker, filesPreserved: true } };
     }
   }
   return { success: false, message: 'Data BMN tidak ditemukan.' };
