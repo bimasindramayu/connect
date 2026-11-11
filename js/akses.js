@@ -22,7 +22,7 @@ const AKSES_BAWAAN = {   // isi awal di bop.sql (tombol "Kembalikan ke bawaan" h
 const MENU_DEF = [
   ['KUA', [
     ['dashboard', 'Dashboard', 'Halaman awal Operator KUA: sudah/belum Realisasi bulan ini, Realisasi dibanding anggaran BOP, kepala dan alamat KUA, statistik SDM. Khusus Operator KUA.'],
-    ['pegawai', 'Pegawai KUA', 'Data pegawai KUA (nama + gelar, NIP, jenis ASN: PNS, PPPK, PPPK Paruh Waktu, Honor; pangkat/golongan, jabatan, jabatan tambahan Kepala/Plt. Kepala KUA, HP/WA). Operator KUA: menambah, mengubah, menghapus, dan memindahkan (transfer) pegawai KUA-nya sendiri. Admin: semua KUA. Peran lain: hanya melihat semua KUA.']],
+    ['pegawai', 'Pegawai KUA', 'Data pegawai KUA (nama + gelar, NIP, jenis ASN: PNS, PPPK, PPPK Paruh Waktu, Honor; pangkat/golongan, jabatan, jabatan tambahan Kepala/Plt. Kepala KUA, HP/WA). Operator KUA: menambah, mengubah, menghapus, dan memindahkan (transfer) pegawai KUA-nya sendiri. Admin: semua KUA. Peran lain: hanya melihat semua KUA.']]],
   ['BOP', [
     ['bop', 'Halaman BOP', 'Halaman depan BOP: kartu pilihan modul dan ringkasan SAKTI.'],
     ['anggaran', 'Anggaran', 'Menetapkan anggaran tahunan tiap KUA. Tidak untuk Operator KUA.'],
@@ -33,21 +33,21 @@ const MENU_DEF = [
     ['sakti', 'Realisasi SAKTI', 'Menginput nominal pembayaran SAKTI tiap bulan. Tidak untuk Operator KUA.'],
     ['config', 'Config', 'Pengaturan sistem BOP: buka/tutup pengisian, bulan RPD, batas file LPJ. Tidak untuk Operator KUA.'],
     ['impor', 'Impor Data Lama', 'Mengambil data dari sistem lama. Khusus Admin.'],
-    ['laporan', 'Laporan', 'Unduh laporan Excel/PDF. Operator KUA: KUA-nya sendiri; peran lain: semua KUA.']],
+    ['laporan', 'Laporan', 'Unduh laporan Excel/PDF. Operator KUA: KUA-nya sendiri; peran lain: semua KUA.']]],
   ['BMN', [
-    ['bmn', 'Barang Milik Negara', 'Dashboard, inventaris aset, foto/dokumen barang, filter, ekspor Excel/PDF. Operator KUA dibatasi pada KUA sendiri; Admin dapat mengelola seluruh Satker.']],
+    ['bmn', 'Barang Milik Negara', 'Dashboard, inventaris aset, foto/dokumen barang, filter, ekspor Excel/PDF. Operator KUA dibatasi pada KUA sendiri; Admin dapat mengelola seluruh Satker.']]],
   ['BAST NR', [
     ['bast', 'Riwayat', 'Daftar Berita Acara, status SIMKAH, dan arsip dokumen tertandatangan (lihat, unggah, hapus).'],
     ['bast-buat', 'Buat BA', 'Membuat Berita Acara baru.'],
     ['bast-pegawai', 'Pegawai', 'Mengelola daftar pegawai (Pihak Pertama dan Pihak Kedua).'],
-    ['bast-setting', 'Pengaturan BAST', 'Format nomor surat, pejabat yang mengetahui, alamat kantor, dan pemindahan arsip lama ke folder master.']],
+    ['bast-setting', 'Pengaturan BAST', 'Format nomor surat, pejabat yang mengetahui, alamat kantor, dan pemindahan arsip lama ke folder master.']]],
   ['Sertifikat', [
     ['sert-masjid', 'Masjid / Musala', 'Data masjid/musala dan cetak sertifikat.'],
     ['sert-kiblat', 'Arah Kiblat', 'Data kalibrasi arah kiblat dan cetak sertifikat.'],
-    ['sert-pengaturan', 'Pengaturan Sertifikat', 'Nama penanda tangan dan tanda tangan petugas ukur.']],
+    ['sert-pengaturan', 'Pengaturan Sertifikat', 'Nama penanda tangan dan tanda tangan petugas ukur.']]],
   ['Lainnya', [
     ['jaspro', 'Jaspro Transport', 'Menghitung Jaspro dan Transport dari data presensi dan membuat laporannya.'],
-    ['akses', 'Hak Akses Menu', 'Halaman ini. Khusus Admin.']]
+    ['akses', 'Hak Akses Menu', 'Halaman ini. Khusus Admin.']]]
 ];
 const MENU_INFO = Object.fromEntries(MENU_DEF.flatMap(([, ms]) => ms).map(([k, n, d]) => [k, { nama: n, ket: d }]));
 
