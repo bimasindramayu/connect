@@ -106,7 +106,7 @@ async function pageBMN() {
       <div><h4 class="mb-1"><i class="bx bx-building me-1"></i>Barang Milik Negara</h4>
         <div class="text-body-secondary small">Inventaris BMN Satker · Database Google Spreadsheet BIMASATU</div></div>
       <div class="d-flex gap-2 flex-wrap">
-        ${bmnIsAdmin() ? '<button class="btn btn-outline-primary btn-sm" id="bmnSummaryToggle"><i class="bx bx-grid-alt me-1"></i> Summary KUA</button><button class="btn btn-outline-secondary btn-sm d-none" id="bmnBackSummary"><i class="bx bx-arrow-back me-1"></i> Kembali ke Summary</button>' : ''}
+        ${bmnIsAdmin() ? '<button class="btn btn-outline-primary btn-sm" id="bmnSettingsOpen"><i class="bx bx-cog me-1"></i> Pengaturan</button><button class="btn btn-outline-primary btn-sm" id="bmnSummaryToggle"><i class="bx bx-grid-alt me-1"></i> Summary KUA</button><button class="btn btn-outline-secondary btn-sm d-none" id="bmnBackSummary"><i class="bx bx-arrow-back me-1"></i> Kembali ke Summary</button>' : ''}
         <button class="btn btn-outline-success btn-sm" id="bmnRefresh"><i class="bx bx-refresh"></i> Muat ulang</button>
         <button class="btn btn-primary btn-sm" id="bmnAdd" ${bmnCanWrite() ? '' : 'disabled'}><i class="bx bx-plus"></i> Tambah BMN</button>
       </div>
@@ -154,10 +154,7 @@ async function pageBMN() {
         </tr></thead>
         <tbody><tr><td colspan="11" class="text-center py-4 text-body-secondary">Memuat data…</td></tr></tbody>
       </table></div></div>
-      ${bmnIsAdmin() ? `<div class="card mt-3" id="bmnSettingsCard"><div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
-        <div><h6 class="mb-1"><i class="bx bx-shield-quarter me-1"></i>Pengaturan Input BMN</h6><p class="small text-body-secondary mb-0">Atur izin Operator KUA untuk menambah, mengubah, dan menghapus data BMN.</p></div>
-        <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" role="switch" id="bmnAllowEntry"><label class="form-check-label fw-semibold" for="bmnAllowEntry">Izinkan Operator KUA mengelola BMN</label></div>
-      </div></div>` : ''}
+
     </div>
   `;
   $('bmnRefresh').onclick = bmnLoad;
@@ -169,20 +166,125 @@ async function pageBMN() {
   if (bmnIsAdmin()) {
     $('bmnSummaryToggle').onclick = bmnShowSatkerSummary;
     $('bmnBackSummary').onclick = bmnBackToSatkerSummary;
-    $('bmnAllowEntry').onchange = async e => {
-      try {
-        await gas('bmnSaveSetting', { key: 'allowDataEntry', value: e.target.checked });
-        BMN_UI.settings.allowDataEntry = e.target.checked;
-        bmnNotice('Pengaturan input BMN disimpan.');
-        if ($('bmnAdd')) $('bmnAdd').disabled = !bmnCanWrite();
-        bmnRenderTable();
-      } catch (err) {
-        e.target.checked = !e.target.checked;
-        bmnNotice(err.message, 'danger');
-      }
-    };
+    $('bmnSettingsOpen').onclick = bmnOpenSettings;
   }
   await bmnLoad();
+}
+
+
+function bmnOpenSettings() {
+  if (!bmnIsAdmin()) return;
+
+  const enabled = BMN_UI.settings.allowDataEntry !== false;
+  const dlg = $('dlg');
+  dlg.className = 'bmn-settings-dialog';
+  dlg.innerHTML = `
+    <div class="bmn-settings-shell">
+      <header class="bmn-settings-header">
+        <div class="bmn-settings-header-main">
+          <span class="bmn-settings-header-icon"><i class="bx bx-shield-quarter"></i></span>
+          <div>
+            <div class="bmn-settings-eyebrow">KONFIGURASI ADMINISTRATOR</div>
+            <h5>Pengaturan BMN</h5>
+            <p>Kelola izin penginputan data inventaris BMN.</p>
+          </div>
+        </div>
+        <button type="button" class="btn-close btn-close-white" id="bmnSettingsClose" aria-label="Tutup"></button>
+      </header>
+
+      <div class="bmn-settings-body">
+        <section class="bmn-settings-card" id="bmnSettingsCard">
+          <div class="bmn-settings-card-top">
+            <span class="bmn-settings-card-icon"><i class="bx bx-edit"></i></span>
+            <div class="bmn-settings-card-copy">
+              <h6>Izin Input Operator KUA</h6>
+              <p>Atur apakah Operator KUA dapat menambah, mengubah, dan menghapus data BMN pada unit kerjanya.</p>
+            </div>
+          </div>
+          <div class="bmn-settings-divider"></div>
+          <div class="bmn-settings-control-row">
+            <div>
+              <strong>Izinkan Operator mengelola BMN</strong>
+              <span id="bmnSettingsStatusText">${enabled ? 'Input sedang dibuka untuk Operator KUA.' : 'Input sedang ditutup. Operator hanya dapat melihat dan mengekspor data.'}</span>
+            </div>
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" role="switch" id="bmnAllowEntry" ${enabled ? 'checked' : ''} aria-label="Izinkan Operator KUA mengelola BMN">
+            </div>
+          </div>
+          <div class="bmn-settings-state">
+            <span class="badge ${enabled ? 'bg-label-success' : 'bg-label-warning'}" id="bmnSettingsState">${enabled ? 'Input Aktif' : 'Input Ditutup'}</span>
+            <span class="small text-body-secondary" id="bmnSettingsSaveState">Perubahan disimpan otomatis saat tombol diubah.</span>
+          </div>
+        </section>
+
+        <div class="bmn-settings-note">
+          <i class="bx bx-info-circle"></i>
+          <p><strong>Catatan:</strong> Pengaturan ini hanya membatasi akun Operator KUA. Administrator tetap dapat menambah, mengubah, dan menghapus data BMN kapan saja.</p>
+        </div>
+      </div>
+
+      <footer class="bmn-settings-footer">
+        <span><i class="bx bx-cloud-check me-1"></i>Pengaturan tersimpan di Spreadsheet BIMASATU</span>
+        <button type="button" class="btn btn-primary" id="bmnSettingsDone">Selesai</button>
+      </footer>
+    </div>
+  `;
+  dlg.showModal();
+
+  const close = () => dlg.close();
+  $('bmnSettingsClose').onclick = close;
+  $('bmnSettingsDone').onclick = close;
+  dlg.onclose = () => {
+    dlg.className = '';
+    dlg.innerHTML = '';
+    dlg.onclose = null;
+  };
+
+  $('bmnAllowEntry').onchange = async event => {
+    const control = event.target;
+    const nextValue = control.checked;
+    const previousValue = !nextValue;
+    const state = $('bmnSettingsState');
+    const statusText = $('bmnSettingsStatusText');
+    const saveState = $('bmnSettingsSaveState');
+
+    control.disabled = true;
+    if (state) {
+      state.className = 'badge bg-label-info';
+      state.textContent = 'Menyimpan…';
+    }
+    if (saveState) saveState.textContent = 'Sedang menyimpan pengaturan ke Spreadsheet BIMASATU…';
+
+    try {
+      await gas('bmnSaveSetting', { key: 'allowDataEntry', value: nextValue });
+      BMN_UI.settings.allowDataEntry = nextValue;
+
+      if (state) {
+        state.className = 'badge ' + (nextValue ? 'bg-label-success' : 'bg-label-warning');
+        state.textContent = nextValue ? 'Input Aktif' : 'Input Ditutup';
+      }
+      if (statusText) statusText.textContent = nextValue
+        ? 'Input sedang dibuka untuk Operator KUA.'
+        : 'Input sedang ditutup. Operator hanya dapat melihat dan mengekspor data.';
+      if (saveState) saveState.textContent = 'Tersimpan otomatis.';
+      if ($('bmnAdd')) $('bmnAdd').disabled = !bmnCanWrite();
+      bmnRenderTable();
+      bmnNotice('Pengaturan input BMN berhasil disimpan.');
+    } catch (error) {
+      control.checked = previousValue;
+      if (state) {
+        state.className = 'badge ' + (previousValue ? 'bg-label-success' : 'bg-label-warning');
+        state.textContent = previousValue ? 'Input Aktif' : 'Input Ditutup';
+      }
+      if (statusText) statusText.textContent = previousValue
+        ? 'Input sedang dibuka untuk Operator KUA.'
+        : 'Input sedang ditutup. Operator hanya dapat melihat dan mengekspor data.';
+      if (saveState) saveState.textContent = 'Gagal menyimpan. Silakan coba lagi.';
+      bmnNotice(error.message || 'Pengaturan BMN gagal disimpan.', 'danger');
+    } finally {
+      control.disabled = false;
+    }
+  };
 }
 
 async function bmnLoad() {
