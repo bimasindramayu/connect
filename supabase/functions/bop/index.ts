@@ -430,7 +430,7 @@ async function bastHapus(url: URL) {
 
 
 // ---- BMN: <master>/BMN/<Satker>/<Kode Barang> ---------------------------------------------------------------
-const MAX_BMN = 10 * 1024 * 1024;
+const MAX_BMN = 5 * 1024 * 1024;
 const bmnNorm = (s: string) => s.toLowerCase().trim().replace(/^kua\s*(kec\.?|kecamatan)?\s*/, '').replace(/\s+/g, ' ');
 
 async function bmnFolder(auth: Auth, satker: string, kode: string, create: boolean) {
