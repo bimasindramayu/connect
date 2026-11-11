@@ -1,6 +1,8 @@
 /* BIMASATU - BMN frontend. Data: Google Spreadsheet via Apps Script; files: Drive master via Edge Function. */
 const BMN_UI = { rows: [], settings: { allowDataEntry: true }, busy: false };
-const bmnCanWrite = () => !!me && (me.role === 'admin' || me.role === 'operator');
+const bmnCanWrite = () => !!me && (
+  me.role === 'admin' || (me.role === 'operator' && BMN_UI.settings.allowDataEntry !== false)
+);
 const bmnIsAdmin = () => !!me && me.role === 'admin';
 const bmnSatkerDefault = () => me && me.role === 'operator' ? (me.kua || '') : '';
 
@@ -115,14 +117,19 @@ async function bmnLoad() {
   if (BMN_UI.busy) return;
   BMN_UI.busy = true;
   try {
+    const needsSettings = bmnIsAdmin() || me.role === 'operator';
     const [list, stats, settings] = await Promise.all([
-      gas('bmnList'), gas('bmnStats'), bmnIsAdmin() ? gas('bmnSettings') : Promise.resolve({ data: {} })
+      gas('bmnList'), gas('bmnStats'), needsSettings ? gas('bmnSettings') : Promise.resolve({ data: {} })
     ]);
     BMN_UI.rows = list.data || [];
     BMN_UI.settings = settings.data || { allowDataEntry: true };
     if (bmnIsAdmin() && $('bmnAllowEntry')) $('bmnAllowEntry').checked = BMN_UI.settings.allowDataEntry !== false;
+    if ($('bmnAdd')) $('bmnAdd').disabled = !bmnCanWrite();
     bmnRenderStats(stats.data || {});
     bmnRenderTable();
+    if (me.role === 'operator' && !bmnCanWrite()) {
+      bmnNotice('Admin sedang menutup input BMN. Anda tetap dapat melihat dan mengekspor data KUA.', 'warning');
+    }
   } catch (e) {
     bmnNotice(e.message || 'Gagal memuat data BMN.', 'danger');
     $('bmnTable').querySelector('tbody').innerHTML = `<tr><td colspan="11" class="text-center text-danger py-4">${esc(e.message)}</td></tr>`;
@@ -160,7 +167,7 @@ function bmnRenderTable() {
     const photos = bmnPhotoList(r);
     const actions = `<button class="btn btn-sm btn-outline-primary" data-bmn-view="${esc(r.id)}" title="Detail"><i class="bx bx-show"></i></button> ` +
       (bmnCanWrite() ? `<button class="btn btn-sm btn-outline-secondary" data-bmn-edit="${esc(r.id)}" title="Edit"><i class="bx bx-edit"></i></button>` : '') +
-      (bmnIsAdmin() ? ` <button class="btn btn-sm btn-outline-danger" data-bmn-delete="${esc(r.id)}" title="Hapus"><i class="bx bx-trash"></i></button>` : '');
+      (bmnCanWrite() ? ` <button class="btn btn-sm btn-outline-danger" data-bmn-delete="${esc(r.id)}" title="Hapus"><i class="bx bx-trash"></i></button>` : '');
     return `<tr><td>${i+1}</td><td>${esc(r.satker)}</td><td class="text-nowrap">${esc(r.kodeBarang)}</td><td class="bmn-name">${esc(r.namaBarang)}</td><td>${esc(r.jenis)}</td><td>${esc(r.tahunPerolehan)}</td><td class="text-nowrap">${bmnMoney(r.nilaiPerolehan)}</td><td>${bmnBadge(r.kondisi,'kondisi')}</td><td>${bmnBadge(r.status,'status')}</td><td>${photos.length ? `<span class="badge bg-label-info">${photos.length} file</span>` : '-'}</td><td class="text-nowrap">${actions}</td></tr>`;
   }).join('') : '<tr><td colspan="11" class="text-center text-body-secondary py-4">Belum ada data BMN sesuai filter.</td></tr>';
   $('bmnTable').querySelectorAll('[data-bmn-view]').forEach(b => b.onclick = () => bmnView(b.dataset.bmnView));
@@ -341,12 +348,14 @@ function bmnOpenFile(photo, photos = [photo]) {
   });
 }
 async function bmnDelete(id) {
-  const r=BMN_UI.rows.find(x=>x.id===id); if(!r || !confirm('Hapus data BMN "'+r.namaBarang+'"? Data yang dihapus tidak dapat dikembalikan dari aplikasi.'))return;
+  if (!bmnCanWrite()) return bmnNotice('Hak tambah, edit, dan hapus BMN sedang tidak diaktifkan oleh Admin.', 'warning');
+  const r = BMN_UI.rows.find(x => x.id === id);
+  if (!r || !confirm('Hapus data BMN "' + r.namaBarang + '" dari ' + r.satker + '? Lampiran di Google Drive tidak ikut dihapus dan tetap tersimpan sebagai arsip.')) return;
   try {
-    await gas('bmnDelete',{id});
-    bmnNotice('Data BMN dihapus. File Drive tidak ikut dihapus otomatis untuk menghindari kehilangan arsip.');
+    await gas('bmnDelete', { id });
+    bmnNotice('Data BMN berhasil dihapus. Lampiran Google Drive tetap tersimpan sebagai arsip.', 'success');
     await bmnLoad();
-  } catch(e){bmnNotice(e.message,'danger');}
+  } catch (e) { bmnNotice(e.message, 'danger'); }
 }
 
 async function bmnExport(format) {
