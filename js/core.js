@@ -144,15 +144,23 @@ async function api(q, opt = {}) {
   return r;
 }
 /* ====== Apps Script (Sertifikat, BAST NR): satu Spreadsheet, login memakai token Supabase (admin saja, diperiksa di server Apps Script) ====== */
-async function gasRaw(action, params = {}) {   // hasil apa adanya, termasuk { success: false, message } dari server; galat jaringan/format tetap dilempar
-  if (!CFG.gas) throw new Error('CFG.gas (URL Web App Apps Script) di index.html belum diisi.');
+async function gasRaw(action, params = {}) {   // Apps Script dipanggil melalui Edge Function agar browser tidak terkena CORS Google
   const { data: { session } } = await sb.auth.getSession();
   if (!session) throw new Error('Sesi habis. Silakan login ulang.');
+  const payload = { ...params, action, token: session.access_token };
   let r;
-  try { r = await fetch(CFG.gas, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...params, action, token: session.access_token }) }); }
-  catch { throw new Error('Tidak dapat menghubungi Apps Script. Periksa koneksi internet dan URL Web App (CFG.gas).'); }
+  try {
+    r = await fetch(`${CFG.url}/functions/v1/bop?action=gas`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + session.access_token, apikey: CFG.key, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch {
+    throw new Error('Tidak dapat menghubungi server BIMASATU (Supabase). Periksa koneksi internet dan deployment Edge Function bop.');
+  }
   const j = await r.json().catch(() => null);
-  if (!j) throw new Error(`Apps Script tidak merespons dengan benar (kode ${r.status}). Pastikan Web App sudah di-deploy dengan akses Anyone.`);
+  if (!j) throw new Error(`Server BIMASATU tidak merespons dengan benar (kode ${r.status}). Periksa deployment Edge Function bop.`);
+  if (!r.ok) throw new Error(j.message || j.error || `Server BIMASATU gagal (kode ${r.status}).`);
   return j;
 }
 async function gas(action, params = {}) {
