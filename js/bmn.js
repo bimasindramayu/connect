@@ -284,7 +284,7 @@ function bmnSortHeading(label, key, kind) {
   const active = current.key === key;
   const icon = active ? (current.dir === 'asc' ? 'bx-sort-up' : 'bx-sort-down') : 'bx-sort';
   const attr = kind === 'summary' ? 'data-bmn-sort-summary' : 'data-bmn-sort-table';
-  return '<button type="button" class="bmn-sort-button' + (active ? ' active' : '') + '" ' + attr + '="' + key + '" aria-label="Urutkan berdasarkan ' + esc(label) + '" title="Urutkan berdasarkan ' + esc(label) + '">' +
+  return '<button type="button" class="bmn-sort-button' + (active ? ' active' : '') + '" ' + attr + '="' + key + '" aria-label="Urutkan berdasarkan ' + esc(label) + '" title="Urutkan berdasarkan ' + esc(label) + '" aria-pressed="' + (active ? 'true' : 'false') + '">' +
     '<span>' + esc(label) + '</span><i class="bx ' + icon + '"></i></button>';
 }
 
@@ -365,28 +365,30 @@ function bmnRenderSatkerSummary() {
       <header class="bmn-summary-header">
         <div class="bmn-summary-heading">
           <span class="bmn-summary-heading-icon"><i class="bx bx-buildings"></i></span>
-          <div><h5>Ringkasan Data BMN per KUA</h5>
-            <p>Klik tombol Detail untuk melihat seluruh barang dari KUA terkait.</p></div>
+          <div class="bmn-summary-heading-copy">
+            <h5>Ringkasan Data BMN per KUA</h5>
+            <p>Klik Detail untuk melihat seluruh data barang dari KUA terkait.</p>
+          </div>
         </div>
-        <button type="button" class="btn btn-outline-secondary btn-sm" id="bmnSummaryAll"><i class="bx bx-list-ul me-1"></i> Semua Data BMN</button>
+        <button type="button" class="btn btn-sm btn-label-secondary" id="bmnSummaryAll"><i class="bx bx-list-ul me-1"></i> Semua Data BMN</button>
       </header>
 
       <div class="bmn-summary-stats">
         <article class="bmn-summary-stat success">
           <span class="bmn-summary-stat-icon"><i class="bx bx-check-circle"></i></span>
-          <div><strong>${sudahIsi}</strong><span>KUA Sudah Mengisi</span></div>
+          <div class="bmn-summary-stat-content"><span class="bmn-summary-stat-label">KUA Sudah Mengisi</span><strong class="bmn-summary-stat-value">${sudahIsi}</strong></div>
         </article>
         <article class="bmn-summary-stat warning">
           <span class="bmn-summary-stat-icon"><i class="bx bx-time-five"></i></span>
-          <div><strong>${belumIsi}</strong><span>KUA Belum Mengisi</span></div>
+          <div class="bmn-summary-stat-content"><span class="bmn-summary-stat-label">KUA Belum Mengisi</span><strong class="bmn-summary-stat-value">${belumIsi}</strong></div>
         </article>
         <article class="bmn-summary-stat primary">
           <span class="bmn-summary-stat-icon"><i class="bx bx-buildings"></i></span>
-          <div><strong>${totalKUA}</strong><span>Total KUA</span></div>
+          <div class="bmn-summary-stat-content"><span class="bmn-summary-stat-label">Total KUA</span><strong class="bmn-summary-stat-value">${totalKUA}</strong></div>
         </article>
         <article class="bmn-summary-stat neutral">
           <span class="bmn-summary-stat-icon"><i class="bx bx-package"></i></span>
-          <div><strong>${totalItems.toLocaleString('id-ID')}</strong><span>Total Item BMN</span></div>
+          <div class="bmn-summary-stat-content"><span class="bmn-summary-stat-label">Total Item BMN</span><strong class="bmn-summary-stat-value">${totalItems.toLocaleString('id-ID')}</strong></div>
         </article>
       </div>
 
@@ -427,7 +429,7 @@ function bmnRenderSatkerSummary() {
               <td class="text-center">${item.berat ? '<span class="bmn-summary-condition bad">' + item.berat + '</span>' : '<span class="bmn-summary-dash">—</span>'}</td>
               <td class="text-nowrap"><span class="bmn-summary-date">${esc(bmnDateLabel(item.lastUpdate))}</span></td>
               <td class="text-center"><span class="bmn-summary-status-pill ${filled ? 'is-filled' : 'is-empty'}">${filled ? '<i class="bx bx-check-circle"></i> Mengisi' : '<i class="bx bx-time-five"></i> Menunggu'}</span></td>
-              <td class="text-center">${filled ? '<button type="button" class="bmn-summary-action" data-bmn-summary-detail="' + esc(item.key) + '">Detail <i class="bx bx-right-arrow-alt"></i></button>' : '<span class="bmn-summary-disabled">Detail</span>'}</td>
+              <td class="text-center">${filled ? '<button type="button" class="btn btn-sm btn-label-primary bmn-summary-action" data-bmn-summary-detail="' + esc(item.key) + '"><i class="bx bx-detail me-1"></i>Detail</button>' : '<button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-disabled="true">Detail</button>'}</td>
             </tr>`;
           }).join('') : '<tr><td colspan="9" class="text-center text-body-secondary py-4">Tidak ada KUA yang sesuai pencarian.</td></tr>'}</tbody>
         </table>
