@@ -553,7 +553,7 @@ function bmnFormHtml(row) {
     return `<div class="bmn-attachment-card">
       <span class="bmn-attachment-icon ${isPdf ? 'pdf' : 'image'}"><i class="bx ${icon}"></i></span>
       <span class="bmn-attachment-meta"><strong title="${esc(photo.fileName || 'Lampiran ' + (i + 1))}">${esc(photo.fileName || 'Lampiran ' + (i + 1))}</strong>
-        <small>${pending ? 'Masih menunggu migrasi' : 'Tersimpan di Drive BIMASATU'}</small></span>
+        <small>${pending ? 'Belum tersedia di Drive BIMASATU' : 'Tersimpan di Drive BIMASATU'}</small></span>
       <button type="button" class="bmn-attachment-remove" data-bmn-remove-photo="${i}" title="Lepas dari data BMN" aria-label="Lepas lampiran"><i class="bx bx-x"></i></button>
     </div>`;
   }).join('') : '<div class="bmn-attachment-empty">Belum ada lampiran tersimpan.</div>';
@@ -698,7 +698,7 @@ function bmnOpenForm(row) {
       return `<div class="bmn-attachment-card">
         <span class="bmn-attachment-icon ${isPdf ? 'pdf' : 'image'}"><i class="bx ${isPdf ? 'bx-file-pdf' : 'bx-image'}"></i></span>
         <span class="bmn-attachment-meta"><strong title="${esc(photo.fileName || 'Lampiran')}">${esc(photo.fileName || 'Lampiran')}</strong>
-          <small>${pending ? 'Menunggu migrasi' : 'Tersimpan di Drive BIMASATU'}</small></span>
+          <small>${pending ? 'Belum tersedia di Drive BIMASATU' : 'Tersimpan di Drive BIMASATU'}</small></span>
         <button type="button" class="bmn-attachment-remove" data-bmn-remove-photo="${i}" title="Lepas dari data BMN"><i class="bx bx-x"></i></button>
       </div>`;
     }).join('') : '<div class="bmn-attachment-empty">Belum ada lampiran tersimpan.</div>';
@@ -845,7 +845,7 @@ async function bmnView(id) {
     const isImage = mime.startsWith('image/');
     const icon = isPdf ? 'bx-file-pdf' : (isImage ? 'bx-image' : 'bx-file');
     const ext = isPdf ? 'PDF' : (mime === 'image/jpeg' ? 'JPG' : (mime === 'image/png' ? 'PNG' : ((p.fileName || '').split('.').pop() || 'FILE').toUpperCase()));
-    return `<button type="button" class="bmn-file-card text-start" data-bmn-photo="${i}" aria-label="${pending ? 'Dokumen menunggu migrasi' : 'Lihat pratinjau ' + esc(p.fileName || 'dokumen')}" ${pending ? 'disabled' : ''}>
+    return `<button type="button" class="bmn-file-card text-start" data-bmn-photo="${i}" aria-label="${pending ? 'Dokumen belum tersedia di Drive BIMASATU' : 'Lihat pratinjau ' + esc(p.fileName || 'dokumen')}" ${pending ? 'disabled' : ''}>
       <span class="bmn-file-icon ${isPdf ? 'pdf' : (isImage ? 'image' : 'other')}"><i class="bx ${icon}"></i></span>
       <span class="bmn-file-meta"><strong title="${esc(p.fileName || 'Dokumen ' + (i + 1))}">${esc(p.fileName || 'Dokumen ' + (i + 1))}</strong>
         <small><span class="bmn-file-type">${esc(ext)}</span><span class="bmn-file-dot">•</span>${pending ? 'Belum dipindahkan' : 'Tersimpan di Drive BIMASATU'}</small></span>
@@ -898,7 +898,7 @@ async function bmnView(id) {
 
 function bmnOpenFile(photo, photos = [photo]) {
   if (!photo || photo.migrationStatus === 'pending' || !photo.fileId) {
-    return bmnNotice('Dokumen ini masih berada di lokasi lama. Admin perlu menyelesaikan migrasi ke folder BIMASATU/BMN terlebih dahulu.', 'warning');
+    return bmnNotice('Dokumen ini belum tersedia di folder arsip BIMASATU. Hubungi Admin untuk pemeriksaan lebih lanjut.', 'warning');
   }
   // Pola penampil sama dengan LPJ BOP: file diambil melalui Edge Function,
   // lalu openViewer menangani PDF multi-halaman maupun gambar dengan zoom/putar.
