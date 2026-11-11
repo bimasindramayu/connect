@@ -35,7 +35,7 @@ const MENU_DEF = [
     ['impor', 'Impor Data Lama', 'Mengambil data dari sistem lama. Khusus Admin.'],
     ['laporan', 'Laporan', 'Unduh laporan Excel/PDF. Operator KUA: KUA-nya sendiri; peran lain: semua KUA.']]],
   ['BMN', [
-    ['bmn', 'Barang Milik Negara', 'Dashboard, inventaris aset, foto/dokumen barang, filter, ekspor Excel/PDF. Operator KUA dibatasi pada KUA sendiri; Admin dapat mengelola seluruh Satker.']]],
+    ['bmn', 'Barang Milik Negara', 'Dashboard, inventaris aset, foto/dokumen barang, filter, ekspor Excel/PDF. Operator KUA dapat menambah, mengubah, dan menghapus BMN pada KUA sendiri selama izin input diaktifkan Admin; Admin dapat mengelola seluruh Satker.']]],
   ['BAST NR', [
     ['bast', 'Riwayat', 'Daftar Berita Acara, status SIMKAH, dan arsip dokumen tertandatangan (lihat, unggah, hapus).'],
     ['bast-buat', 'Buat BA', 'Membuat Berita Acara baru.'],
