@@ -50,6 +50,10 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 // Nama aplikasi = nama folder master di Google Drive. Samakan dengan CFG.nama di js/config.js dan APP_NAME di bop.mjs.
 const APP_NAME = 'BIMASATU';
 
+// URL Web App Apps Script BIMASATU. Samakan dengan CFG.gas di js/config.js.
+// Dapat dioverride tanpa mengubah kode: npx supabase secrets set BIMASATU_GAS_URL=<URL_WEB_APP_EXEC>
+const GAS_WEB_APP_URL = Deno.env.get('BIMASATU_GAS_URL') || 'https://script.google.com/macros/s/AKfycbzD36oRsvupE23S5MVbpl179Npwjuv8iyWTMyEyykAOfMTvgzpEOaPrUUWrK8GhynaY5Q/exec';
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
@@ -529,7 +533,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   try {
     const url = new URL(req.url), action = url.searchParams.get('action') ?? '';
-    const POST = ['upload', 'delete', 'reset-password', 'buat-akun', 'ubah-akun', 'impor-lpj', 'bast-upload', 'bast-salin', 'bast-hapus', 'bmn-upload', 'bmn-salin', 'bmn-hapus'];
+    const POST = ['upload', 'delete', 'reset-password', 'buat-akun', 'ubah-akun', 'impor-lpj', 'bast-upload', 'bast-salin', 'bast-hapus', 'bmn-upload', 'bmn-salin', 'bmn-hapus', 'gas'];
     if (![...POST, 'list', 'file', 'bast-file', 'bmn-file'].includes(action)) return json({ error: 'Aksi tidak dikenal.' }, 400);
     if (POST.includes(action) !== (req.method === 'POST')) return json({ error: 'Metode tidak didukung.' }, 405);
     const own = action === 'upload' || action === 'delete';   // mengubah dokumen LPJ: hanya Operator KUA, untuk KUA-nya sendiri
@@ -545,6 +549,49 @@ Deno.serve(async (req) => {
     const { data: prof } = await db.from('profiles').select('nama, role, kua_id').eq('id', user.id).maybeSingle();
     if (!prof) return json({ error: 'Profil tidak ditemukan.' }, 403);
     const me: Me = { id: user.id, nama: prof.nama, role: prof.role, kua_id: prof.kua_id };
+
+    // Proxy Apps Script: browser -> Edge Function -> Web App. Token tetap diverifikasi lagi oleh Apps Script,
+    // termasuk peran dan hak akses menu; token di body wajib sama dengan Bearer token pemanggil.
+    if (action === 'gas') {
+      const parsed = await req.json().catch(() => null);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return json({ success: false, code: 'BAD_REQUEST', message: 'Isi permintaan Apps Script tidak valid.' }, 400);
+      }
+      const payload = parsed as Record<string, unknown>;
+      if (payload.token !== jwt) {
+        return json({ success: false, code: 'AUTH', message: 'Token Apps Script tidak sama dengan sesi login.' }, 401);
+      }
+      if (typeof payload.action !== 'string' || !/^[A-Za-z][A-Za-z0-9]{0,79}$/.test(payload.action)) {
+        return json({ success: false, code: 'BAD_REQUEST', message: 'Nama aksi Apps Script tidak valid.' }, 400);
+      }
+      try {
+        const upstream = await fetch(GAS_WEB_APP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload),
+          redirect: 'follow',
+        });
+        const raw = await upstream.text();
+        let result: unknown;
+        try { result = JSON.parse(raw); }
+        catch {
+          return json({
+            success: false, code: 'APPS_SCRIPT_RESPONSE',
+            message: 'Apps Script tidak mengembalikan JSON. Periksa URL Web App dan pastikan deployment memiliki akses Anyone.',
+          }, 502);
+        }
+        if (!upstream.ok) {
+          const detail = result && typeof result === 'object' ? String((result as Record<string, unknown>).message || (result as Record<string, unknown>).error || '') : '';
+          return json({ success: false, code: 'APPS_SCRIPT_HTTP', message: detail || `Apps Script gagal merespons (HTTP ${upstream.status}).` }, 502);
+        }
+        return json(result);
+      } catch (e) {
+        return json({
+          success: false, code: 'APPS_SCRIPT_NETWORK',
+          message: 'Edge Function tidak dapat menghubungi Apps Script: ' + ((e as Error).message || 'kesalahan jaringan.'),
+        }, 502);
+      }
+    }
 
     if (action === 'reset-password') return await resetPassword(db, me, req);
     if (action === 'buat-akun') return await buatAkun(db, me, req);
