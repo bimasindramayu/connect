@@ -20,6 +20,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const note = (t, type = 'danger') => `<div class="alert alert-${type} py-2">${esc(t)}</div>`;
 let me = null, token = null, wid = null;
 let EP = 0;   // nomor halaman aktif: naik tiap pindah menu. Hasil await dari halaman lama diabaikan (cek live) agar tidak menulis ke layar yang sudah diganti
+let REFRESH_PAGE_DATA = false; // true hanya saat tombol global meminta data terbaru dari server
+let REFRESH_PAGE_BUSY = false;
 const live = ep => ep === EP;
 
 /* ====== Peran dan hak akses menu ======
@@ -127,7 +129,43 @@ function route() {
   $('view').classList.toggle('d-none', sv); $('sertView').classList.toggle('d-none', !sv);
   $('view').classList.toggle('bop', !/^(jaspro|bast|bmn|sert-)/.test(k));   // pewarnaan khusus halaman BOP dan akun (css/app.css)
   $('view').classList.toggle('bmn', k === 'bmn'); // namespace CSS khusus halaman BMN (css/bmn.css)
-  pages[k]();
+  // BMN sudah memiliki tombol Muat Ulang di toolbar halamannya sendiri.
+  $('pageRefresh')?.classList.toggle('d-none', k === 'bmn');
+  return pages[k]();
+}
+
+async function refreshCurrentPage() {
+  const button = $('pageRefresh');
+  if (!me || !button || REFRESH_PAGE_BUSY) return;
+
+  REFRESH_PAGE_BUSY = true;
+  button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  button.querySelector('i')?.classList.add('bx-spin');
+
+  try {
+    // Data master BOP biasanya di-cache selama sesi; hapus agar konfigurasi/KUA/POS ikut diperbarui.
+    if (typeof M !== 'undefined') {
+      delete M.kua;
+      delete M.pos;
+      delete M.cfg;
+    }
+    REFRESH_PAGE_DATA = true;
+    await route();
+  } catch (error) {
+    const message = error?.message || 'Terjadi kesalahan saat memuat ulang halaman.';
+    if (typeof jpToast === 'function') jpToast('Gagal memuat data terbaru: ' + message, 'danger');
+    else {
+      const target = $('sertView').classList.contains('d-none') ? $('view') : $('sertView');
+      target.insertAdjacentHTML('afterbegin', note('Gagal memuat data terbaru: ' + message));
+    }
+  } finally {
+    REFRESH_PAGE_DATA = false;
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    button.querySelector('i')?.classList.remove('bx-spin');
+    REFRESH_PAGE_BUSY = false;
+  }
 }
 const rp = n => String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const num = s => parseInt(String(s).replace(/\D/g, '') || '0', 10);
