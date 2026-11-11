@@ -42,7 +42,7 @@ function bmnPhotoList(row) {
   return Array.isArray(row.fotos) ? row.fotos : [];
 }
 function bmnNormalizeSatker(value) {
-  return String(value || '').trim().toLowerCase().replace(/^kua\\s*(kec\\.?|kecamatan)?\\s*/i, '').replace(/\\s+/g, ' ');
+  return String(value || '').trim().toLowerCase().replace(/^kua\s*(kec\.?|kecamatan)?\s*/i, '').replace(/\s+/g, ' ');
 }
 function bmnKodeBarangPreview(satker, jenis) {
   const key = bmnNormalizeSatker(satker);
