@@ -298,7 +298,7 @@ function bmnFormHtml(row) {
               <label for="bmnTahun">Tahun Perolehan <em>*</em></label>
               <input id="bmnTahun" type="number" class="form-control bmn-form-control" name="tahunPerolehan"
                 min="1900" max="2100" step="1" inputmode="numeric"
-                value="${esc(r.tahunPerolehan || new Date().getFullYear())}" required>
+                value="${esc(isEdit ? (r.tahunPerolehan || '') : new Date().getFullYear())}" required>
               <small class="bmn-form-help">Hanya angka tahun, 1900–2100.</small>
             </div>
             <div class="bmn-form-field">
