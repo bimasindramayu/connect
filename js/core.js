@@ -75,6 +75,19 @@ function applyMenus() {
   const side = $('side');
   side.querySelectorAll('[data-menu]').forEach(a => a.classList.toggle('d-none', !can(a.dataset.menu)));
   side.querySelectorAll('details').forEach(g => g.classList.toggle('d-none', !g.querySelector('[data-menu]:not(.d-none)')));
+
+  // Label tooltip + nama aksesibel tetap tersedia saat sidebar dipadatkan menjadi ikon.
+  side.querySelectorAll('.nav-link, summary').forEach(el => {
+    const label = Array.from(el.childNodes)
+      .filter(n => n.nodeType === 3)
+      .map(n => n.textContent.trim())
+      .filter(Boolean)
+      .join(' ');
+    if (label) {
+      el.title = label;
+      el.setAttribute('aria-label', label);
+    }
+  });
   $('dbWarn').classList.toggle('d-none', !(menuLama && me.role === 'admin'));
 }
 
@@ -109,7 +122,16 @@ async function boot(session) {
 // Menu samping: layar lebar = sembunyikan/tampilkan (pilihan diingat di browser ini); layar sempit = geser masuk/keluar.
 // Daftar menu dapat digulir bila submenu yang dibuka lebih panjang daripada layar (CSS #side overflow-y).
 const SIDE_KEY = 'jalin.side', wideScreen = () => innerWidth >= 992;
-const syncSide = () => $('burger').setAttribute('aria-expanded', String(wideScreen() ? !document.body.classList.contains('side-off') : $('side').classList.contains('open')));
+const syncSide = () => {
+  const btn = $('burger'), wide = wideScreen();
+  const expanded = wide ? !document.body.classList.contains('side-mini') : $('side').classList.contains('open');
+  const label = wide
+    ? (expanded ? 'Ciutkan menu menjadi ikon' : 'Tampilkan menu lengkap')
+    : (expanded ? 'Tutup menu navigasi' : 'Buka menu navigasi');
+  btn.setAttribute('aria-expanded', String(expanded));
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+};
 
 const pages = {};
 function route() {
