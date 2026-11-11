@@ -349,7 +349,7 @@ function bmnImportLegacy_() {
     });
 
     var satker = String(r.kua || r.satker || '').trim();
-    if (satker && !/^(KUA\\b|MIN\\b|MTSN\\b|MAN\\b)/i.test(satker)) satker = 'KUA ' + satker;
+    if (satker && !/^(KUA\b|MIN\b|MTSN\b|MAN\b)/i.test(satker)) satker = 'KUA ' + satker;
     var jenis = String(r.jenis || '').trim();
     if (BMN_JENIS_.indexOf(jenis) < 0) jenis = 'Aset Lainnya';
     var kondisi = String(r.kondisi || 'Baik').trim();
