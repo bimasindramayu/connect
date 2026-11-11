@@ -60,7 +60,7 @@ async function pageBMN() {
     ${bmnIsAdmin() ? `<div class="card mt-3"><div class="card-body">
       <h6 class="mb-2">Pengaturan dan migrasi data lama</h6>
       <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" role="switch" id="bmnAllowEntry"><label class="form-check-label" for="bmnAllowEntry">Izinkan Operator KUA menambah/mengubah data BMN</label></div>
-      <div class="row g-2 align-items-end"><div class="col-12 col-md-8"><label class="form-label" for="bmnLegacyId">ID Spreadsheet BMN lama (project entry)</label><input id="bmnLegacyId" class="form-control" placeholder="ID dari URL Google Spreadsheet lama"></div><div class="col-12 col-md-auto"><button class="btn btn-outline-primary" id="bmnImport">Impor data lama</button></div></div>
+      <div class="d-flex flex-wrap align-items-center gap-2"><button class="btn btn-outline-primary" id="bmnImport">Impor data BMN lama</button><span class="small text-body-secondary">Sumber: Apps Script lama (sudah dikonfigurasi).</span></div>
       <div class="small text-body-secondary mt-2">Impor aman diulang: ID barang yang sudah ada dilewati. Foto lama ditandai untuk disalin ke Drive BIMASATU.</div>
       <div class="mt-2"><button class="btn btn-outline-warning btn-sm" id="bmnMigratePhotos">Salin foto lama ke Drive BIMASATU</button></div>
     </div></div>` : ''}
@@ -249,13 +249,11 @@ async function bmnExport(format) {
 }
 
 async function bmnImportLegacy() {
-  const id=$('bmnLegacyId').value.trim();
-  if(!id)return bmnNotice('Masukkan ID spreadsheet lama terlebih dahulu.','warning');
-  if(!confirm('Impor data BMN dari spreadsheet lama? Data pada BIMASATU yang sudah ada tidak akan ditimpa.'))return;
+  if(!confirm('Impor data BMN dari Apps Script lama yang sudah dikonfigurasi? Data pada BIMASATU yang sudah ada tidak akan ditimpa.'))return;
   try {
-    const result=await gas('bmnImportLegacy',{spreadsheetId:id});
+    const result=await gas('bmnImportLegacy',{});
     const d=result.data||{};
-    bmnNotice('Impor selesai. Masuk: '+d.imported+', dilewati: '+d.skipped+', foto menunggu migrasi: '+d.fotoPending+'.');
+    bmnNotice('Impor selesai. Sumber: '+(d.sourceCount || 0)+' baris; masuk: '+d.imported+', dilewati: '+d.skipped+', foto menunggu migrasi: '+d.fotoPending+'.'+(d.errors && d.errors.length ? ' Sebagian gagal: '+d.errors.join(' | ') : ''));
     await bmnLoad();
   } catch(e){bmnNotice(e.message,'danger');}
 }
