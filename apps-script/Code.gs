@@ -249,7 +249,7 @@ function periksaToken_(token) {
   if (isi.exp && Number(isi.exp) <= sekarang) throw galat_('AUTH', PESAN_SESI_ + ' (token kedaluwarsa)');
 
   const cache = CacheService.getScriptCache();
-  const kunci = 'sb2_' + sha256Hex_(token);   // awalan sb2_: isi cache berubah bentuk (ada menus), jadi cache versi lama tidak terbaca
+  const kunci = 'sb3_' + sha256Hex_(token);   // awalan sb3_: konteks pengguna kini menyertakan KUA dan kua_id, cache lama tanpa KUA tidak dipakai
   const ada = cache.get(kunci);
   if (ada === 'x') throw galat_('AUTH', PESAN_SESI_ + ' (token ditolak Supabase beberapa saat lalu)');
   if (ada) return JSON.parse(ada);
