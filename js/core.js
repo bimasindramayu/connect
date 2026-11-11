@@ -126,6 +126,7 @@ function route() {
   const sv = k === 'sert-masjid' || k === 'sert-kiblat' || k === 'sert-pengaturan';   // modul Sertifikat punya wadah sendiri (#sertView), tidak ditimpa innerHTML #view
   $('view').classList.toggle('d-none', sv); $('sertView').classList.toggle('d-none', !sv);
   $('view').classList.toggle('bop', !/^(jaspro|bast|bmn|sert-)/.test(k));   // pewarnaan khusus halaman BOP dan akun (css/app.css)
+  $('view').classList.toggle('bmn', k === 'bmn'); // namespace CSS khusus halaman BMN (css/bmn.css)
   pages[k]();
 }
 const rp = n => String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
