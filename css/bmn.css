@@ -528,4 +528,18 @@
   #view.bmn .bmn-summary-stat-label{font-size:.68rem}
   #view.bmn .bmn-summary-stat-value{font-size:1.25rem}
 }
+#view.bmn .bmn-summary-action.btn-label-primary{
+  border-color:transparent;
+  background-color:#e7e7ff;
+  color:#696cff;
+}
+#view.bmn .bmn-summary-action.btn-label-primary:hover,
+#view.bmn .bmn-summary-action.btn-label-primary:focus-visible{
+  border-color:#696cff;
+  background-color:#696cff;
+  color:#fff;
+}
+#view.bmn .bmn-summary-action.btn-label-primary:focus-visible{
+  box-shadow:0 0 0 .2rem rgba(105,108,255,.18);
+}
 
