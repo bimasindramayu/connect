@@ -1,0 +1,12 @@
+#view.bmn .bmn-name{min-width:180px;white-space:normal}
+#view.bmn .bmn-detail-item{background:var(--bs-tertiary-bg);border-radius:.5rem;padding:.7rem .85rem;height:100%}
+#view.bmn .table th{font-size:.76rem;white-space:nowrap}
+#view.bmn .table td{font-size:.82rem}
+#view.bmn .table .badge{font-size:.7rem}
+#dlg.wide{max-width:min(920px,96vw);width:96vw;max-height:92vh;overflow:auto}
+#dlg.wide form .form-label{font-size:.82rem;font-weight:600}
+@media(max-width:767.98px){
+ #view.bmn .card-body{padding:1rem}
+ #view.bmn .table{min-width:1050px}
+ #dlg.wide{width:100%;max-width:100%;max-height:96vh;margin:auto 0}
+}
