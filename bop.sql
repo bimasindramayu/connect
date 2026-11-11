@@ -101,6 +101,21 @@ create policy "baca profil sendiri atau admin" on public.profiles
   for select to authenticated
   using (id = auth.uid() or public.is_admin());
 
+-- Pengguna dapat mengubah nama profilnya sendiri, tanpa akses mengubah role/KUA/kolom lain.
+create or replace function public.profile_update_nama(p_nama text) returns void
+language plpgsql security definer set search_path = public as $
+begin
+  if auth.uid() is null then raise exception 'Sesi tidak valid.'; end if;
+  if p_nama is null or length(btrim(p_nama)) = 0 or length(btrim(p_nama)) > 100 then
+    raise exception 'Nama wajib diisi (maksimal 100 karakter).';
+  end if;
+  update public.profiles set nama = btrim(p_nama) where id = auth.uid();
+  if not found then raise exception 'Profil akun tidak ditemukan.'; end if;
+end $;
+revoke all on function public.profile_update_nama(text) from public, anon;
+grant execute on function public.profile_update_nama(text) to authenticated;
+
+
 -- profil dibuat otomatis saat akun dibuat (data dari user_metadata); kua_id dicari dari nama KUA (hanya untuk operator).
 -- Peran tidak dikenal = operator. PENTING: pendaftaran mandiri Supabase harus dimatikan, karena trigger ini memercayai metadata.
 create or replace function public.handle_new_user() returns trigger
