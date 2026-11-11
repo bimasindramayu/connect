@@ -1,5 +1,9 @@
 /* BIMASATU - BMN frontend. Data: Google Spreadsheet via Apps Script; files: Drive master via Edge Function. */
-const BMN_UI = { rows: [], settings: { allowDataEntry: true }, busy: false };
+const BMN_UI = {
+  rows: [], settings: { allowDataEntry: true }, busy: false,
+  summaryActive: false, summaryDetail: false, summarySearch: '', summaryStatus: '',
+  summarySort: { key: 'kua', dir: 'asc' }, tableSort: { key: 'updatedAt', dir: 'desc' }
+};
 const BMN_JENIS_FORM = ['Tanah', 'Gedung/Bangunan', 'Kendaraan', 'Peralatan & Mesin', 'Aset Lainnya'];
 const BMN_SUMBER_FORM = ['APBN', 'APBD', 'Hibah', 'Swadaya', 'Bantuan'];
 const BMN_KONDISI_FORM = ['Baik', 'Rusak Ringan', 'Rusak Berat'];
@@ -95,70 +99,66 @@ function bmnMimeType(photo) {
 }
 
 async function pageBMN() {
+  BMN_UI.summaryActive = false;
+  BMN_UI.summaryDetail = false;
   $('view').innerHTML = `
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
       <div><h4 class="mb-1"><i class="bx bx-building me-1"></i>Barang Milik Negara</h4>
         <div class="text-body-secondary small">Inventaris BMN Satker · Database Google Spreadsheet BIMASATU</div></div>
       <div class="d-flex gap-2 flex-wrap">
+        ${bmnIsAdmin() ? '<button class="btn btn-outline-primary btn-sm" id="bmnSummaryToggle"><i class="bx bx-grid-alt me-1"></i> Summary KUA</button><button class="btn btn-outline-secondary btn-sm d-none" id="bmnBackSummary"><i class="bx bx-arrow-back me-1"></i> Kembali ke Summary</button>' : ''}
         <button class="btn btn-outline-success btn-sm" id="bmnRefresh"><i class="bx bx-refresh"></i> Muat ulang</button>
         <button class="btn btn-primary btn-sm" id="bmnAdd" ${bmnCanWrite() ? '' : 'disabled'}><i class="bx bx-plus"></i> Tambah BMN</button>
       </div>
     </div>
     <div id="bmnMessage"></div>
-    <div class="row g-3 mb-3" id="bmnStats">
-      ${['Total Barang','Kondisi Baik','Rusak Ringan','Rusak Berat'].map(x => `<div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-body-secondary small">${x}</div><div class="placeholder-glow"><span class="placeholder col-4"></span></div></div></div></div>`).join('')}
-    </div>
-    ${bmnIsAdmin() ? '<div id="bmnSatkerSummary" class="mb-3" aria-live="polite"></div>' : ''}
-    <div class="card mb-3"><div class="card-body">
-      <div class="row g-2 align-items-end">
-        <div class="col-12 col-md-3 ${me.role === 'operator' ? 'd-none' : ''}">
-          <label class="form-label" for="bmnFilterSatker">Satker / KUA</label>
-          <select class="form-select" id="bmnFilterSatker"><option value="">Semua Satker</option></select>
-        </div>
-        <div class="col-6 col-md-2"><label class="form-label" for="bmnFilterJenis">Jenis</label>
-          <select class="form-select" id="bmnFilterJenis"><option value="">Semua jenis</option><option>Tanah</option><option>Gedung/Bangunan</option><option>Kendaraan</option><option>Peralatan & Mesin</option><option>Aset Lainnya</option></select></div>
-        <div class="col-6 col-md-2"><label class="form-label" for="bmnFilterKondisi">Kondisi</label>
-          <select class="form-select" id="bmnFilterKondisi"><option value="">Semua kondisi</option><option>Baik</option><option>Rusak Ringan</option><option>Rusak Berat</option></select></div>
-        <div class="col-6 col-md-2"><label class="form-label" for="bmnFilterStatus">Status</label>
-          <select class="form-select" id="bmnFilterStatus"><option value="">Semua status</option><option>Digunakan</option><option>Tidak Digunakan</option><option>Diusulkan Penghapusan</option></select></div>
-        <div class="col-12 col-md"><label class="form-label" for="bmnSearch">Cari barang</label><input class="form-control" id="bmnSearch" placeholder="Kode, nama, ID BMN, lokasi…"></div>
+
+    ${bmnIsAdmin() ? '<section id="bmnSatkerSummary" class="bmn-summary-view d-none" aria-live="polite"></section>' : ''}
+
+    <div id="bmnTableView">
+      <div class="row g-3 mb-3" id="bmnStats">
+        ${['Total Barang','Kondisi Baik','Rusak Ringan','Rusak Berat'].map(x => `<div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-body-secondary small">${x}</div><div class="placeholder-glow"><span class="placeholder col-4"></span></div></div></div></div>`).join('')}
       </div>
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
-        <div class="small text-body-secondary" id="bmnCount"></div>
-        <div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-success btn-sm" id="bmnExcel">Ekspor Excel</button><button class="btn btn-outline-danger btn-sm" id="bmnPdf">Ekspor PDF</button></div>
-      </div>
-    </div></div>
-    <div class="card"><div class="table-responsive"><table class="table table-hover align-middle mb-0" id="bmnTable">
-      <thead><tr><th>No</th><th>Satker</th><th>Kode Barang</th><th>Nama Barang</th><th>Jenis</th><th>Tahun</th><th>Nilai</th><th>Kondisi</th><th>Status</th><th>Foto</th><th>Aksi</th></tr></thead>
-      <tbody><tr><td colspan="11" class="text-center py-4 text-body-secondary">Memuat data…</td></tr></tbody>
-    </table></div></div>
-    ${bmnIsAdmin() ? `<div class="card mt-3" id="bmnMigrationCard"><div class="card-body">
-      <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
-        <div><h5 class="mb-1"><i class="bx bx-transfer-alt me-1"></i> Pusat Migrasi Data BMN</h5><div class="small text-body-secondary">Migrasi bertahap dari aplikasi BMN lama ke penyimpanan BIMASATU.</div></div>
-        <span class="badge bg-label-info">Khusus Admin</span>
-      </div>
-      <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" role="switch" id="bmnAllowEntry"><label class="form-check-label" for="bmnAllowEntry">Izinkan Operator KUA menambah/mengubah data BMN</label></div>
-      <div class="bmn-migration-step">
-        <div class="d-flex gap-3 align-items-start"><span class="bmn-step-number">1</span><div class="flex-grow-1">
-          <div class="fw-semibold">Impor data barang</div><div class="small text-body-secondary mb-2">Membaca Spreadsheet BMN lama dan menyalin data barang ke sheet BMN_Data pada Spreadsheet BIMASATU. ID yang sudah ada tidak ditimpa.</div>
-          <div class="d-flex flex-wrap align-items-center gap-2"><button class="btn btn-primary btn-sm" id="bmnImport"><i class="bx bx-import me-1"></i> Mulai / Ulangi Impor</button><span class="small text-body-secondary" id="bmnImportState">Belum ada proses pada sesi ini.</span></div>
-        </div></div>
-      </div>
-      <div class="bmn-migration-step mt-3">
-        <div class="d-flex gap-3 align-items-start"><span class="bmn-step-number">2</span><div class="flex-grow-1">
-          <div class="fw-semibold">Salin foto dan dokumen</div><div class="small text-body-secondary mb-2">Menyalin berkas lama ke folder Google Drive BIMASATU/BMN. File di lokasi lama tetap dipertahankan.</div>
-          <div class="row g-2 mb-2" id="bmnMigrationStats">
-            <div class="col-4"><div class="bmn-migration-stat"><div class="small text-body-secondary">Menunggu</div><div class="fw-semibold" id="bmnPendingCount">0</div></div></div>
-            <div class="col-4"><div class="bmn-migration-stat"><div class="small text-body-secondary">Sudah disalin</div><div class="fw-semibold" id="bmnDoneCount">0</div></div></div>
-            <div class="col-4"><div class="bmn-migration-stat"><div class="small text-body-secondary">Total berkas</div><div class="fw-semibold" id="bmnTotalPhotoCount">0</div></div></div>
+      <div class="card mb-3"><div class="card-body">
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md-3 ${me.role === 'operator' ? 'd-none' : ''}">
+            <label class="form-label" for="bmnFilterSatker">Satker / KUA</label>
+            <select class="form-select" id="bmnFilterSatker"><option value="">Semua Satker</option></select>
           </div>
-          <div class="progress mb-2" style="height:8px"><div class="progress-bar" id="bmnPhotoProgress" role="progressbar" style="width:0%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div></div>
-          <div class="d-flex flex-wrap align-items-center gap-2"><button class="btn btn-outline-warning btn-sm" id="bmnMigratePhotos"><i class="bx bx-cloud-upload me-1"></i> Salin / Lanjutkan Foto</button><span class="small text-body-secondary" id="bmnPhotoState">Belum ada foto yang diproses.</span></div>
-        </div></div>
-      </div>
-      <div class="alert alert-light border small mt-3 mb-0"><i class="bx bx-info-circle me-1"></i> Urutan yang disarankan: selesaikan impor data terlebih dahulu, lalu jalankan salin foto. Jika proses terhenti, jalankan ulang; data barang yang sudah masuk akan dilewati.</div>
-      <div id="bmnMigrationResult" class="mt-3" aria-live="polite"></div>
-    </div></div>` : ''}
+          <div class="col-6 col-md-2"><label class="form-label" for="bmnFilterJenis">Jenis</label>
+            <select class="form-select" id="bmnFilterJenis"><option value="">Semua jenis</option><option>Tanah</option><option>Gedung/Bangunan</option><option>Kendaraan</option><option>Peralatan & Mesin</option><option>Aset Lainnya</option></select></div>
+          <div class="col-6 col-md-2"><label class="form-label" for="bmnFilterKondisi">Kondisi</label>
+            <select class="form-select" id="bmnFilterKondisi"><option value="">Semua kondisi</option><option>Baik</option><option>Rusak Ringan</option><option>Rusak Berat</option></select></div>
+          <div class="col-6 col-md-2"><label class="form-label" for="bmnFilterStatus">Status</label>
+            <select class="form-select" id="bmnFilterStatus"><option value="">Semua status</option><option>Digunakan</option><option>Tidak Digunakan</option><option>Diusulkan Penghapusan</option></select></div>
+          <div class="col-12 col-md"><label class="form-label" for="bmnSearch">Cari barang</label><input class="form-control" id="bmnSearch" placeholder="Kode, nama, ID BMN, lokasi…"></div>
+        </div>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+          <div class="small text-body-secondary" id="bmnCount"></div>
+          <div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-success btn-sm" id="bmnExcel"><i class="bx bx-file-excel me-1"></i>Ekspor Excel</button><button class="btn btn-outline-danger btn-sm" id="bmnPdf"><i class="bx bx-file-pdf me-1"></i>Ekspor PDF</button></div>
+        </div>
+      </div></div>
+      <div class="card"><div class="table-responsive"><table class="table table-hover align-middle mb-0" id="bmnTable">
+        <thead><tr>
+          <th class="text-center">No</th>
+          <th>${bmnSortHeading('Satker','satker','table')}</th>
+          <th>${bmnSortHeading('Kode Barang','kodeBarang','table')}</th>
+          <th>${bmnSortHeading('Nama Barang','namaBarang','table')}</th>
+          <th>${bmnSortHeading('Jenis','jenis','table')}</th>
+          <th>${bmnSortHeading('Tahun','tahunPerolehan','table')}</th>
+          <th class="text-end">${bmnSortHeading('Nilai Perolehan','nilaiPerolehan','table')}</th>
+          <th>${bmnSortHeading('Kondisi','kondisi','table')}</th>
+          <th>${bmnSortHeading('Status','status','table')}</th>
+          <th class="text-center">${bmnSortHeading('Foto','fotoCount','table')}</th>
+          <th class="text-center">Aksi</th>
+        </tr></thead>
+        <tbody><tr><td colspan="11" class="text-center py-4 text-body-secondary">Memuat data…</td></tr></tbody>
+      </table></div></div>
+      ${bmnIsAdmin() ? `<div class="card mt-3" id="bmnSettingsCard"><div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div><h6 class="mb-1"><i class="bx bx-shield-quarter me-1"></i>Pengaturan Input BMN</h6><p class="small text-body-secondary mb-0">Atur izin Operator KUA untuk menambah, mengubah, dan menghapus data BMN.</p></div>
+        <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" role="switch" id="bmnAllowEntry"><label class="form-check-label fw-semibold" for="bmnAllowEntry">Izinkan Operator KUA mengelola BMN</label></div>
+      </div></div>` : ''}
+    </div>
   `;
   $('bmnRefresh').onclick = bmnLoad;
   $('bmnAdd').onclick = () => bmnOpenForm(null);
@@ -167,13 +167,20 @@ async function pageBMN() {
   $('bmnExcel').onclick = () => bmnExport('xls');
   $('bmnPdf').onclick = () => bmnExport('pdf');
   if (bmnIsAdmin()) {
+    $('bmnSummaryToggle').onclick = bmnShowSatkerSummary;
+    $('bmnBackSummary').onclick = bmnBackToSatkerSummary;
     $('bmnAllowEntry').onchange = async e => {
-      try { await gas('bmnSaveSetting', { key: 'allowDataEntry', value: e.target.checked }); BMN_UI.settings.allowDataEntry = e.target.checked; bmnNotice('Pengaturan input BMN disimpan.'); }
-      catch (err) { e.target.checked = !e.target.checked; bmnNotice(err.message, 'danger'); }
+      try {
+        await gas('bmnSaveSetting', { key: 'allowDataEntry', value: e.target.checked });
+        BMN_UI.settings.allowDataEntry = e.target.checked;
+        bmnNotice('Pengaturan input BMN disimpan.');
+        if ($('bmnAdd')) $('bmnAdd').disabled = !bmnCanWrite();
+        bmnRenderTable();
+      } catch (err) {
+        e.target.checked = !e.target.checked;
+        bmnNotice(err.message, 'danger');
+      }
     };
-    $('bmnImport').onclick = bmnImportLegacy;
-    $('bmnMigratePhotos').onclick = bmnMigrateLegacyPhotos;
-    bmnUpdateMigrationPanel();
   }
   await bmnLoad();
 }
@@ -220,93 +227,256 @@ function bmnRenderStats(s) {
 function bmnSatkerLabel(value) {
   const key = bmnNormalizeSatker(value);
   const known = BMN_KUA_NAMES.find(name => bmnNormalizeSatker(name) === key);
-  if (known) return 'KUA ' + known;
-  const raw = String(value || '').trim();
-  return raw ? (/^kua\b/i.test(raw) ? raw : 'KUA ' + raw) : 'Satker belum ditentukan';
+  return known ? 'KUA ' + known : '';
 }
 
 function bmnRenderSatkerFilter() {
   const select = $('bmnFilterSatker');
   if (!select || !bmnIsAdmin()) return;
   const selected = select.value;
-  const known = BMN_KUA_NAMES.map(name => ({ key: bmnNormalizeSatker(name), label: 'KUA ' + name }));
-  const knownKeys = new Set(known.map(item => item.key));
-  const additional = new Map();
-  BMN_UI.rows.forEach(row => {
-    const key = bmnNormalizeSatker(row.satker);
-    if (key && !knownKeys.has(key) && !additional.has(key)) additional.set(key, { key, label: bmnSatkerLabel(row.satker) });
-  });
-  const options = known.concat(Array.from(additional.values()).sort((a, b) => a.label.localeCompare(b.label, 'id')));
+  const options = BMN_KUA_NAMES.map(name => ({ key: bmnNormalizeSatker(name), label: 'KUA ' + name }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'id'));
   select.innerHTML = '<option value="">Semua Satker</option>' +
     options.map(item => '<option value="' + esc(item.key) + '">' + esc(item.label) + '</option>').join('');
   if (options.some(item => item.key === selected)) select.value = selected;
 }
 
+function bmnDateValue(value) {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function bmnDateLabel(value) {
+  const timestamp = bmnDateValue(value);
+  if (!timestamp) return '—';
+  return new Date(timestamp).toLocaleDateString('id-ID', {
+    day: 'numeric', month: 'long', year: 'numeric'
+  });
+}
+
 function bmnSatkerSummaryRows() {
-  const items = new Map();
-  BMN_KUA_NAMES.forEach(name => {
-    const key = bmnNormalizeSatker(name);
-    items.set(key, { key, label: 'KUA ' + name, total: 0, nilai: 0, baik: 0, rusakRingan: 0, rusakBerat: 0 });
-  });
+  const labels = BMN_KUA_NAMES.map(name => 'KUA ' + name).sort((a, b) => a.localeCompare(b, 'id'));
+  const byKey = new Map(labels.map(label => [bmnNormalizeSatker(label), {
+    key: bmnNormalizeSatker(label), kua: label, jumlah: 0,
+    baik: 0, ringan: 0, berat: 0, lastUpdate: '', lastUpdateMs: 0
+  }]));
   BMN_UI.rows.forEach(row => {
-    const key = bmnNormalizeSatker(row.satker) || 'belum-ditentukan';
-    if (!items.has(key)) items.set(key, {
-      key, label: bmnSatkerLabel(row.satker), total: 0, nilai: 0, baik: 0, rusakRingan: 0, rusakBerat: 0
-    });
-    const item = items.get(key);
-    item.total++;
-    item.nilai += Number(row.nilaiPerolehan || 0) || 0;
+    const item = byKey.get(bmnNormalizeSatker(row.satker));
+    // Sama seperti project BMN lama: ringkasan hanya memuat 31 KUA di APP_CONFIG.KUA_LIST.
+    if (!item) return;
+    item.jumlah++;
     if (row.kondisi === 'Baik') item.baik++;
-    else if (row.kondisi === 'Rusak Ringan') item.rusakRingan++;
-    else if (row.kondisi === 'Rusak Berat') item.rusakBerat++;
+    else if (row.kondisi === 'Rusak Ringan') item.ringan++;
+    else if (row.kondisi === 'Rusak Berat') item.berat++;
+    const last = row.updatedAt || row.createdAt || row.tanggalUpdate || row.tanggalInput || '';
+    const time = bmnDateValue(last);
+    if (time > item.lastUpdateMs) {
+      item.lastUpdateMs = time;
+      item.lastUpdate = last;
+    }
   });
-  return Array.from(items.values());
+  return Array.from(byKey.values());
+}
+
+function bmnSortHeading(label, key, kind) {
+  const current = kind === 'summary' ? BMN_UI.summarySort : BMN_UI.tableSort;
+  const active = current.key === key;
+  const icon = active ? (current.dir === 'asc' ? 'bx-sort-up' : 'bx-sort-down') : 'bx-sort';
+  const attr = kind === 'summary' ? 'data-bmn-sort-summary' : 'data-bmn-sort-table';
+  return '<button type="button" class="bmn-sort-button' + (active ? ' active' : '') + '" ' + attr + '="' + key + '" aria-label="Urutkan berdasarkan ' + esc(label) + '" title="Urutkan berdasarkan ' + esc(label) + '">' +
+    '<span>' + esc(label) + '</span><i class="bx ' + icon + '"></i></button>';
+}
+
+function bmnSortValue(row, key, kind) {
+  if (kind === 'summary') {
+    if (key === 'status') return row.jumlah > 0 ? 1 : 0;
+    if (key === 'lastUpdate') return row.lastUpdateMs;
+    return row[key];
+  }
+  if (key === 'fotoCount') return bmnPhotoList(row).length;
+  if (key === 'updatedAt') return bmnDateValue(row.updatedAt || row.createdAt);
+  if (key === 'tahunPerolehan' || key === 'nilaiPerolehan') return Number(row[key] || 0);
+  return String(row[key] || '');
+}
+
+function bmnSortRows(rows, key, dir, kind) {
+  const multiplier = dir === 'desc' ? -1 : 1;
+  return rows.slice().sort((a, b) => {
+    const av = bmnSortValue(a, key, kind), bv = bmnSortValue(b, key, kind);
+    if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * multiplier;
+    return String(av).localeCompare(String(bv), 'id', { numeric: true, sensitivity: 'base' }) * multiplier;
+  });
+}
+
+function bmnSetSort(kind, key) {
+  const state = kind === 'summary' ? BMN_UI.summarySort : BMN_UI.tableSort;
+  if (state.key === key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+  else {
+    state.key = key;
+    state.dir = 'asc';
+  }
+  if (kind === 'summary') bmnRenderSatkerSummary();
+  else bmnRenderTable();
+}
+
+function bmnSummaryFilteredRows() {
+  const query = String(BMN_UI.summarySearch || '').trim().toLowerCase();
+  const status = BMN_UI.summaryStatus || '';
+  return bmnSatkerSummaryRows().filter(item => {
+    const matchesName = !query || item.kua.toLowerCase().includes(query);
+    const matchesStatus = !status || (status === 'isi' ? item.jumlah > 0 : item.jumlah === 0);
+    return matchesName && matchesStatus;
+  });
 }
 
 function bmnRenderSatkerSummary() {
   const root = $('bmnSatkerSummary');
   if (!root || !bmnIsAdmin()) return;
   const items = bmnSatkerSummaryRows();
-  const totals = items.reduce((sum, item) => {
-    sum.total += item.total; sum.nilai += item.nilai; sum.baik += item.baik;
-    sum.rusakRingan += item.rusakRingan; sum.rusakBerat += item.rusakBerat;
-    return sum;
-  }, { total: 0, nilai: 0, baik: 0, rusakRingan: 0, rusakBerat: 0 });
-  const active = items.filter(item => item.total > 0).length;
+  const filtered = bmnSortRows(bmnSummaryFilteredRows(), BMN_UI.summarySort.key, BMN_UI.summarySort.dir, 'summary');
+  const totalKUA = items.length;
+  const sudahIsi = items.filter(item => item.jumlah > 0).length;
+  const belumIsi = totalKUA - sudahIsi;
+  const totalItems = BMN_UI.rows.length;
+
   root.innerHTML = `
-    <div class="card bmn-summary-card">
-      <div class="bmn-summary-heading">
-        <div><div class="bmn-summary-eyebrow"><i class="bx bx-buildings me-1"></i>MONITORING ADMINISTRATOR</div>
-          <h5 class="mb-1">Ringkasan BMN per Satker</h5>
-          <p class="mb-0">Rekap seluruh data BMN dari 31 KUA dan Satker tambahan. Tidak terpengaruh filter tabel di bawah.</p></div>
-        <div class="bmn-summary-total"><span>Total aset terdata</span><strong>${totals.total.toLocaleString('id-ID')}</strong><small>${active} Satker memiliki data</small></div>
+    <section class="bmn-summary-panel">
+      <header class="bmn-summary-header">
+        <div class="bmn-summary-heading">
+          <span class="bmn-summary-heading-icon"><i class="bx bx-buildings"></i></span>
+          <div><h5>Ringkasan Data BMN per KUA</h5>
+            <p>Klik tombol Detail untuk melihat seluruh barang dari KUA terkait.</p></div>
+        </div>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="bmnSummaryAll"><i class="bx bx-list-ul me-1"></i> Semua Data BMN</button>
+      </header>
+
+      <div class="bmn-summary-stats">
+        <article class="bmn-summary-stat success">
+          <span class="bmn-summary-stat-icon"><i class="bx bx-check-circle"></i></span>
+          <div><strong>${sudahIsi}</strong><span>KUA Sudah Mengisi</span></div>
+        </article>
+        <article class="bmn-summary-stat warning">
+          <span class="bmn-summary-stat-icon"><i class="bx bx-time-five"></i></span>
+          <div><strong>${belumIsi}</strong><span>KUA Belum Mengisi</span></div>
+        </article>
+        <article class="bmn-summary-stat primary">
+          <span class="bmn-summary-stat-icon"><i class="bx bx-buildings"></i></span>
+          <div><strong>${totalKUA}</strong><span>Total KUA</span></div>
+        </article>
+        <article class="bmn-summary-stat neutral">
+          <span class="bmn-summary-stat-icon"><i class="bx bx-package"></i></span>
+          <div><strong>${totalItems.toLocaleString('id-ID')}</strong><span>Total Item BMN</span></div>
+        </article>
       </div>
-      <div class="bmn-summary-value-strip"><span><i class="bx bx-wallet me-1"></i>Total nilai perolehan</span><strong>${bmnMoney(totals.nilai)}</strong></div>
+
+      <div class="bmn-summary-toolbar">
+        <div class="bmn-summary-filter">
+          <i class="bx bx-search"></i>
+          <input type="search" class="form-control" id="bmnSummarySearch" value="${esc(BMN_UI.summarySearch)}" placeholder="Cari nama KUA...">
+        </div>
+        <select class="form-select bmn-summary-status" id="bmnSummaryStatus" aria-label="Filter status KUA">
+          <option value="">Semua Status</option>
+          <option value="isi" ${BMN_UI.summaryStatus === 'isi' ? 'selected' : ''}>Sudah Mengisi</option>
+          <option value="kosong" ${BMN_UI.summaryStatus === 'kosong' ? 'selected' : ''}>Belum Mengisi</option>
+        </select>
+        <span class="bmn-summary-result-count">${filtered.length} dari ${totalKUA} KUA</span>
+      </div>
+
       <div class="bmn-summary-table-wrap">
-        <table class="table table-hover align-middle mb-0 bmn-summary-table">
-          <thead><tr><th>Satker / KUA</th><th class="text-end">Total Aset</th><th class="text-end">Nilai Perolehan</th><th class="text-center">Baik</th><th class="text-center">Rusak Ringan</th><th class="text-center">Rusak Berat</th></tr></thead>
-          <tbody>${items.map(item => `
-            <tr>
-              <td><button type="button" class="bmn-summary-link" data-bmn-satker-shortcut="${esc(item.key)}">${esc(item.label)}</button></td>
-              <td class="text-end fw-semibold">${item.total.toLocaleString('id-ID')}</td>
-              <td class="text-end text-nowrap">${bmnMoney(item.nilai)}</td>
-              <td class="text-center"><span class="bmn-condition-count good">${item.baik}</span></td>
-              <td class="text-center"><span class="bmn-condition-count mild">${item.rusakRingan}</span></td>
-              <td class="text-center"><span class="bmn-condition-count bad">${item.rusakBerat}</span></td>
-            </tr>`).join('')}</tbody>
-          <tfoot><tr><th>TOTAL</th><th class="text-end">${totals.total.toLocaleString('id-ID')}</th><th class="text-end text-nowrap">${bmnMoney(totals.nilai)}</th><th class="text-center">${totals.baik}</th><th class="text-center">${totals.rusakRingan}</th><th class="text-center">${totals.rusakBerat}</th></tr></tfoot>
+        <table class="table align-middle mb-0 bmn-summary-table">
+          <thead><tr>
+            <th class="text-center">No</th>
+            <th>${bmnSortHeading('Nama KUA','kua','summary')}</th>
+            <th class="text-center">${bmnSortHeading('Jumlah Data','jumlah','summary')}</th>
+            <th class="text-center">${bmnSortHeading('Baik','baik','summary')}</th>
+            <th class="text-center">${bmnSortHeading('Rusak Ringan','ringan','summary')}</th>
+            <th class="text-center">${bmnSortHeading('Rusak Berat','berat','summary')}</th>
+            <th>${bmnSortHeading('Last Update','lastUpdate','summary')}</th>
+            <th class="text-center">${bmnSortHeading('Status','status','summary')}</th>
+            <th class="text-center">Aksi</th>
+          </tr></thead>
+          <tbody>${filtered.length ? filtered.map((item, index) => {
+            const filled = item.jumlah > 0;
+            return `<tr class="${filled ? '' : 'is-waiting'}">
+              <td class="text-center text-body-secondary">${index + 1}</td>
+              <td><div class="bmn-summary-kua-name">${esc(item.kua)}</div>${filled ? '' : '<small class="bmn-summary-kua-note">Belum ada data</small>'}</td>
+              <td class="text-center"><span class="bmn-summary-quantity ${filled ? 'filled' : 'empty'}">${item.jumlah}</span></td>
+              <td class="text-center">${item.baik ? '<span class="bmn-summary-condition good">' + item.baik + '</span>' : '<span class="bmn-summary-dash">—</span>'}</td>
+              <td class="text-center">${item.ringan ? '<span class="bmn-summary-condition mild">' + item.ringan + '</span>' : '<span class="bmn-summary-dash">—</span>'}</td>
+              <td class="text-center">${item.berat ? '<span class="bmn-summary-condition bad">' + item.berat + '</span>' : '<span class="bmn-summary-dash">—</span>'}</td>
+              <td class="text-nowrap"><span class="bmn-summary-date">${esc(bmnDateLabel(item.lastUpdate))}</span></td>
+              <td class="text-center"><span class="bmn-summary-status-pill ${filled ? 'is-filled' : 'is-empty'}">${filled ? '<i class="bx bx-check-circle"></i> Mengisi' : '<i class="bx bx-time-five"></i> Menunggu'}</span></td>
+              <td class="text-center">${filled ? '<button type="button" class="bmn-summary-action" data-bmn-summary-detail="' + esc(item.key) + '">Detail <i class="bx bx-right-arrow-alt"></i></button>' : '<span class="bmn-summary-disabled">Detail</span>'}</td>
+            </tr>`;
+          }).join('') : '<tr><td colspan="9" class="text-center text-body-secondary py-4">Tidak ada KUA yang sesuai pencarian.</td></tr>'}</tbody>
         </table>
       </div>
-    </div>`;
-  root.querySelectorAll('[data-bmn-satker-shortcut]').forEach(button => {
-    button.onclick = () => {
-      const select = $('bmnFilterSatker');
-      if (!select) return;
-      select.value = button.dataset.bmnSatkerShortcut;
-      bmnRenderTable();
-      select.focus();
-    };
+      <footer class="bmn-summary-footer"><span><i class="bx bx-info-circle me-1"></i>Daftar mengikuti 31 KUA pada aplikasi BMN lama.</span><span>Data diperbarui sesuai perubahan terakhir BMN.</span></footer>
+    </section>`;
+
+  $('bmnSummaryAll').onclick = bmnShowAllBMN;
+  $('bmnSummarySearch').oninput = event => {
+    BMN_UI.summarySearch = event.target.value;
+    bmnRenderSatkerSummary();
+    const input = $('bmnSummarySearch');
+    input?.focus();
+    if (input) input.setSelectionRange(input.value.length, input.value.length);
+  };
+  $('bmnSummaryStatus').onchange = event => {
+    BMN_UI.summaryStatus = event.target.value;
+    bmnRenderSatkerSummary();
+  };
+  root.querySelectorAll('[data-bmn-sort-summary]').forEach(button => {
+    button.onclick = () => bmnSetSort('summary', button.dataset.bmnSortSummary);
   });
+  root.querySelectorAll('[data-bmn-summary-detail]').forEach(button => {
+    button.onclick = () => bmnShowSatkerDetail(button.dataset.bmnSummaryDetail);
+  });
+}
+
+function bmnShowSatkerSummary() {
+  if (!bmnIsAdmin()) return;
+  BMN_UI.summaryActive = true;
+  BMN_UI.summaryDetail = false;
+  $('bmnTableView')?.classList.add('d-none');
+  $('bmnSatkerSummary')?.classList.remove('d-none');
+  $('bmnSummaryToggle')?.classList.add('d-none');
+  $('bmnBackSummary')?.classList.add('d-none');
+  bmnRenderSatkerSummary();
+}
+
+function bmnShowSatkerDetail(key) {
+  if (!bmnIsAdmin()) return;
+  BMN_UI.summaryActive = false;
+  BMN_UI.summaryDetail = true;
+  const select = $('bmnFilterSatker');
+  if (select) select.value = key;
+  $('bmnSatkerSummary')?.classList.add('d-none');
+  $('bmnTableView')?.classList.remove('d-none');
+  $('bmnSummaryToggle')?.classList.add('d-none');
+  $('bmnBackSummary')?.classList.remove('d-none');
+  bmnRenderTable();
+}
+
+function bmnBackToSatkerSummary() {
+  const select = $('bmnFilterSatker');
+  if (select) select.value = '';
+  bmnShowSatkerSummary();
+}
+
+function bmnShowAllBMN() {
+  BMN_UI.summaryActive = false;
+  BMN_UI.summaryDetail = false;
+  ['bmnFilterSatker','bmnFilterJenis','bmnFilterKondisi','bmnFilterStatus','bmnSearch'].forEach(id => {
+    const input = $(id);
+    if (input) input.value = '';
+  });
+  $('bmnSatkerSummary')?.classList.add('d-none');
+  $('bmnTableView')?.classList.remove('d-none');
+  $('bmnSummaryToggle')?.classList.remove('d-none');
+  $('bmnBackSummary')?.classList.add('d-none');
+  bmnRenderTable();
 }
 
 function bmnFilteredRows() {
@@ -320,18 +490,24 @@ function bmnFilteredRows() {
 }
 
 function bmnRenderTable() {
-  const rows = bmnFilteredRows();
-  $('bmnCount').textContent = rows.length.toLocaleString('id-ID') + ' dari ' + BMN_UI.rows.length.toLocaleString('id-ID') + ' barang';
-  $('bmnTable').querySelector('tbody').innerHTML = rows.length ? rows.map((r,i) => {
+  const filtered = bmnFilteredRows();
+  const rows = bmnSortRows(filtered, BMN_UI.tableSort.key, BMN_UI.tableSort.dir, 'table');
+  if ($('bmnCount')) $('bmnCount').textContent = rows.length.toLocaleString('id-ID') + ' dari ' + BMN_UI.rows.length.toLocaleString('id-ID') + ' barang';
+  const tbody = $('bmnTable')?.querySelector('tbody');
+  if (!tbody) return;
+  tbody.innerHTML = rows.length ? rows.map((r,i) => {
     const photos = bmnPhotoList(r);
     const actions = `<button class="btn btn-sm btn-outline-primary" data-bmn-view="${esc(r.id)}" title="Detail"><i class="bx bx-show"></i></button> ` +
       (bmnCanWrite() ? `<button class="btn btn-sm btn-outline-secondary" data-bmn-edit="${esc(r.id)}" title="Edit"><i class="bx bx-edit"></i></button>` : '') +
       (bmnCanWrite() ? ` <button class="btn btn-sm btn-outline-danger" data-bmn-delete="${esc(r.id)}" title="Hapus"><i class="bx bx-trash"></i></button>` : '');
-    return `<tr><td>${i+1}</td><td>${esc(r.satker)}</td><td class="text-nowrap">${esc(r.kodeBarang)}</td><td class="bmn-name">${esc(r.namaBarang)}</td><td>${esc(r.jenis)}</td><td>${esc(r.tahunPerolehan)}</td><td class="text-nowrap">${bmnMoney(r.nilaiPerolehan)}</td><td>${bmnBadge(r.kondisi,'kondisi')}</td><td>${bmnBadge(r.status,'status')}</td><td>${photos.length ? `<span class="badge bg-label-info">${photos.length} file</span>` : '-'}</td><td class="text-nowrap">${actions}</td></tr>`;
+    return `<tr><td class="text-center text-body-secondary">${i+1}</td><td>${esc(r.satker)}</td><td class="text-nowrap">${esc(r.kodeBarang)}</td><td class="bmn-name">${esc(r.namaBarang)}</td><td>${esc(r.jenis)}</td><td>${esc(r.tahunPerolehan)}</td><td class="text-nowrap text-end">${bmnMoney(r.nilaiPerolehan)}</td><td>${bmnBadge(r.kondisi,'kondisi')}</td><td>${bmnBadge(r.status,'status')}</td><td class="text-center">${photos.length ? `<span class="badge bg-label-info">${photos.length} file</span>` : '-'}</td><td class="text-nowrap text-center">${actions}</td></tr>`;
   }).join('') : '<tr><td colspan="11" class="text-center text-body-secondary py-4">Belum ada data BMN sesuai filter.</td></tr>';
   $('bmnTable').querySelectorAll('[data-bmn-view]').forEach(b => b.onclick = () => bmnView(b.dataset.bmnView));
   $('bmnTable').querySelectorAll('[data-bmn-edit]').forEach(b => b.onclick = () => bmnOpenForm(BMN_UI.rows.find(x=>x.id===b.dataset.bmnEdit)));
   $('bmnTable').querySelectorAll('[data-bmn-delete]').forEach(b => b.onclick = () => bmnDelete(b.dataset.bmnDelete));
+  $('bmnTable').querySelectorAll('[data-bmn-sort-table]').forEach(button => {
+    button.onclick = () => bmnSetSort('table', button.dataset.bmnSortTable);
+  });
 }
 
 function bmnFormHtml(row) {
