@@ -59,7 +59,7 @@
           kEl('kiblatLoadingState').classList.remove('d-none');
           kEl('kiblatEmptyState').classList.add('d-none');
           kEl('kiblatAlert').classList.add('d-none');
-          callApi('listKiblat', {})
+          return callApi('listKiblat', {})
             .then(function (res) {
               kEl('kiblatLoadingState').classList.add('d-none');
               if (!res.success) {
