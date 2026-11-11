@@ -567,7 +567,15 @@ function bmnExport_(p, user) {
   if (p.format === 'pdf') {
     var esc = function (v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
     var table = data.map(function (r) { return '<tr>' + r.map(function (v) { return '<td>' + esc(v) + '</td>'; }).join('') + '</tr>'; }).join('');
-    var html = '<html><head><meta charset="utf-8"><style>body{font:10px Arial;padding:18px}h2{text-align:center}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:5px;text-align:left}th{background:#e8eef7}thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body><h2>LAPORAN BARANG MILIK NEGARA</h2><p>Kementerian Agama Kabupaten Indramayu</p><table><thead><tr>' + headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' + table + '</tbody></table></body></html>';
+    var filters = p.filters || {}, filterLabels = [];
+    if (filters.satker) filterLabels.push('Satker: KUA ' + filters.satker);
+    if (filters.jenis) filterLabels.push('Jenis: ' + filters.jenis);
+    if (filters.kondisi) filterLabels.push('Kondisi: ' + filters.kondisi);
+    if (filters.status) filterLabels.push('Status: ' + filters.status);
+    if (filters.search) filterLabels.push('Pencarian: ' + filters.search);
+    var filterText = filterLabels.length ? filterLabels.join(' | ') : 'Seluruh data';
+    var printedAt = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Asia/Jakarta', 'dd MMMM yyyy HH:mm');
+    var html = '<html><head><meta charset="utf-8"><style>@page{size:A4 landscape;margin:10mm}body{font:9px Arial;color:#27364b;padding:10px}h2{text-align:center;margin:0 0 4px;font-size:17px}p{margin:3px 0 10px;text-align:center;color:#59677c}table{border-collapse:collapse;width:100%;table-layout:auto}th,td{border:1px solid #cbd3df;padding:5px;text-align:left;vertical-align:top}th{background:#e8eef7;color:#33445e}thead{display:table-header-group}tr{page-break-inside:avoid}</style></head><body><h2>LAPORAN BARANG MILIK NEGARA</h2><p>Kementerian Agama Kabupaten Indramayu<br>Filter: ' + esc(filterText) + '<br>Dicetak: ' + esc(printedAt) + '</p><table><thead><tr>' + headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' + table + '</tbody></table></body></html>';
     var pdf = Utilities.newBlob(html, MimeType.HTML, 'bmn.html').getAs(MimeType.PDF).setName(safe + '.pdf');
     return { success: true, fileData: Utilities.base64Encode(pdf.getBytes()), fileName: pdf.getName(), mimeType: 'application/pdf' };
   }
