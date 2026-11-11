@@ -40,7 +40,78 @@ dialog.wide.xl{width:min(1400px,calc(100% - 1rem))}
 @media(max-width:767px){#vwa{position:absolute;z-index:5;left:0;top:0;bottom:0;width:min(400px,94%);max-width:none;box-shadow:0 0 1rem rgba(0,0,0,.25)}}
 @media(max-width:575px){dialog.wide{width:100%;height:100%;border-radius:0}}
 @media(max-width:991px){#side{transform:translateX(-100%);visibility:hidden;transition:transform .2s,visibility 0s .2s}#side.open{transform:none;visibility:visible;transition:transform .2s,visibility 0s}#main{margin-left:0}#topbar{margin:.75rem}}
-@media(min-width:992px){body.side-off #side{transform:translateX(-100%);visibility:hidden;transition:transform .2s,visibility 0s .2s}body.side-off #main{margin-left:0}}   /* menu samping disembunyikan (layar lebar) */
+@media(min-width:992px){
+  #side{transition:width .22s ease,transform .2s,visibility 0s}
+  #main{transition:margin-left .22s ease}
+  body.side-mini #side{width:76px}
+  body.side-mini #main{margin-left:76px}
+
+  /* Brand tetap terlihat, tetapi label teks disembunyikan pada rail ikon. */
+  body.side-mini #side>.p-4:first-child{
+    padding:4.35rem .45rem .65rem!important;
+    text-align:center;
+  }
+  body.side-mini #side .brand{
+    justify-content:center;
+    gap:0;
+    font-size:0;
+  }
+  body.side-mini #side .brand-logo{
+    height:2rem;
+    max-width:2.1rem;
+  }
+
+  /* Semua item menu menjadi target ikon yang rata dan mudah disentuh. */
+  body.side-mini #side .nav-link{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:0;
+    width:calc(100% - .9rem);
+    margin:.18rem .45rem;
+    padding:.68rem 0;
+    font-size:0;
+    line-height:1;
+  }
+  body.side-mini #side .nav-link>i:first-child{
+    flex:none;
+    margin:0;
+    font-size:1.25rem;
+    line-height:1;
+  }
+  body.side-mini #side .nav-link .ms-auto{display:none!important}
+  body.side-mini #side .nav-link.sub{padding-left:0}
+
+  /* Tombol burger mengambang di atas rail dan selalu dapat dijangkau untuk membuka menu penuh. */
+  body.side-mini #burger{
+    position:fixed;
+    top:12px;
+    left:16px;
+    z-index:1100;
+    display:grid;
+    place-items:center;
+    width:42px;
+    height:42px;
+    padding:0;
+    border:1px solid #dfe1eb;
+    border-radius:.5rem;
+    background:#fff;
+    color:#696cff;
+    box-shadow:0 4px 14px rgba(67,89,113,.2);
+  }
+  body.side-mini #burger:hover{
+    border-color:#696cff;
+    background:rgba(105,108,255,.08);
+  }
+  body.side-mini #burger:focus-visible{
+    outline:3px solid rgba(105,108,255,.3);
+    outline-offset:2px;
+  }
+  body.side-mini #burger i{font-size:1.35rem!important}
+}
+@media(prefers-reduced-motion:reduce){
+  #side,#main{transition:none!important}
+}
 .bg-label-success{background:rgba(113,221,55,.16)!important;color:#71dd37!important}
 .bg-label-warning{background:rgba(255,171,0,.16)!important;color:#ffab00!important}
 .bg-label-danger{background:rgba(255,62,29,.16)!important;color:#ff3e1d!important}
