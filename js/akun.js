@@ -142,27 +142,54 @@ async function akunMuat() {
   akunRender();
 }
 
-async function pagePengaturan() {
+async function pageProfil() {
   const ep = EP;
   $('view').innerHTML = `<div class="row g-4">
-    <div class="col-lg-6"><div class="card"><div class="card-body">
-      <h5 class="mb-3">Profil</h5>
-      <dl class="row mb-0">
-        <dt class="col-4">Nama</dt><dd class="col-8">${esc(me.nama)}</dd>
-        <dt class="col-4">Instansi</dt><dd class="col-8">${esc(me.kua || '-')}</dd>
-        <dt class="col-4">Username</dt><dd class="col-8">${esc(me.username)}</dd>
-        <dt class="col-4">Peran</dt><dd class="col-8">${esc(peranLabel(me.role))}</dd>
-      </dl></div></div></div>
-    <div class="col-lg-6"><div class="card"><div class="card-body">
-      <h5 class="mb-3">Ubah password</h5><div id="pmsg"></div>
+    <div class="col-xl-6"><div class="card h-100"><div class="card-body">
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <div class="avatar avatar-lg"><span class="avatar-initial rounded bg-label-primary"><i class="bx bx-user fs-3"></i></span></div>
+        <div><h5 class="mb-1">Profil Saya</h5><p class="text-body-secondary mb-0 small">Informasi akun yang sedang Anda gunakan.</p></div>
+      </div>
+      <div id="profileMsg"></div>
+      <form id="profileForm">
+        <label class="form-label" for="profileNama">Nama</label>
+        <input id="profileNama" class="form-control mb-3" maxlength="100" value="${esc(me.nama)}" required>
+        <label class="form-label" for="profileUsername">Username</label>
+        <input id="profileUsername" class="form-control mb-3" value="${esc(me.username)}" disabled>
+        <label class="form-label" for="profileRole">Role</label>
+        <input id="profileRole" class="form-control mb-3" value="${esc(peranLabel(me.role))}" disabled>
+        <label class="form-label" for="profileInstansi">Instansi / KUA</label>
+        <input id="profileInstansi" class="form-control mb-3" value="${esc(me.kua || '-')}" disabled>
+        <div class="small text-body-secondary mb-3">Role dan instansi dikelola oleh administrator agar hak akses akun tetap aman.</div>
+        <button class="btn btn-primary" id="profileSave"><i class="bx bx-save me-1"></i>Simpan Profil</button>
+      </form>
+    </div></div></div>
+    <div class="col-xl-6"><div class="card h-100"><div class="card-body">
+      <h5 class="mb-1">Keamanan Akun</h5><p class="text-body-secondary small mb-3">Ubah password akun Anda sendiri secara berkala.</p>
+      <div id="pmsg"></div>
       <form id="pf">${pwPair('np')}
-      <button class="btn btn-primary" id="pgo">Simpan password</button></form></div></div></div>
-    ${me.role === 'admin' ? `<div class="col-12"><div class="card"><div class="card-body">
-      <div class="d-flex flex-wrap align-items-center gap-2 mb-3"><h5 class="mb-0 me-auto">Daftar akun</h5>
-        <input id="aq" type="search" class="form-control form-control-sm" style="width:220px" placeholder="Cari nama, username, KUA…" aria-label="Cari akun" autocomplete="off">
-        <button class="btn btn-sm btn-primary" id="anew"><i class="bx bx-user-plus"></i> Tambah akun</button></div>
-      <div id="amsg"></div><div id="achips" class="d-flex flex-wrap gap-2 mb-3"></div><div class="table-responsive" id="acc">Memuat…</div></div></div></div>` : ''}
+        <button class="btn btn-primary" id="pgo"><i class="bx bx-key me-1"></i>Simpan Password</button>
+      </form>
+    </div></div></div>
   </div>`;
+  $('profileForm').onsubmit = async e => {
+    e.preventDefault();
+    const nama = $('profileNama').value.trim();
+    if (!nama) return lapor($('profileMsg'), 'Nama wajib diisi.', 'warning');
+    $('profileSave').disabled = true;
+    try {
+      const { data, error } = await sb.from('profiles').update({ nama }).eq('id', me.id).select('id').single();
+      if (error) throw error;
+      me.nama = nama;
+      $('uName').textContent = nama;
+      $('uAv').textContent = nama.charAt(0).toUpperCase();
+      lapor($('profileMsg'), 'Profil berhasil diperbarui.', 'success');
+    } catch (error) {
+      lapor($('profileMsg'), error.message || 'Profil gagal diperbarui.', 'danger');
+    } finally {
+      if (live(ep) && $('profileSave')) $('profileSave').disabled = false;
+    }
+  };
   bindPair('np');
   $('pf').onsubmit = async e => {
     e.preventDefault();
@@ -174,19 +201,34 @@ async function pagePengaturan() {
     lapor($('pmsg'), error ? errId(error) : 'Password berhasil diubah.', error ? 'danger' : 'success');
     if (!error) { $('pf').reset(); mask($('pf')); pairOk('np'); }
   };
-  if (me.role === 'admin') {
-    akun = { data: [], kua: [], peran: '', q: '', ep };
-    $('aq').oninput = e => { akun.q = e.target.value; akunRender(); };
-    $('achips').onclick = e => { const b = e.target.closest('[data-peran]'); if (b) { akun.peran = b.dataset.peran; akunRender(); } };
-    $('anew').onclick = () => openAkun();
-    $('acc').onclick = e => {
-      const b = e.target.closest('[data-reset],[data-ubah]'); if (!b) return;
-      const id = b.dataset.reset || b.dataset.ubah, r = akun.data.find(x => x.id === id);
-      if (b.dataset.reset) openReset(r); else openAkun(r);
-    };
-    await akunMuat();   // username = bagian email sebelum @ (auth.users tidak terbuka ke klien)
-  }
 }
+
+async function pagePengaturan() {
+  if (me.role !== 'admin') { location.hash = '#profil'; return; }
+  const ep = EP;
+  $('view').innerHTML = `<div class="card"><div class="card-body">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+      <div class="me-auto"><h4 class="mb-1">Manajemen Pengguna</h4><p class="text-body-secondary mb-0 small">Kelola akun pengguna lain: tambah akun, ubah nama dan role, serta reset password.</p></div>
+      <input id="aq" type="search" class="form-control form-control-sm" style="width:220px" placeholder="Cari nama, username, KUA…" aria-label="Cari akun" autocomplete="off">
+      <button class="btn btn-sm btn-primary" id="anew"><i class="bx bx-user-plus me-1"></i>Tambah Pengguna</button>
+    </div>
+    <div id="amsg"></div><div id="achips" class="d-flex flex-wrap gap-2 mb-3"></div><div class="table-responsive" id="acc">Memuat…</div>
+  </div></div>`;
+  akun = { data: [], kua: [], peran: '', q: '', ep };
+  $('aq').oninput = e => { akun.q = e.target.value; akunRender(); };
+  $('achips').onclick = e => { const b = e.target.closest('[data-peran]'); if (b) { akun.peran = b.dataset.peran; akunRender(); } };
+  $('anew').onclick = () => openAkun();
+  $('acc').onclick = e => {
+    const b = e.target.closest('[data-reset],[data-ubah]'); if (!b) return;
+    const id = b.dataset.reset || b.dataset.ubah, r = akun.data.find(x => x.id === id);
+    if (!r || r.id === me.id) return;
+    if (b.dataset.reset) openReset(r); else openAkun(r);
+  };
+  await akunMuat();
+}
+
+// ---- Daftarkan halaman ke router (core.js) ----
+Object.assign(pages, { profil: pageProfil, pengaturan: pagePengaturan });
 
 
 // ---- Daftarkan halaman ke router (core.js) ----
