@@ -177,7 +177,7 @@ async function pageProfil() {
     if (!nama) return lapor($('profileMsg'), 'Nama wajib diisi.', 'warning');
     $('profileSave').disabled = true;
     try {
-      const { data, error } = await sb.from('profiles').update({ nama }).eq('id', me.id).select('id').single();
+      const { error } = await sb.rpc('profile_update_nama', { p_nama: nama });
       if (error) throw error;
       me.nama = nama;
       $('uName').textContent = nama;
