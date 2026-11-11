@@ -86,7 +86,7 @@ function sertInfo(html) {
   box.prepend(el);
 }
 window.sertPage = async function (view) {   // dipanggil router untuk sert-masjid / sert-kiblat / sert-pengaturan
-  var ep = EP, box = $('sertView');
+  var ep = EP, box = $('sertView'), refreshLoaded = REFRESH_PAGE_DATA && SERT.selesai;
   try {
     if (!SERT.dom) box.innerHTML = '<div id="sertInfo" class="text-body-secondary">Memuat modul Sertifikat…</div>';   // hanya sebelum tampilan terpasang
     await sertMount();
@@ -94,6 +94,15 @@ window.sertPage = async function (view) {   // dipanggil router untuk sert-masji
     sertInfo('');
     box.querySelectorAll('.app-view').forEach(function (v) { v.classList.add('d-none'); });
     var t = $('view-' + view); if (t) t.classList.remove('d-none');
+
+    // sertMount hanya mengambil data saat pertama dibuka. Pada refresh berikutnya, ambil ulang data submenu aktif.
+    if (refreshLoaded) {
+      var jobs = [loadPengaturan()]; // tanda tangan/pejabat dipakai bersama untuk cetak Masjid dan Arah Kiblat
+      if (view === 'masjid') jobs.push(loadMasjidList());
+      if (view === 'kiblat') jobs.push(loadKiblatList());
+      await Promise.all(jobs);
+      if (!live(ep)) return;
+    }
   } catch (e) {
     if (live(ep)) sertInfo('<div class="alert alert-danger">' + esc(e.message) + '</div>');
   }
