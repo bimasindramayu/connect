@@ -350,6 +350,43 @@ function bmnReadLegacySource_() {
 }
 
 /**
+ * Menambahkan satu baris migrasi dengan mempertahankan ID asli.
+ * Tidak memakai bmnSave_ karena fungsi CRUD normal menganggap data.id
+ * berarti UPDATE dan menolak ID yang belum ada pada sheet tujuan.
+ */
+function bmnInsertLegacyRow_(data) {
+  var sh = bmnSheet_();
+  var values = sh.getDataRange().getValues();
+  var map = bmnMap_(values[0]);
+  var row = new Array(values[0].length).fill('');
+  var now = new Date();
+  var fields = {
+    id: String(data.id || ''),
+    satker: String(data.satker || ''),
+    kodebarang: String(data.kodeBarang || ''),
+    namabarang: String(data.namaBarang || ''),
+    jenis: String(data.jenis || 'Aset Lainnya'),
+    tahunperolehan: data.tahunPerolehan || '',
+    sumberperolehan: data.sumberPerolehan || '',
+    nilaiperolehan: Number(data.nilaiPerolehan || 0) || 0,
+    kondisi: data.kondisi || 'Baik',
+    status: data.status || 'Digunakan',
+    lokasibarang: data.lokasiBarang || '',
+    idbmn: data.idBMN || '',
+    keterangan: data.keterangan || '',
+    fotosjson: JSON.stringify(Array.isArray(data.fotos) ? data.fotos : []),
+    createdat: data.createdAt || now,
+    updatedat: now
+  };
+  Object.keys(fields).forEach(function (key) {
+    var idx = bmnIndex_(map, [key]);
+    if (idx >= 0) row[idx] = fields[key];
+  });
+  sh.appendRow(row);
+  return { success: true, data: { id: data.id, satker: data.satker } };
+}
+
+/**
  * Impor idempotent: ID yang sudah ada dilewati, data target tidak ditimpa.
  */
 function bmnImportLegacy_() {
@@ -402,7 +439,7 @@ function bmnImportLegacy_() {
     };
 
     var saved;
-    try { saved = bmnSave_(mapped, { role: 'admin', nama: 'Migrasi BMN lama' }); }
+    try { saved = bmnInsertLegacyRow_(mapped); }
     catch (e) { saved = { success: false, message: e.message }; }
     if (saved && saved.success) {
       imported++;
