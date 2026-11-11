@@ -111,7 +111,8 @@ begin
   end if;
   update public.profiles set nama = btrim(p_nama) where id = auth.uid();
   if not found then raise exception 'Profil akun tidak ditemukan.'; end if;
-end $;
+end;
+$;
 revoke all on function public.profile_update_nama(text) from public, anon;
 grant execute on function public.profile_update_nama(text) to authenticated;
 
