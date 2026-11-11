@@ -5,7 +5,7 @@
  * Dokumen: Edge Function bop menyimpan file di folder master Drive / BMN.
  * Autentikasi: token Supabase diverifikasi Code.gs; hak menu "bmn" diperiksa router.
  *
- * Data lama dari entry dapat diimpor admin dengan bmnImportLegacy(spreadsheetId).
+ * Data lama dari entry dibaca dari Apps Script /exec dan fallback ke SS_ID asli yang sudah di-hardcode.
  * Impor hanya membaca sheet BMN_Data, mencegah ID ganda, dan menandai foto lama
  * sebagai pending agar disalin ke folder master melalui endpoint bmn-salin.
  */
@@ -31,7 +31,7 @@ function bmnActions_() {
     bmnSave: { menu: 'bmn', write: true, run: function (p, user) { return bmnSave_(p.data || {}, user); } },
     bmnDelete: { admin: true, write: true, run: function (p) { return bmnDelete_(p.id); } },
     bmnSaveSetting: { admin: true, write: true, run: function (p, user) { return bmnSaveSetting_(p.key, p.value, user); } },
-    bmnImportLegacy: { admin: true, write: true, run: function (p) { return bmnImportLegacy_(p.spreadsheetId); } }
+    bmnImportLegacy: { admin: true, write: true, run: function () { return bmnImportLegacy_(); } }
   };
 }
 
@@ -282,46 +282,81 @@ function bmnDelete_(id) {
  */
 // URL Web App Apps Script lama (repo entry). Dibaca melalui endpoint /exec,
 // sehingga Apps Script BIMASATU tidak perlu diberi akses langsung ke Spreadsheet lama.
+// Sumber asli BMN dari project entry (Google Apps Script/code-main.gs).
+// SS_ID ini disalin persis dari konfigurasi asli repository bimasindramayu/entry.
+var BMN_LEGACY_SPREADSHEET_ID_ = '1yz9IeOW9WSDRM9JHwBHYtwi5xmA9hIxJVFPX9G10pNw';
 var BMN_LEGACY_EXEC_URL_ = 'https://script.google.com/macros/s/AKfycbwQZiSPbvdnz-814dlNsdI6seG4SQG43JAqbX23RuYaGZR2_-V8i1BlkONATP6ZbeSi/exec';
 
 /**
- * Impor BMN lama melalui Web App Apps Script project entry.
- * ID/URL sumber sudah ditanam di kode; parameter lama diabaikan.
- * Endpoint lama mengembalikan { success:true, data:[...] } dari aksi getBMNData.
+ * Membaca data dari endpoint /exec BMN lama. Jika endpoint tidak mengembalikan
+ * data valid, gunakan ID Spreadsheet SS_ID asli sebagai fallback langsung.
  */
-function bmnImportLegacy_() {
-  var response;
+function bmnReadLegacySource_() {
+  var endpointError = '';
   try {
-    response = UrlFetchApp.fetch(BMN_LEGACY_EXEC_URL_, {
+    var response = UrlFetchApp.fetch(BMN_LEGACY_EXEC_URL_, {
       method: 'post',
       contentType: 'application/json',
-      payload: JSON.stringify({ action: 'getBMNData' }),
+      payload: JSON.stringify({ action: 'getBMNData', kua: '' }),
       muteHttpExceptions: true,
       followRedirects: true
     });
+    var status = response.getResponseCode();
+    var body = response.getContentText();
+    if (status >= 200 && status < 300) {
+      var payload = JSON.parse(body);
+      if (payload && payload.success === true && Array.isArray(payload.data)) {
+        return { data: payload.data, source: 'Apps Script /exec BMN lama' };
+      }
+      endpointError = String(payload && payload.message || 'Respons /exec tidak berisi data BMN.');
+    } else {
+      endpointError = 'HTTP ' + status + ': ' + body.substring(0, 180);
+    }
   } catch (e) {
-    return { success: false, message: 'Tidak dapat menghubungi Apps Script BMN lama: ' + e.message };
+    endpointError = e.message || String(e);
   }
 
-  var status = response.getResponseCode();
-  var body = response.getContentText();
-  if (status < 200 || status >= 300) {
-    return { success: false, message: 'Apps Script lama mengembalikan HTTP ' + status + ': ' + body.substring(0, 300) };
+  // Fallback menggunakan SS_ID yang benar-benar didefinisikan di code-main.gs
+  // repository entry. Urutan kolom mengikuti getBMNData() asli di code-bmn.gs.
+  try {
+    var ss = SpreadsheetApp.openById(BMN_LEGACY_SPREADSHEET_ID_);
+    var sh = ss.getSheetByName('BMN_Data');
+    if (!sh) throw new Error('Sheet BMN_Data tidak ditemukan pada Spreadsheet sumber.');
+    var values = sh.getDataRange().getValues();
+    var data = [];
+    for (var i = 1; i < values.length; i++) {
+      var row = values[i];
+      if (!row || row.every(function (v) { return v === '' || v === null; })) continue;
+      var fotos = row[13] || '[]';
+      if (typeof fotos === 'string') {
+        try { fotos = JSON.parse(fotos); } catch (parseError) { fotos = []; }
+      }
+      data.push({
+        id: row[0], kua: row[1], kodeBarang: row[2], namaBarang: row[3],
+        jenis: row[4], tahunPerolehan: row[5], sumberPerolehan: row[6],
+        nilaiPerolehan: row[7], kondisi: row[8], status: row[9],
+        lokasiBarang: row[10], idBMN: row[11], keterangan: row[12],
+        fotos: Array.isArray(fotos) ? fotos : [], createdAt: row[14], updatedAt: row[15]
+      });
+    }
+    return { data: data, source: 'Spreadsheet BMN asli (' + BMN_LEGACY_SPREADSHEET_ID_ + ')', endpointWarning: endpointError };
+  } catch (e) {
+    throw new Error(
+      'Gagal membaca sumber BMN lama. Endpoint /exec: ' + endpointError +
+      '. Akses Spreadsheet ID asli (' + BMN_LEGACY_SPREADSHEET_ID_ + '): ' + e.message +
+      '. Pastikan akun pemilik Apps Script BIMASATU memiliki akses Viewer ke Spreadsheet BMN lama.'
+    );
   }
+}
 
-  var payload;
-  try { payload = JSON.parse(body); }
-  catch (e) {
-    return { success: false, message: 'Respons Apps Script lama bukan JSON. Pastikan deployment /exec lama masih aktif dan aksesnya dapat dibaca. Respons: ' + body.substring(0, 250) };
-  }
-  if (!payload || payload.success !== true || !Array.isArray(payload.data)) {
-    return { success: false, message: 'Apps Script lama tidak mengembalikan daftar BMN. ' + String(payload && payload.message || 'Format data tidak sesuai.') };
-  }
-
-  var old = payload.data;
+/**
+ * Impor idempotent: ID yang sudah ada dilewati, data target tidak ditimpa.
+ */
+function bmnImportLegacy_() {
+  var source = bmnReadLegacySource_();
+  var old = source.data;
   var existing = {};
-  var current = bmnRows_();
-  current.forEach(function (r) { existing[String(r.id)] = true; });
+  bmnRows_().forEach(function (r) { existing[String(r.id)] = true; });
 
   var imported = 0, skipped = 0, fotoPending = 0, errors = [];
   for (var i = 0; i < old.length; i++) {
@@ -358,20 +393,12 @@ function bmnImportLegacy_() {
     if (BMN_STATUS_.indexOf(statusBarang) < 0) statusBarang = 'Digunakan';
 
     var mapped = {
-      id: id,
-      satker: satker,
-      kodeBarang: r.kodeBarang || '',
-      namaBarang: r.namaBarang || '(Nama barang kosong)',
-      jenis: jenis,
-      tahunPerolehan: r.tahunPerolehan || '',
-      sumberPerolehan: r.sumberPerolehan || '',
-      nilaiPerolehan: r.nilaiPerolehan || 0,
-      kondisi: kondisi,
-      status: statusBarang,
-      lokasiBarang: r.lokasiBarang || '',
-      idBMN: r.idBMN || '',
-      keterangan: r.keterangan || '',
-      fotos: photos
+      id: id, satker: satker, kodeBarang: r.kodeBarang || '',
+      namaBarang: r.namaBarang || '(Nama barang kosong)', jenis: jenis,
+      tahunPerolehan: r.tahunPerolehan || '', sumberPerolehan: r.sumberPerolehan || '',
+      nilaiPerolehan: r.nilaiPerolehan || 0, kondisi: kondisi, status: statusBarang,
+      lokasiBarang: r.lokasiBarang || '', idBMN: r.idBMN || '',
+      keterangan: r.keterangan || '', fotos: photos
     };
 
     var saved;
@@ -389,7 +416,8 @@ function bmnImportLegacy_() {
   return {
     success: true,
     data: {
-      source: 'Apps Script /exec lama',
+      source: source.source,
+      endpointWarning: source.endpointWarning || '',
       sourceCount: old.length,
       imported: imported,
       skipped: skipped,
