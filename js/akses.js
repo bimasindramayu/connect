@@ -11,7 +11,7 @@ const AKSES_ADMIN = ['akses', 'impor'];                                         
 const AKSES_TAK_OPERATOR = ['anggaran', 'verifikasi', 'metode', 'sakti', 'config'];                          // Operator KUA hanya boleh mengakses data KUA-nya sendiri
 const AKSES_HANYA_OPERATOR = { realisasi: 'Khusus Operator KUA (mengisi Realisasi KUA sendiri)', dashboard: 'Khusus Operator KUA (ringkasan KUA-nya sendiri)' };   // menu yang hanya dapat diberikan ke Operator KUA
 const AKSES_BAWAAN = {   // isi awal di bop.sql (tombol "Kembalikan ke bawaan" hanya mencentang ulang; tersimpan bila Simpan ditekan)
-  operator: ['dashboard', 'pegawai', 'bop', 'rpd', 'realisasi', 'laporan'],
+  operator: ['dashboard', 'pegawai', 'bop', 'rpd', 'realisasi', 'laporan', 'bmn'],
   bendahara_bop: ['bop', 'rpd', 'verifikasi', 'sakti', 'laporan'],
   verifikator_bop: ['bop', 'rpd', 'verifikasi', 'laporan'],
   bast_nr: ['bast', 'bast-buat', 'bast-pegawai', 'bast-setting'],
@@ -34,6 +34,8 @@ const MENU_DEF = [
     ['config', 'Config', 'Pengaturan sistem BOP: buka/tutup pengisian, bulan RPD, batas file LPJ. Tidak untuk Operator KUA.'],
     ['impor', 'Impor Data Lama', 'Mengambil data dari sistem lama. Khusus Admin.'],
     ['laporan', 'Laporan', 'Unduh laporan Excel/PDF. Operator KUA: KUA-nya sendiri; peran lain: semua KUA.']]],
+  ['BMN', [
+    ['bmn', 'Barang Milik Negara', 'Dashboard, inventaris aset, foto/dokumen barang, filter, ekspor Excel/PDF. Operator KUA dapat menambah, mengubah, dan menghapus BMN pada KUA sendiri selama izin input diaktifkan Admin; Admin dapat mengelola seluruh Satker.']]],
   ['BAST NR', [
     ['bast', 'Riwayat', 'Daftar Berita Acara, status SIMKAH, dan arsip dokumen tertandatangan (lihat, unggah, hapus).'],
     ['bast-buat', 'Buat BA', 'Membuat Berita Acara baru.'],

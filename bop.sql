@@ -179,7 +179,7 @@ create trigger profiles_admin_guard before update of role on public.profiles
 -- mengelola pegawai KUA-nya sendiri; peran lain yang diberi menu ini oleh admin hanya MELIHAT pegawai semua KUA (bagian 13).
 create or replace function public.menu_keys() returns text[] language sql immutable as $$
   select array['dashboard','pegawai','bop','anggaran','rpd','realisasi','verifikasi','metode','sakti','config','impor','laporan',
-               'bast','bast-buat','bast-pegawai','bast-setting','sert-masjid','sert-kiblat','sert-pengaturan','jaspro','akses'];
+               'bast','bast-buat','bast-pegawai','bast-setting','sert-masjid','sert-kiblat','sert-pengaturan','jaspro','bmn','akses'];
 $$;
 
 create or replace function public.peran_label(p_role text) returns text language sql immutable as $$
@@ -363,7 +363,7 @@ begin
       ('verifikator_bop','bop'),('verifikator_bop','rpd'),('verifikator_bop','verifikasi'),('verifikator_bop','laporan'),
       ('bast_nr','bast'),('bast_nr','bast-buat'),('bast_nr','bast-pegawai'),('bast_nr','bast-setting'),
       ('kemasjidan','sert-masjid'),('kemasjidan','sert-kiblat'),('kemasjidan','sert-pengaturan'),
-      ('pnbp_nr','jaspro')
+      ('pnbp_nr','jaspro'),('operator','bmn')
     on conflict do nothing;
     insert into public.config (key, value) values ('hak_akses_awal', 'true') on conflict (key) do nothing;
   end if;

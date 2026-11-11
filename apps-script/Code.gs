@@ -44,7 +44,7 @@ const SUPABASE_KEY = 'sb_publishable_AfVmUT86ttPMaiO3iUmJew_u3l3IBPF';
 
 /* ========================================================================== */
 
-const VERSI_ = '1.2 (hak akses menu per peran; arsip BAST NR lewat folder master)';
+const VERSI_ = '1.4 (Operator KUA kelola BMN sendiri)';
 
 const SHEET_MASJID = 'DataMasjid';
 const SHEET_PENGATURAN = 'Pengaturan';
@@ -125,7 +125,8 @@ function actions_() {
     }
   };
   const tambahan = typeof bastActions_ === 'function' ? bastActions_() : {};
-  return Object.assign({}, dasar, tambahan);
+  const bmn = typeof bmnActions_ === 'function' ? bmnActions_() : {};
+  return Object.assign({}, dasar, tambahan, bmn);
 }
 
 /**
@@ -248,7 +249,7 @@ function periksaToken_(token) {
   if (isi.exp && Number(isi.exp) <= sekarang) throw galat_('AUTH', PESAN_SESI_ + ' (token kedaluwarsa)');
 
   const cache = CacheService.getScriptCache();
-  const kunci = 'sb2_' + sha256Hex_(token);   // awalan sb2_: isi cache berubah bentuk (ada menus), jadi cache versi lama tidak terbaca
+  const kunci = 'sb3_' + sha256Hex_(token);   // awalan sb3_: konteks pengguna kini menyertakan KUA dan kua_id, cache lama tanpa KUA tidak dipakai
   const ada = cache.get(kunci);
   if (ada === 'x') throw galat_('AUTH', PESAN_SESI_ + ' (token ditolak Supabase beberapa saat lalu)');
   if (ada) return JSON.parse(ada);
@@ -271,7 +272,10 @@ function periksaToken_(token) {
   if (!badan || Array.isArray(badan) || typeof badan !== 'object' || !badan.role) throw galat_('FORBIDDEN', 'Profil akun tidak ditemukan.');
 
   const menus = Array.isArray(badan.menus) ? badan.menus.map(String) : [];
-  const info = { id: isi.sub, nama: String(badan.nama || ''), role: String(badan.role || ''), menus: menus };
+  const info = {
+    id: isi.sub, nama: String(badan.nama || ''), role: String(badan.role || ''),
+    kua: String(badan.kua || ''), kua_id: badan.kua_id || null, menus: menus
+  };
   const ttl = Math.min(CACHE_LOGIN_DETIK_, (Number(isi.exp) || 0) - sekarang - 5);
   if (ttl >= 5) cache.put(kunci, JSON.stringify(info), ttl);
   return info;
@@ -363,6 +367,8 @@ function setupDatabase() {
 
   // Modul tambahan (Bast.gs) menyiapkan sheet-nya sendiri bila ada.
   if (typeof ensureBastSchemas_ === 'function') ensureBastSchemas_(ss);
+  // BMN berada di file spreadsheet BIMASATU yang sama, pada sheet terpisah.
+  if (typeof ensureBMNSchemas_ === 'function') ensureBMNSchemas_(ss);
 
   if (ss.getSheetByName('Users')) {
     Logger.log('Sheet "Users" tidak lagi dipakai (login lewat Supabase). Boleh dihapus setelah portal lama dipensiunkan.');

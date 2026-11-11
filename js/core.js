@@ -33,7 +33,7 @@ const can = menu => !!me && Array.isArray(me.menus) && me.menus.includes(menu); 
 // Urutan mencari halaman awal bila alamat kosong atau menunya tidak boleh dibuka akun ini. Dashboard (khusus Operator KUA) menjadi halaman awal
 // operator; Pegawai KUA paling akhir supaya halaman awal peran lain tidak berubah.
 const HOME_ORDER = ['dashboard', 'bop', 'rpd', 'realisasi', 'verifikasi', 'sakti', 'metode', 'anggaran', 'laporan', 'config', 'impor',
-  'bast', 'bast-buat', 'bast-pegawai', 'bast-setting', 'sert-masjid', 'sert-kiblat', 'sert-pengaturan', 'jaspro', 'akses', 'pegawai'];
+  'bast', 'bast-buat', 'bast-pegawai', 'bast-setting', 'bmn', 'sert-masjid', 'sert-kiblat', 'sert-pengaturan', 'jaspro', 'akses', 'pegawai'];
 const homeMenu = () => HOME_ORDER.find(can) || 'pengaturan';
 // Hanya dipakai bila database belum diperbarui (fungsi akses_saya belum ada): perilaku lama, admin semua menu dan operator 4 menu.
 // Dashboard dan Pegawai KUA butuh tabel baru di bop.sql, jadi tidak ikut.
@@ -125,7 +125,8 @@ function route() {
   EP++;
   const sv = k === 'sert-masjid' || k === 'sert-kiblat' || k === 'sert-pengaturan';   // modul Sertifikat punya wadah sendiri (#sertView), tidak ditimpa innerHTML #view
   $('view').classList.toggle('d-none', sv); $('sertView').classList.toggle('d-none', !sv);
-  $('view').classList.toggle('bop', !/^(jaspro|bast|sert-)/.test(k));   // pewarnaan khusus halaman BOP dan akun (css/app.css)
+  $('view').classList.toggle('bop', !/^(jaspro|bast|bmn|sert-)/.test(k));   // pewarnaan khusus halaman BOP dan akun (css/app.css)
+  $('view').classList.toggle('bmn', k === 'bmn'); // namespace CSS khusus halaman BMN (css/bmn.css)
   pages[k]();
 }
 const rp = n => String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -144,15 +145,23 @@ async function api(q, opt = {}) {
   return r;
 }
 /* ====== Apps Script (Sertifikat, BAST NR): satu Spreadsheet, login memakai token Supabase (admin saja, diperiksa di server Apps Script) ====== */
-async function gasRaw(action, params = {}) {   // hasil apa adanya, termasuk { success: false, message } dari server; galat jaringan/format tetap dilempar
-  if (!CFG.gas) throw new Error('CFG.gas (URL Web App Apps Script) di index.html belum diisi.');
+async function gasRaw(action, params = {}) {   // Apps Script dipanggil melalui Edge Function agar browser tidak terkena CORS Google
   const { data: { session } } = await sb.auth.getSession();
   if (!session) throw new Error('Sesi habis. Silakan login ulang.');
+  const payload = { ...params, action, token: session.access_token };
   let r;
-  try { r = await fetch(CFG.gas, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...params, action, token: session.access_token }) }); }
-  catch { throw new Error('Tidak dapat menghubungi Apps Script. Periksa koneksi internet dan URL Web App (CFG.gas).'); }
+  try {
+    r = await fetch(`${CFG.url}/functions/v1/bop?action=gas`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + session.access_token, apikey: CFG.key, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch {
+    throw new Error('Tidak dapat menghubungi server BIMASATU (Supabase). Periksa koneksi internet dan deployment Edge Function bop.');
+  }
   const j = await r.json().catch(() => null);
-  if (!j) throw new Error(`Apps Script tidak merespons dengan benar (kode ${r.status}). Pastikan Web App sudah di-deploy dengan akses Anyone.`);
+  if (!j) throw new Error(`Server BIMASATU tidak merespons dengan benar (kode ${r.status}). Periksa deployment Edge Function bop.`);
+  if (!r.ok) throw new Error(j.message || j.error || `Server BIMASATU gagal (kode ${r.status}).`);
   return j;
 }
 async function gas(action, params = {}) {

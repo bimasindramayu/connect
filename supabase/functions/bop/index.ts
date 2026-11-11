@@ -50,6 +50,10 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 // Nama aplikasi = nama folder master di Google Drive. Samakan dengan CFG.nama di js/config.js dan APP_NAME di bop.mjs.
 const APP_NAME = 'BIMASATU';
 
+// URL Web App Apps Script BIMASATU. Samakan dengan CFG.gas di js/config.js.
+// Dapat dioverride tanpa mengubah kode: npx supabase secrets set BIMASATU_GAS_URL=<URL_WEB_APP_EXEC>
+const GAS_WEB_APP_URL = Deno.env.get('BIMASATU_GAS_URL') || 'https://script.google.com/macros/s/AKfycbzD36oRsvupE23S5MVbpl179Npwjuv8iyWTMyEyykAOfMTvgzpEOaPrUUWrK8GhynaY5Q/exec';
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
@@ -424,12 +428,132 @@ async function bastHapus(url: URL) {
   return json({ ok: true });
 }
 
+
+// ---- BMN: <master>/BMN/<Satker>/<Kode Barang> ---------------------------------------------------------------
+const MAX_BMN = 5 * 1024 * 1024;
+const bmnNorm = (s: string) => s.toLowerCase().trim().replace(/^kua\s*(kec\.?|kecamatan)?\s*/, '').replace(/\s+/g, ' ');
+
+async function bmnFolder(auth: Auth, satker: string, kode: string, create: boolean) {
+  return drivePath(auth, ['BMN', clean(satker).slice(0, 100) || 'Satker', clean(kode).slice(0, 100) || 'Tanpa Kode'], create);
+}
+
+async function bmnSatkerUser(db: any, me: Me): Promise<string | null> {
+  if (me.role !== 'operator' || !me.kua_id) return null;
+  const { data } = await db.from('kua').select('nama_kua').eq('id', me.kua_id).maybeSingle();
+  return data?.nama_kua ? String(data.nama_kua) : null;
+}
+
+async function bmnMayWrite(db: any, me: Me, satker: string): Promise<boolean> {
+  if (me.role === 'admin') return true;
+  if (me.role !== 'operator') return false;
+  const own = await bmnSatkerUser(db, me);
+  return !!own && bmnNorm(own) === bmnNorm(satker);
+}
+
+async function bmnFileSatker(auth: Auth, id: string): Promise<string | null> {
+  const root = await drivePath(auth, ['BMN'], false);
+  if (!root) return null;
+  const file = await (await fetch(API + '/' + id + '?fields=parents,trashed,mimeType', { headers: auth })).json();
+  if (!file || file.trashed || !TYPES.includes(file.mimeType) || !file.parents?.[0]) return null;
+  const kode = await (await fetch(API + '/' + file.parents[0] + '?fields=name,parents,mimeType', { headers: auth })).json();
+  const satkerId = kode?.parents?.[0];
+  if (!satkerId || kode.mimeType !== FOLDER) return null;
+  const satker = await (await fetch(API + '/' + satkerId + '?fields=name,parents,mimeType', { headers: auth })).json();
+  if (!satker?.name || satker.mimeType !== FOLDER || !satker.parents?.includes(root)) return null;
+  return String(satker.name);
+}
+
+async function bmnUpload(req: Request, db: any, me: Me, jwt: string) {
+  const form = await req.formData();
+  const file = form.get('file');
+  const satkerIn = String(form.get('satker') ?? '').trim();
+  const kode = String(form.get('kodeBarang') ?? '').trim();
+  if (!(file instanceof File) || !file.size) return json({ error: 'Pilih foto atau dokumen BMN.' }, 400);
+  if (!satkerIn || !kode) return json({ error: 'Satker dan Kode Barang wajib diisi sebelum mengunggah.' }, 400);
+  if (!await bmnMayWrite(db, me, satkerIn)) return json({ error: 'Anda tidak berhak mengunggah dokumen untuk Satker ini.' }, 403);
+  if (me.role === 'operator') {
+    try {
+      const check = await fetch(GAS_WEB_APP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'bmnCanWrite', token: jwt }),
+        redirect: 'follow',
+      });
+      const result = await check.json().catch(() => null);
+      if (!check.ok || !result?.success) {
+        return json({ error: result?.message || 'Tidak dapat memeriksa izin input BMN pada Apps Script.' }, 502);
+      }
+      if (result.data?.allowed !== true) {
+        return json({ error: result.data?.message || 'Input BMN sedang ditutup oleh Admin.' }, 403);
+      }
+    } catch {
+      return json({ error: 'Tidak dapat memeriksa izin input BMN. Coba lagi atau hubungi Admin.' }, 502);
+    }
+  }
+  const ext = (file.name.split('.').pop() ?? '').toLowerCase(), type = EXT[ext];
+  if (!type || !TYPES.includes(type)) return json({ error: 'Hanya PDF, JPG, atau PNG.' }, 400);
+  if (file.size > MAX_BMN) return json({ error: 'Ukuran file maksimal ' + (MAX_BMN / 1024 / 1024) + ' MB.' }, 400);
+  const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  if (!MAGIC[type].every((x, i) => head[i] === x)) return json({ error: 'Isi file tidak sesuai ekstensinya.' }, 400);
+  const own = me.role === 'operator' ? await bmnSatkerUser(db, me) : satkerIn;
+  const auth = { Authorization: 'Bearer ' + await googleToken() };
+  const dir = (await bmnFolder(auth, own || satkerIn, kode, true))!;
+  const up = await driveUpload(auth, dir, clean(file.name).slice(-140), type, file, { bmn: '1', satker: clean(own || satkerIn) });
+  return json({ ok: true, id: up.id, link: linkFile(up.id), name: file.name });
+}
+
+async function bmnSalin(req: Request, db: any, me: Me) {
+  if (me.role !== 'admin') return json({ error: 'Migrasi file BMN lama hanya dapat dilakukan Admin.' }, 403);
+  const b = await bacaJson<{ url?: unknown; satker?: unknown; kodeBarang?: unknown; fileName?: unknown }>(req);
+  const url = String(b.url ?? ''), satker = String(b.satker ?? '').trim(), kode = String(b.kodeBarang ?? '').trim();
+  const m = url.match(/\/d\/([\w-]{10,100})/) ?? url.match(/[?&]id=([\w-]{10,100})/);
+  if (!/^https:\/\/(drive|docs)\.google\.com\//.test(url) || !m) return json({ error: 'Tautan file lama tidak dikenali (harus tautan Google Drive).' }, 400);
+  if (!satker || !kode) return json({ error: 'Satker dan Kode Barang wajib diisi.' }, 400);
+  const src = m[1], rk = url.match(/[?&]resourcekey=([\w-]+)/i)?.[1];
+  const auth = { Authorization: 'Bearer ' + await googleToken() };
+  const dir = (await bmnFolder(auth, satker, kode, true))!;
+  const duplicate = (await driveList(auth, "appProperties has { key='bmnlegacy' and value='" + esc(src) + "' } and '" + dir + "' in parents and trashed=false", 'files(id,name)'))[0];
+  if (duplicate) return json({ ok: true, ada: true, id: duplicate.id, name: duplicate.name });
+  const unduhan = await unduhPublik(src, rk);
+  if (!unduhan.got) return json({ error: unduhan.besar ? 'File lama melebihi batas 20 MB.' : 'File lama tidak dapat diunduh. Pastikan izin tautan Google Drive lama masih aktif.' }, 502);
+  const name = clean(String(b.fileName || 'Dokumen BMN')).slice(-140);
+  const up = await driveUpload(auth, dir, name, unduhan.got.type, new Blob([unduhan.got.bytes as BlobPart]), { bmn: '1', satker: clean(satker), bmnlegacy: src });
+  return json({ ok: true, id: up.id, name: name });
+}
+
+async function bmnFile(url: URL, db: any, me: Me) {
+  const id = url.searchParams.get('id') ?? '';
+  if (!validId(id)) return json({ error: 'ID file BMN tidak valid.' }, 400);
+  const auth = { Authorization: 'Bearer ' + await googleToken() };
+  const satker = await bmnFileSatker(auth, id);
+  if (!satker) return json({ error: 'Dokumen tidak ditemukan di folder master BIMASATU/BMN.' }, 404);
+  if (me.role === 'operator') {
+    const own = await bmnSatkerUser(db, me);
+    if (!own || bmnNorm(own) !== bmnNorm(satker)) return json({ error: 'Anda tidak berhak membuka dokumen Satker lain.' }, 403);
+  }
+  const meta = await (await fetch(API + '/' + id + '?fields=mimeType', { headers: auth })).json();
+  const r = await fetch(API + '/' + id + '?alt=media', { headers: auth });
+  if (!r.ok || !r.body || !TYPES.includes(meta.mimeType)) return json({ error: 'Gagal membaca dokumen BMN.' }, 502);
+  return new Response(r.body, { headers: { ...cors, 'Content-Type': meta.mimeType, 'Cache-Control': 'private, max-age=300' } });
+}
+
+async function bmnHapus(url: URL, me: Me) {
+  if (me.role !== 'admin') return json({ error: 'Hanya Admin yang dapat menghapus file BMN.' }, 403);
+  const id = url.searchParams.get('id') ?? '';
+  if (!validId(id)) return json({ error: 'ID file BMN tidak valid.' }, 400);
+  const auth = { Authorization: 'Bearer ' + await googleToken() };
+  if (!await bmnFileSatker(auth, id)) return json({ error: 'Dokumen tidak ditemukan di folder master BIMASATU/BMN.' }, 404);
+  const r = await trash(auth, id);
+  if (!r.ok) throw new Error('Gagal memindahkan dokumen BMN ke Sampah Google Drive.');
+  return json({ ok: true });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   try {
     const url = new URL(req.url), action = url.searchParams.get('action') ?? '';
-    const POST = ['upload', 'delete', 'reset-password', 'buat-akun', 'ubah-akun', 'impor-lpj', 'bast-upload', 'bast-salin', 'bast-hapus'];
-    if (![...POST, 'list', 'file', 'bast-file'].includes(action)) return json({ error: 'Aksi tidak dikenal.' }, 400);
+    const POST = ['upload', 'delete', 'reset-password', 'buat-akun', 'ubah-akun', 'impor-lpj', 'bast-upload', 'bast-salin', 'bast-hapus', 'bmn-upload', 'bmn-salin', 'bmn-hapus', 'gas'];
+    if (![...POST, 'list', 'file', 'bast-file', 'bmn-file'].includes(action)) return json({ error: 'Aksi tidak dikenal.' }, 400);
     if (POST.includes(action) !== (req.method === 'POST')) return json({ error: 'Metode tidak didukung.' }, 405);
     const own = action === 'upload' || action === 'delete';   // mengubah dokumen LPJ: hanya Operator KUA, untuk KUA-nya sendiri
 
@@ -445,12 +569,63 @@ Deno.serve(async (req) => {
     if (!prof) return json({ error: 'Profil tidak ditemukan.' }, 403);
     const me: Me = { id: user.id, nama: prof.nama, role: prof.role, kua_id: prof.kua_id };
 
+    // Proxy Apps Script: browser -> Edge Function -> Web App. Token tetap diverifikasi lagi oleh Apps Script,
+    // termasuk peran dan hak akses menu; token di body wajib sama dengan Bearer token pemanggil.
+    if (action === 'gas') {
+      const parsed = await req.json().catch(() => null);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return json({ success: false, code: 'BAD_REQUEST', message: 'Isi permintaan Apps Script tidak valid.' }, 400);
+      }
+      const payload = parsed as Record<string, unknown>;
+      if (payload.token !== jwt) {
+        return json({ success: false, code: 'AUTH', message: 'Token Apps Script tidak sama dengan sesi login.' }, 401);
+      }
+      if (typeof payload.action !== 'string' || !/^[A-Za-z][A-Za-z0-9]{0,79}$/.test(payload.action)) {
+        return json({ success: false, code: 'BAD_REQUEST', message: 'Nama aksi Apps Script tidak valid.' }, 400);
+      }
+      try {
+        const upstream = await fetch(GAS_WEB_APP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload),
+          redirect: 'follow',
+        });
+        const raw = await upstream.text();
+        let result: unknown;
+        try { result = JSON.parse(raw); }
+        catch {
+          return json({
+            success: false, code: 'APPS_SCRIPT_RESPONSE',
+            message: 'Apps Script tidak mengembalikan JSON. Periksa URL Web App dan pastikan deployment memiliki akses Anyone.',
+          }, 502);
+        }
+        if (!upstream.ok) {
+          const detail = result && typeof result === 'object' ? String((result as Record<string, unknown>).message || (result as Record<string, unknown>).error || '') : '';
+          return json({ success: false, code: 'APPS_SCRIPT_HTTP', message: detail || `Apps Script gagal merespons (HTTP ${upstream.status}).` }, 502);
+        }
+        return json(result);
+      } catch (e) {
+        return json({
+          success: false, code: 'APPS_SCRIPT_NETWORK',
+          message: 'Edge Function tidak dapat menghubungi Apps Script: ' + ((e as Error).message || 'kesalahan jaringan.'),
+        }, 502);
+      }
+    }
+
     if (action === 'reset-password') return await resetPassword(db, me, req);
     if (action === 'buat-akun') return await buatAkun(db, me, req);
     if (action === 'ubah-akun') return await ubahAkun(db, me, req);
     if (action === 'impor-lpj') return await imporLpj(db, me, req);
 
     const bisa = await hakMenu(db, me);
+    if (action.startsWith('bmn-')) {
+      if (!bisa('bmn')) return json({ error: 'Anda tidak berhak mengakses menu BMN.' }, 403);
+      if (action === 'bmn-upload') return await bmnUpload(req, db, me, jwt);
+      if (action === 'bmn-salin') return await bmnSalin(req, db, me);
+      if (action === 'bmn-file') return await bmnFile(url, db, me);
+      return await bmnHapus(url, me);
+    }
+
     if (action.startsWith('bast-')) {   // arsip BAST NR: menu Riwayat BAST (bast) atau Pengaturan BAST (bast-setting, untuk migrasi arsip lama)
       if (!(action === 'bast-hapus' ? bisa('bast') : bisa('bast') || bisa('bast-setting'))) return json({ error: 'Anda tidak berhak mengakses arsip BAST NR.' }, 403);
       if (action === 'bast-upload') return await bastUpload(req);

@@ -84,6 +84,7 @@ npx supabase link --project-ref <PROJECT-REF>
 <tempel baris "npx supabase secrets set ..." dari bagian 5>
 npx supabase functions deploy bop --no-verify-jwt
 ```
+Edge Function `bop` juga menjadi **proxy server-side untuk Apps Script** (aksi internal `gas`), sehingga browser tidak memanggil `script.google.com` langsung dan tidak terkena CORS. URL bawaan proxy harus sama dengan `CFG.gas` di `js/config.js`; bila URL Web App berubah, perbarui konstanta `GAS_WEB_APP_URL` di `supabase/functions/bop/index.ts`, atau atur rahasia `BIMASATU_GAS_URL` dengan `npx supabase secrets set BIMASATU_GAS_URL=<URL_WEB_APP_EXEC>`, lalu deploy ulang fungsi.
 Seluruh kode server Supabase ada di **satu berkas**, `supabase/functions/bop/index.ts` (aksi akun: `reset-password`, `buat-akun`, `ubah-akun`; LPJ BOP: `upload`, `delete`, `list`, `file`, `impor-lpj`; arsip BAST NR: `bast-upload`, `bast-salin`, `bast-file`, `bast-hapus`); hanya satu fungsi bernama `bop` yang perlu dideploy.
 Bila di proyek Supabase Anda masih ada fungsi lama bernama `upload-lpj`, `lpj`, atau `reset-password` (dari versi awal), semuanya sudah tergantikan dan boleh dihapus: `npx supabase functions delete <nama>`.
 `--no-verify-jwt` aman: fungsi memeriksa token login dan peran sendiri. Bila CLI meminta `config.toml`, jalankan `npx supabase init` sekali (jawab tidak untuk pertanyaan tambahan), lalu ulangi.
