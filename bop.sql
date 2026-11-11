@@ -103,7 +103,7 @@ create policy "baca profil sendiri atau admin" on public.profiles
 
 -- Pengguna dapat mengubah nama profilnya sendiri, tanpa akses mengubah role/KUA/kolom lain.
 create or replace function public.profile_update_nama(p_nama text) returns void
-language plpgsql security definer set search_path = public as $
+language plpgsql security definer set search_path = public as $profile_update_nama$
 begin
   if auth.uid() is null then raise exception 'Sesi tidak valid.'; end if;
   if p_nama is null or length(btrim(p_nama)) = 0 or length(btrim(p_nama)) > 100 then
@@ -112,7 +112,7 @@ begin
   update public.profiles set nama = btrim(p_nama) where id = auth.uid();
   if not found then raise exception 'Profil akun tidak ditemukan.'; end if;
 end;
-$;
+$profile_update_nama$;
 revoke all on function public.profile_update_nama(text) from public, anon;
 grant execute on function public.profile_update_nama(text) to authenticated;
 
