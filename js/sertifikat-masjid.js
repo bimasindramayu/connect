@@ -45,7 +45,7 @@
         function loadMasjidList() {
           document.getElementById('masjidLoadingState').classList.remove('d-none');
           document.getElementById('masjidEmptyState').classList.add('d-none');
-          callApi('listMasjid', {})
+          return callApi('listMasjid', {})
             .then(function (res) {
               document.getElementById('masjidLoadingState').classList.add('d-none');
               if (!res.success) {
