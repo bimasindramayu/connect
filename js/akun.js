@@ -130,7 +130,6 @@ function akunRender() {
     rows.map(r => `<tr><td>${esc(r.nama)}${r.id === me.id ? ' <span class="badge bg-label-info">Anda</span>' : ''}</td><td><code>${esc(r.username)}</code></td>
       <td><span class="badge bg-label-${BADGE_PERAN[r.role] || 'secondary'}">${esc(peranLabel(r.role))}</span></td><td>${esc(r.kua || '-')}</td>
       <td class="text-end text-nowrap">${r.id === me.id ? '<span class="small text-body-secondary">Kelola di Profil Saya</span>' : `<button class="btn btn-sm btn-outline-secondary" data-ubah="${esc(r.id)}" aria-label="Ubah akun ${esc(r.nama)}"><i class="bx bx-edit-alt"></i> Ubah</button> <button class="btn btn-sm btn-outline-primary" data-reset="${esc(r.id)}" aria-label="Reset password ${esc(r.nama)}"><i class="bx bx-key"></i> Reset password</button>`}</td></tr>`).join('')
-      ${r.id === me.id ? '' : ` <button class="btn btn-sm btn-outline-primary" data-reset="${esc(r.id)}" aria-label="Reset password ${esc(r.nama)}"><i class="bx bx-key"></i> Reset password</button>`}</td></tr>`).join('')
   }</tbody></table>` : '<div class="text-muted py-3">Tidak ada akun yang cocok.</div>';
 }
 async function akunMuat() {
@@ -231,5 +230,3 @@ async function pagePengaturan() {
 Object.assign(pages, { profil: pageProfil, pengaturan: pagePengaturan });
 
 
-// ---- Daftarkan halaman ke router (core.js) ----
-Object.assign(pages, { pengaturan: pagePengaturan });
