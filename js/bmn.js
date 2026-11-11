@@ -755,16 +755,55 @@ function bmnCurrentFilters() {
 async function bmnExport(format) {
   const buttons = [$('bmnExcel'), $('bmnPdf')].filter(Boolean);
   try {
-    if (!bmnFilteredRows().length) throw new Error('Tidak ada data sesuai filter untuk diekspor.');
+    const rows = bmnFilteredRows();
+    if (!rows.length) throw new Error('Tidak ada data sesuai filter untuk diekspor.');
     buttons.forEach(button => { button.disabled = true; });
-    const result = await gas('bmnExport', { format, filters: bmnCurrentFilters() });
-    if (!result.fileData) throw new Error('File ekspor tidak diterima dari server.');
-    const bytes = Uint8Array.from(atob(result.fileData), c => c.charCodeAt(0));
-    const blob = new Blob([bytes], { type: result.mimeType || 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const a = Object.assign(document.createElement('a'), { href: url, download: result.fileName || ('BMN.' + format) });
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const filters = bmnCurrentFilters();
+    const now = new Date();
+    const stamp = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0'),
+      String(now.getHours()).padStart(2, '0'), String(now.getMinutes()).padStart(2, '0')].join('');
+
+    if (format === 'xls' || format === 'xlsx') {
+      // Gunakan SheetJS yang sama dengan modul laporan BOP agar hasilnya berupa workbook .xlsx asli.
+      await loadJs(CDN.xlsx);
+      const filterInfo = [
+        'Satker: ' + (filters.satker ? bmnSatkerLabel(filters.satker) : 'Semua Satker'),
+        'Jenis: ' + (filters.jenis || 'Semua Jenis'),
+        'Kondisi: ' + (filters.kondisi || 'Semua Kondisi'),
+        'Status: ' + (filters.status || 'Semua Status'),
+        filters.search ? 'Pencarian: ' + filters.search : ''
+      ].filter(Boolean).join(' · ');
+      const headers = ['No', 'Satker', 'Kode Barang', 'Nama Barang', 'Jenis', 'Tahun', 'Nilai Perolehan (Rp)', 'Kondisi', 'Status', 'Lokasi'];
+      const body = rows.map((r, i) => [
+        i + 1, r.satker, r.kodeBarang, r.namaBarang, r.jenis, r.tahunPerolehan,
+        Number(r.nilaiPerolehan || 0), r.kondisi, r.status, r.lokasiBarang
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([
+        ['LAPORAN BARANG MILIK NEGARA'],
+        ['Kementerian Agama Kabupaten Indramayu'],
+        ['Filter: ' + filterInfo],
+        ['Dicetak: ' + now.toLocaleString('id-ID')],
+        [],
+        headers,
+        ...body
+      ]);
+      ws['!cols'] = [6, 24, 19, 32, 22, 10, 20, 16, 24, 30].map(wch => ({ wch }));
+      Object.keys(ws).forEach(address => {
+        if (address[0] !== '!' && ws[address].t === 'n') ws[address].z = '#,##0';
+      });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Data BMN');
+      XLSX.writeFile(wb, 'BMN_' + stamp + '.xlsx');
+    } else {
+      const result = await gas('bmnExport', { format: 'pdf', filters });
+      if (!result.fileData) throw new Error('File PDF tidak diterima dari server.');
+      const bytes = Uint8Array.from(atob(result.fileData), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: result.mimeType || 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = Object.assign(document.createElement('a'), { href: url, download: result.fileName || ('BMN_' + stamp + '.pdf') });
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
     bmnNotice('Ekspor selesai. Data yang diunduh mengikuti seluruh filter yang sedang aktif.', 'success');
   } catch (e) {
     bmnNotice(e.message || 'Gagal mengekspor data BMN.', 'danger');
