@@ -275,3 +275,257 @@
  #view.bmn .bmn-summary-result-count{margin-left:0}
  #view.bmn .bmn-summary-footer{padding:.6rem .75rem}
 }
+
+/* Final Sneat alignment for BMN summary: this page receives .bmn from core.js route(). */
+#view.bmn .bmn-summary-panel{
+  overflow:hidden;
+  border:1px solid #d9dee3;
+  border-radius:.375rem;
+  background:#fff;
+  box-shadow:0 .125rem .25rem rgba(67,89,113,.12);
+}
+#view.bmn .bmn-summary-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:1.25rem;
+  min-height:82px;
+  padding:1.125rem 1.5rem;
+  border-bottom:1px solid #d9dee3;
+  background:#fff;
+}
+#view.bmn .bmn-summary-heading{
+  display:flex;
+  align-items:center;
+  gap:1rem;
+  min-width:0;
+  flex:1 1 auto;
+}
+#view.bmn .bmn-summary-heading-icon{
+  width:44px;
+  height:44px;
+  flex:0 0 44px;
+  display:grid;
+  place-items:center;
+  margin:0;
+  border:0;
+  border-radius:.375rem;
+  background:rgba(105,108,255,.12);
+  color:#696cff;
+  font-size:1.35rem;
+}
+#view.bmn .bmn-summary-heading-copy{
+  display:flex;
+  flex:1 1 auto;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:center;
+  gap:.35rem;
+  min-width:0;
+}
+#view.bmn .bmn-summary-heading-copy h5{
+  display:block;
+  margin:0;
+  color:#566a7f;
+  font-size:1.05rem;
+  font-weight:600;
+  line-height:1.4;
+  letter-spacing:0;
+}
+#view.bmn .bmn-summary-heading-copy p{
+  display:block;
+  margin:0;
+  color:#a1acb8;
+  font-size:.8125rem;
+  font-weight:400;
+  line-height:1.55;
+  letter-spacing:0;
+}
+#view.bmn #bmnSummaryAll{
+  display:inline-flex;
+  flex:0 0 auto;
+  align-items:center;
+  justify-content:center;
+  gap:.35rem;
+  min-height:36px;
+  padding:.4375rem .875rem;
+  border-radius:.375rem;
+  font-size:.8125rem;
+  font-weight:500;
+  white-space:nowrap;
+}
+#view.bmn .bmn-summary-stats{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  align-items:stretch;
+  gap:1rem;
+  padding:1.25rem 1.5rem;
+  border-bottom:1px solid #d9dee3;
+  background:#fff;
+}
+#view.bmn .bmn-summary-stat{
+  display:flex;
+  align-items:center;
+  gap:.875rem;
+  min-width:0;
+  min-height:94px;
+  padding:1rem 1.125rem;
+  border:1px solid #d9dee3;
+  border-radius:.375rem;
+  background:#fff;
+  box-shadow:none;
+}
+#view.bmn .bmn-summary-stat-icon{
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  display:grid;
+  place-items:center;
+  margin:0;
+  border-radius:.375rem;
+  font-size:1.3rem;
+}
+#view.bmn .bmn-summary-stat-content{
+  display:flex;
+  flex:1 1 auto;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:center;
+  gap:.3rem;
+  min-width:0;
+  margin:0;
+}
+#view.bmn .bmn-summary-stat-label{
+  display:block;
+  order:0;
+  margin:0;
+  color:#a1acb8;
+  font-size:.75rem;
+  font-weight:500;
+  line-height:1.4;
+  white-space:normal;
+}
+#view.bmn .bmn-summary-stat-value{
+  display:block;
+  order:1;
+  margin:0;
+  color:#566a7f;
+  font-size:1.5rem;
+  font-weight:600;
+  line-height:1.2;
+  letter-spacing:0;
+  font-variant-numeric:tabular-nums;
+}
+#view.bmn .bmn-summary-stat.success .bmn-summary-stat-icon{background:rgba(40,199,111,.12);color:#28c76f}
+#view.bmn .bmn-summary-stat.warning .bmn-summary-stat-icon{background:rgba(255,171,0,.12);color:#ffab00}
+#view.bmn .bmn-summary-stat.primary .bmn-summary-stat-icon{background:rgba(105,108,255,.12);color:#696cff}
+#view.bmn .bmn-summary-stat.neutral .bmn-summary-stat-icon{background:rgba(3,195,236,.12);color:#03c3ec}
+
+/* Sneat table-header sort controls: quiet text controls, not custom pill buttons. */
+#view.bmn .bmn-summary-table thead th,
+#view.bmn #bmnTable thead th{
+  padding:.75rem .875rem;
+  border-bottom:1px solid #d9dee3;
+  background:#f5f5f9;
+  color:#566a7f;
+  font-size:.75rem;
+  font-weight:600;
+  line-height:1.35;
+  letter-spacing:.35px;
+  text-transform:uppercase;
+  vertical-align:middle;
+  white-space:nowrap;
+}
+#view.bmn .bmn-sort-button{
+  display:inline-flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:.4rem;
+  min-height:24px;
+  margin:-.2rem -.3rem;
+  padding:.2rem .3rem;
+  border:0;
+  border-radius:.25rem;
+  background:transparent;
+  color:#566a7f;
+  font-family:inherit;
+  font-size:inherit;
+  font-weight:600;
+  line-height:1.35;
+  letter-spacing:inherit;
+  text-align:left;
+  text-transform:inherit;
+  white-space:nowrap;
+  cursor:pointer;
+  box-shadow:none;
+  transition:color .15s ease,background-color .15s ease;
+}
+#view.bmn .bmn-sort-button span{
+  display:inline-block;
+  margin:0;
+  padding:0;
+  line-height:inherit;
+}
+#view.bmn .bmn-sort-button i{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  margin:0;
+  color:#a1acb8;
+  font-size:1rem;
+  line-height:1;
+}
+#view.bmn .bmn-sort-button:hover{
+  background:rgba(105,108,255,.07);
+  color:#696cff;
+}
+#view.bmn .bmn-sort-button:hover i{color:#696cff}
+#view.bmn .bmn-sort-button.active{
+  background:transparent;
+  color:#696cff;
+}
+#view.bmn .bmn-sort-button.active i{color:#696cff}
+#view.bmn .bmn-sort-button:focus-visible{
+  outline:2px solid rgba(105,108,255,.35);
+  outline-offset:2px;
+}
+
+/* Detail uses Sneat's native btn-label-primary treatment; only normalize sizing. */
+#view.bmn .bmn-summary-action.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.25rem;
+  min-height:32px;
+  min-width:72px;
+  padding:.375rem .75rem;
+  border-radius:.375rem;
+  font-size:.8125rem;
+  font-weight:500;
+  line-height:1.25;
+  white-space:nowrap;
+  box-shadow:none;
+}
+#view.bmn .bmn-summary-action.btn i{font-size:1rem;line-height:1}
+#view.bmn .bmn-summary-action.btn:hover{transform:none}
+#view.bmn .bmn-summary-disabled.btn:disabled{opacity:.55;cursor:not-allowed}
+@media(max-width:991.98px){
+  #view.bmn .bmn-summary-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;padding:1rem}
+}
+@media(max-width:575.98px){
+  #view.bmn .bmn-summary-header{align-items:stretch;flex-direction:column;gap:1rem;padding:1rem}
+  #view.bmn .bmn-summary-heading{align-items:flex-start;gap:.75rem}
+  #view.bmn .bmn-summary-heading-icon{width:38px;height:38px;flex-basis:38px;font-size:1.15rem}
+  #view.bmn .bmn-summary-heading-copy{gap:.3rem}
+  #view.bmn .bmn-summary-heading-copy h5{font-size:.95rem}
+  #view.bmn .bmn-summary-heading-copy p{font-size:.75rem}
+  #view.bmn #bmnSummaryAll{align-self:flex-start}
+  #view.bmn .bmn-summary-stats{gap:.625rem;padding:.75rem}
+  #view.bmn .bmn-summary-stat{align-items:flex-start;gap:.55rem;min-height:84px;padding:.75rem}
+  #view.bmn .bmn-summary-stat-icon{width:34px;height:34px;flex-basis:34px;font-size:1.1rem}
+  #view.bmn .bmn-summary-stat-content{gap:.25rem}
+  #view.bmn .bmn-summary-stat-label{font-size:.68rem}
+  #view.bmn .bmn-summary-stat-value{font-size:1.25rem}
+}
+
