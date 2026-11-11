@@ -38,6 +38,7 @@ function bmnActions_() {
   return {
     bmnList: { menu: 'bmn', run: function (p, user) { return bmnList_(p || {}, user); } },
     bmnStats: { menu: 'bmn', run: function (p, user) { return bmnStats_(user); } },
+    bmnExport: { menu: 'bmn', run: function (p, user) { return bmnExport_(p || {}, user); } },
     bmnSettings: { menu: 'bmn', run: function () { return bmnSettings_(); } },
     bmnCanWrite: { menu: 'bmn', run: function (p, user) { return { success: true, data: bmnCanWrite_(user) }; } },
     bmnSave: { menu: 'bmn', write: true, run: function (p, user) { return bmnSave_(p.data || {}, user); } },
