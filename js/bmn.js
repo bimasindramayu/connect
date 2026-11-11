@@ -28,6 +28,25 @@ const bmnSatkerDefault = () => me && me.role === 'operator' ? (me.kua || '') : '
 function bmnMoney(v) {
   return 'Rp ' + Number(v || 0).toLocaleString('id-ID');
 }
+function bmnFormatInputNumber(value) {
+  const digits = String(value == null ? '' : value).replace(/\D/g, '');
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+function bmnFormatNumberInput(input) {
+  if (!input) return;
+  const current = input.value;
+  const caret = input.selectionStart == null ? current.length : input.selectionStart;
+  const digitBeforeCaret = current.slice(0, caret).replace(/\D/g, '').length;
+  const digits = current.replace(/\D/g, '');
+  const formatted = digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  input.value = formatted;
+  let next = 0, seen = 0;
+  while (next < formatted.length && seen < digitBeforeCaret) {
+    if (/\d/.test(formatted[next])) seen++;
+    next++;
+  }
+  if (document.activeElement === input && input.setSelectionRange) input.setSelectionRange(next, next);
+}
 function bmnNotice(message, type = 'success') {
   const el = $('bmnMessage');
   if (el) el.innerHTML = note(esc(message), type);
@@ -89,10 +108,12 @@ async function pageBMN() {
     <div class="row g-3 mb-3" id="bmnStats">
       ${['Total Barang','Kondisi Baik','Rusak Ringan','Rusak Berat'].map(x => `<div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-body-secondary small">${x}</div><div class="placeholder-glow"><span class="placeholder col-4"></span></div></div></div></div>`).join('')}
     </div>
+    ${bmnIsAdmin() ? '<div id="bmnSatkerSummary" class="mb-3" aria-live="polite"></div>' : ''}
     <div class="card mb-3"><div class="card-body">
       <div class="row g-2 align-items-end">
         <div class="col-12 col-md-3 ${me.role === 'operator' ? 'd-none' : ''}">
-          <label class="form-label" for="bmnFilterSatker">Satker</label><input class="form-control" id="bmnFilterSatker" placeholder="Semua Satker">
+          <label class="form-label" for="bmnFilterSatker">Satker / KUA</label>
+          <select class="form-select" id="bmnFilterSatker"><option value="">Semua Satker</option></select>
         </div>
         <div class="col-6 col-md-2"><label class="form-label" for="bmnFilterJenis">Jenis</label>
           <select class="form-select" id="bmnFilterJenis"><option value="">Semua jenis</option><option>Tanah</option><option>Gedung/Bangunan</option><option>Kendaraan</option><option>Peralatan & Mesin</option><option>Aset Lainnya</option></select></div>
@@ -141,7 +162,8 @@ async function pageBMN() {
   `;
   $('bmnRefresh').onclick = bmnLoad;
   $('bmnAdd').onclick = () => bmnOpenForm(null);
-  ['bmnFilterSatker','bmnFilterJenis','bmnFilterKondisi','bmnFilterStatus','bmnSearch'].forEach(id => $(id)?.addEventListener('input', bmnRenderTable));
+  ['bmnFilterJenis','bmnFilterKondisi','bmnFilterStatus','bmnSearch'].forEach(id => $(id)?.addEventListener('input', bmnRenderTable));
+  $('bmnFilterSatker')?.addEventListener('change', bmnRenderTable);
   $('bmnExcel').onclick = () => bmnExport('xls');
   $('bmnPdf').onclick = () => bmnExport('pdf');
   if (bmnIsAdmin()) {
@@ -168,7 +190,9 @@ async function bmnLoad() {
     BMN_UI.settings = settings.data || { allowDataEntry: true };
     if (bmnIsAdmin() && $('bmnAllowEntry')) $('bmnAllowEntry').checked = BMN_UI.settings.allowDataEntry !== false;
     if ($('bmnAdd')) $('bmnAdd').disabled = !bmnCanWrite();
+    bmnRenderSatkerFilter();
     bmnRenderStats(stats.data || {});
+    bmnRenderSatkerSummary();
     bmnRenderTable();
     if (me.role === 'operator' && !bmnCanWrite()) {
       bmnNotice('Admin sedang menutup input BMN. Anda tetap dapat melihat dan mengekspor data KUA.', 'warning');
@@ -193,11 +217,103 @@ function bmnRenderStats(s) {
     </div></div></div>`).join('');
 }
 
+function bmnSatkerLabel(value) {
+  const key = bmnNormalizeSatker(value);
+  const known = BMN_KUA_NAMES.find(name => bmnNormalizeSatker(name) === key);
+  if (known) return 'KUA ' + known;
+  const raw = String(value || '').trim();
+  return raw ? (/^kua\b/i.test(raw) ? raw : 'KUA ' + raw) : 'Satker belum ditentukan';
+}
+
+function bmnRenderSatkerFilter() {
+  const select = $('bmnFilterSatker');
+  if (!select || !bmnIsAdmin()) return;
+  const selected = select.value;
+  const known = BMN_KUA_NAMES.map(name => ({ key: bmnNormalizeSatker(name), label: 'KUA ' + name }));
+  const knownKeys = new Set(known.map(item => item.key));
+  const additional = new Map();
+  BMN_UI.rows.forEach(row => {
+    const key = bmnNormalizeSatker(row.satker);
+    if (key && !knownKeys.has(key) && !additional.has(key)) additional.set(key, { key, label: bmnSatkerLabel(row.satker) });
+  });
+  const options = known.concat(Array.from(additional.values()).sort((a, b) => a.label.localeCompare(b.label, 'id')));
+  select.innerHTML = '<option value="">Semua Satker</option>' +
+    options.map(item => '<option value="' + esc(item.key) + '">' + esc(item.label) + '</option>').join('');
+  if (options.some(item => item.key === selected)) select.value = selected;
+}
+
+function bmnSatkerSummaryRows() {
+  const items = new Map();
+  BMN_KUA_NAMES.forEach(name => {
+    const key = bmnNormalizeSatker(name);
+    items.set(key, { key, label: 'KUA ' + name, total: 0, nilai: 0, baik: 0, rusakRingan: 0, rusakBerat: 0 });
+  });
+  BMN_UI.rows.forEach(row => {
+    const key = bmnNormalizeSatker(row.satker) || 'belum-ditentukan';
+    if (!items.has(key)) items.set(key, {
+      key, label: bmnSatkerLabel(row.satker), total: 0, nilai: 0, baik: 0, rusakRingan: 0, rusakBerat: 0
+    });
+    const item = items.get(key);
+    item.total++;
+    item.nilai += Number(row.nilaiPerolehan || 0) || 0;
+    if (row.kondisi === 'Baik') item.baik++;
+    else if (row.kondisi === 'Rusak Ringan') item.rusakRingan++;
+    else if (row.kondisi === 'Rusak Berat') item.rusakBerat++;
+  });
+  return Array.from(items.values());
+}
+
+function bmnRenderSatkerSummary() {
+  const root = $('bmnSatkerSummary');
+  if (!root || !bmnIsAdmin()) return;
+  const items = bmnSatkerSummaryRows();
+  const totals = items.reduce((sum, item) => {
+    sum.total += item.total; sum.nilai += item.nilai; sum.baik += item.baik;
+    sum.rusakRingan += item.rusakRingan; sum.rusakBerat += item.rusakBerat;
+    return sum;
+  }, { total: 0, nilai: 0, baik: 0, rusakRingan: 0, rusakBerat: 0 });
+  const active = items.filter(item => item.total > 0).length;
+  root.innerHTML = `
+    <div class="card bmn-summary-card">
+      <div class="bmn-summary-heading">
+        <div><div class="bmn-summary-eyebrow"><i class="bx bx-buildings me-1"></i>MONITORING ADMINISTRATOR</div>
+          <h5 class="mb-1">Ringkasan BMN per Satker</h5>
+          <p class="mb-0">Rekap seluruh data BMN dari 31 KUA dan Satker tambahan. Tidak terpengaruh filter tabel di bawah.</p></div>
+        <div class="bmn-summary-total"><span>Total aset terdata</span><strong>${totals.total.toLocaleString('id-ID')}</strong><small>${active} Satker memiliki data</small></div>
+      </div>
+      <div class="bmn-summary-value-strip"><span><i class="bx bx-wallet me-1"></i>Total nilai perolehan</span><strong>${bmnMoney(totals.nilai)}</strong></div>
+      <div class="bmn-summary-table-wrap">
+        <table class="table table-hover align-middle mb-0 bmn-summary-table">
+          <thead><tr><th>Satker / KUA</th><th class="text-end">Total Aset</th><th class="text-end">Nilai Perolehan</th><th class="text-center">Baik</th><th class="text-center">Rusak Ringan</th><th class="text-center">Rusak Berat</th></tr></thead>
+          <tbody>${items.map(item => `
+            <tr>
+              <td><button type="button" class="bmn-summary-link" data-bmn-satker-shortcut="${esc(item.key)}">${esc(item.label)}</button></td>
+              <td class="text-end fw-semibold">${item.total.toLocaleString('id-ID')}</td>
+              <td class="text-end text-nowrap">${bmnMoney(item.nilai)}</td>
+              <td class="text-center"><span class="bmn-condition-count good">${item.baik}</span></td>
+              <td class="text-center"><span class="bmn-condition-count mild">${item.rusakRingan}</span></td>
+              <td class="text-center"><span class="bmn-condition-count bad">${item.rusakBerat}</span></td>
+            </tr>`).join('')}</tbody>
+          <tfoot><tr><th>TOTAL</th><th class="text-end">${totals.total.toLocaleString('id-ID')}</th><th class="text-end text-nowrap">${bmnMoney(totals.nilai)}</th><th class="text-center">${totals.baik}</th><th class="text-center">${totals.rusakRingan}</th><th class="text-center">${totals.rusakBerat}</th></tr></tfoot>
+        </table>
+      </div>
+    </div>`;
+  root.querySelectorAll('[data-bmn-satker-shortcut]').forEach(button => {
+    button.onclick = () => {
+      const select = $('bmnFilterSatker');
+      if (!select) return;
+      select.value = button.dataset.bmnSatkerShortcut;
+      bmnRenderTable();
+      select.focus();
+    };
+  });
+}
+
 function bmnFilteredRows() {
   const val = id => $(id)?.value.trim() || '';
-  const satker = val('bmnFilterSatker').toLowerCase(), jenis = val('bmnFilterJenis'), kondisi = val('bmnFilterKondisi'), status = val('bmnFilterStatus'), q = val('bmnSearch').toLowerCase();
+  const satker = val('bmnFilterSatker'), jenis = val('bmnFilterJenis'), kondisi = val('bmnFilterKondisi'), status = val('bmnFilterStatus'), q = val('bmnSearch').toLowerCase();
   return BMN_UI.rows.filter(r =>
-    (!satker || String(r.satker).toLowerCase().includes(satker)) &&
+    (!satker || bmnNormalizeSatker(r.satker) === satker) &&
     (!jenis || r.jenis === jenis) && (!kondisi || r.kondisi === kondisi) && (!status || r.status === status) &&
     (!q || [r.kodeBarang,r.namaBarang,r.idBMN,r.lokasiBarang,r.satker].join(' ').toLowerCase().includes(q))
   );
@@ -308,8 +424,8 @@ function bmnFormHtml(row) {
             </div>
             <div class="bmn-form-field">
               <label for="bmnNilai">Nilai Perolehan (Rp)</label>
-              <div class="bmn-number-input"><span>Rp</span><input id="bmnNilai" type="number" class="form-control bmn-form-control" name="nilaiPerolehan" min="0" step="1" inputmode="numeric" value="${esc(r.nilaiPerolehan || 0)}" placeholder="0"></div>
-              <small class="bmn-form-help">Masukkan angka tanpa titik atau koma.</small>
+              <div class="bmn-number-input"><span>Rp</span><input id="bmnNilai" type="text" class="form-control bmn-form-control" name="nilaiPerolehan" inputmode="numeric" autocomplete="off" value="${esc(bmnFormatInputNumber(r.nilaiPerolehan || 0))}" placeholder="0"></div>
+              <small class="bmn-form-help">Pemisah ribuan ditambahkan otomatis saat mengetik.</small>
             </div>
             <div class="bmn-form-field">
               <label for="bmnKondisi">Kondisi Barang <em>*</em></label>
@@ -369,6 +485,7 @@ function bmnOpenForm(row) {
     $('bmnKodeBarang').value = bmnKodeBarangPreview($('bmnSatker').value, type);
   };
   $('bmnJenisSelect').onchange = updateCode;
+  $('bmnNilai')?.addEventListener('input', () => bmnFormatNumberInput($('bmnNilai')));
   $('bmnSatker').addEventListener('input', updateCode);
   $('bmnSatker').addEventListener('change', updateCode);
 
@@ -445,7 +562,7 @@ function bmnOpenForm(row) {
       jenis: String(fd.get('jenis') || ''),
       tahunPerolehan: String(fd.get('tahunPerolehan') || ''),
       sumberPerolehan: String(fd.get('sumberPerolehan') || ''),
-      nilaiPerolehan: String(fd.get('nilaiPerolehan') || '0'),
+      nilaiPerolehan: String(fd.get('nilaiPerolehan') || '0').replace(/\D/g, '') || '0',
       kondisi: String(fd.get('kondisi') || ''),
       status: String(fd.get('status') || ''),
       lokasiBarang: String(fd.get('lokasiBarang') || '').trim(),
@@ -624,18 +741,36 @@ async function bmnDelete(id) {
   } catch (e) { bmnNotice(e.message, 'danger'); }
 }
 
+function bmnCurrentFilters() {
+  const value = id => $(id)?.value?.trim() || '';
+  return {
+    satker: value('bmnFilterSatker'),
+    jenis: value('bmnFilterJenis'),
+    kondisi: value('bmnFilterKondisi'),
+    status: value('bmnFilterStatus'),
+    search: value('bmnSearch')
+  };
+}
+
 async function bmnExport(format) {
+  const buttons = [$('bmnExcel'), $('bmnPdf')].filter(Boolean);
   try {
-    const rows=bmnFilteredRows();
-    if(!rows.length) throw new Error('Tidak ada data untuk diekspor.');
-    const result=await gas('bmnExport',{format,rows:rows.map(r=>({
-      satker:r.satker,kodeBarang:r.kodeBarang,namaBarang:r.namaBarang,jenis:r.jenis,tahunPerolehan:r.tahunPerolehan,
-      nilaiPerolehan:r.nilaiPerolehan,kondisi:r.kondisi,status:r.status,lokasiBarang:r.lokasiBarang
-    }))});
-    const bytes=Uint8Array.from(atob(result.fileData),c=>c.charCodeAt(0));
-    const blob=new Blob([bytes],{type:result.mimeType}), url=URL.createObjectURL(blob);
-    const a=Object.assign(document.createElement('a'),{href:url,download:result.fileName});document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);
-  } catch(e){bmnNotice(e.message,'danger');}
+    if (!bmnFilteredRows().length) throw new Error('Tidak ada data sesuai filter untuk diekspor.');
+    buttons.forEach(button => { button.disabled = true; });
+    const result = await gas('bmnExport', { format, filters: bmnCurrentFilters() });
+    if (!result.fileData) throw new Error('File ekspor tidak diterima dari server.');
+    const bytes = Uint8Array.from(atob(result.fileData), c => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: result.mimeType || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), { href: url, download: result.fileName || ('BMN.' + format) });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    bmnNotice('Ekspor selesai. Data yang diunduh mengikuti seluruh filter yang sedang aktif.', 'success');
+  } catch (e) {
+    bmnNotice(e.message || 'Gagal mengekspor data BMN.', 'danger');
+  } finally {
+    buttons.forEach(button => { button.disabled = false; });
+  }
 }
 
 function bmnPhotoMigrationCounts() {
