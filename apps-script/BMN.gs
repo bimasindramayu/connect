@@ -18,10 +18,21 @@ var BMN_HEADERS_ = [
   'ID BMN', 'Keterangan', 'Fotos (JSON)', 'Created At', 'Updated At'
 ];
 var BMN_SETTING_HEADERS_ = ['Key', 'Value', 'Keterangan', 'Updated By', 'Updated At'];
-var BMN_MAX_FOTO_ = 12;
+var BMN_MAX_FOTO_ = 5;
 var BMN_JENIS_ = ['Tanah', 'Gedung/Bangunan', 'Kendaraan', 'Peralatan & Mesin', 'Aset Lainnya'];
 var BMN_KONDISI_ = ['Baik', 'Rusak Ringan', 'Rusak Berat'];
 var BMN_STATUS_ = ['Digunakan', 'Tidak Digunakan', 'Diusulkan Penghapusan'];
+var BMN_SUMBER_PEROLEHAN_ = ['APBN', 'APBD', 'Hibah', 'Swadaya', 'Bantuan'];
+// Kode KUA mengikuti pola aplikasi BMN lama: KODE KUA-KODE JENIS-NOMOR URUT 4 DIGIT.
+var BMN_KUA_CODES_ = {
+  anjatan: 'AJ', arahan: 'AR', balongan: 'BA', bangodua: 'BG', bongas: 'BS',
+  cantigi: 'CT', cikedung: 'CK', gantar: 'GT', gabuswetan: 'GB', haurgeulis: 'HG',
+  indramayu: 'IM', jatibarang: 'JT', juntinyuat: 'JN', kandanghaur: 'KH',
+  karangampel: 'KA', 'kedokan bunder': 'KB', kertasemaya: 'KS', krangkeng: 'KR',
+  kroya: 'KY', lelea: 'LL', lohbener: 'LB', losarang: 'LS', pasekan: 'PS',
+  patrol: 'PT', sindang: 'SD', sliyeg: 'SL', sukagumiwang: 'SG', sukra: 'SK',
+  terisi: 'TR', tukdana: 'TK', widasari: 'WD'
+};
 
 function bmnActions_() {
   return {
@@ -156,6 +167,34 @@ function bmnCanWrite_(user) {
   return { allowed: true, message: '' };
 }
 
+function bmnJenisCode_(jenis) {
+  var index = BMN_JENIS_.indexOf(String(jenis || '').trim());
+  return index < 0 ? '' : String(index + 1).padStart(2, '0');
+}
+
+function bmnKuaCode_(satker) {
+  var key = bmnNormalSatker_(satker);
+  if (BMN_KUA_CODES_[key]) return BMN_KUA_CODES_[key];
+  // Fallback untuk Satker selain KUA yang ditambahkan Admin.
+  var letters = key.replace(/[^a-z0-9]/g, '').toUpperCase();
+  return letters.substring(0, 2) || '00';
+}
+
+function bmnGenerateKodeBarang_(satker, jenis) {
+  var jenisCode = bmnJenisCode_(jenis), kuaCode = bmnKuaCode_(satker);
+  if (!jenisCode) throw new Error('Jenis BMN tidak valid untuk membuat Kode Barang.');
+  var prefix = kuaCode + '-' + jenisCode + '-';
+  var max = 0;
+  bmnRows_().forEach(function (r) {
+    var code = String(r.kodeBarang || '');
+    if (code.indexOf(prefix) === 0) {
+      var n = parseInt(code.substring(prefix.length), 10);
+      if (isFinite(n) && n > max) max = n;
+    }
+  });
+  return prefix + String(max + 1).padStart(4, '0');
+}
+
 function bmnRows_() {
   var sh = bmnSheet_(), values = sh.getDataRange().getValues();
   if (!values.length) return [];
@@ -237,34 +276,60 @@ function bmnSave_(data, user) {
   if (!data || typeof data !== 'object') return { success: false, message: 'Data BMN tidak valid.' };
   var permission = bmnCanWrite_(user);
   if (!permission.allowed) return { success: false, message: permission.message };
+
   var nama = String(data.namaBarang || '').trim();
   var jenis = String(data.jenis || '').trim();
   var satker = bmnIsOperator_(user) ? bmnOwnSatker_(user) : String(data.satker || '').trim();
+  var tahun = String(data.tahunPerolehan || '').trim();
+  var sumber = String(data.sumberPerolehan || '').trim();
+  var kondisi = String(data.kondisi || '').trim();
+  var status = String(data.status || '').trim();
+  var lokasi = String(data.lokasiBarang || '').trim();
+  var nilaiRaw = String(data.nilaiPerolehan == null || data.nilaiPerolehan === '' ? '0' : data.nilaiPerolehan).replace(/[^\d.-]/g, '');
+  var nilai = Number(nilaiRaw);
+
   if (!satker) return { success: false, message: 'Nama Satker/KUA wajib diisi.' };
   if (!nama) return { success: false, message: 'Nama barang wajib diisi.' };
   if (BMN_JENIS_.indexOf(jenis) < 0) return { success: false, message: 'Jenis barang tidak valid.' };
-  if (data.kondisi && BMN_KONDISI_.indexOf(String(data.kondisi)) < 0) return { success: false, message: 'Kondisi barang tidak valid.' };
-  if (data.status && BMN_STATUS_.indexOf(String(data.status)) < 0) return { success: false, message: 'Status penggunaan tidak valid.' };
+  if (!/^\d{4}$/.test(tahun) || Number(tahun) < 1900 || Number(tahun) > 2100) {
+    return { success: false, message: 'Tahun Perolehan harus berupa angka tahun 1900 sampai 2100.' };
+  }
+  if (sumber && BMN_SUMBER_PEROLEHAN_.indexOf(sumber) < 0) return { success: false, message: 'Sumber Perolehan tidak valid.' };
+  if (BMN_KONDISI_.indexOf(kondisi) < 0) return { success: false, message: 'Kondisi barang wajib dipilih.' };
+  if (BMN_STATUS_.indexOf(status) < 0) return { success: false, message: 'Status Penggunaan wajib dipilih.' };
+  if (!lokasi) return { success: false, message: 'Lokasi Barang wajib diisi.' };
+  if (!isFinite(nilai) || nilai < 0) return { success: false, message: 'Nilai Perolehan harus berupa angka nol atau lebih.' };
+
   var photos = Array.isArray(data.fotos) ? data.fotos : [];
   if (photos.length > BMN_MAX_FOTO_) return { success: false, message: 'Maksimal ' + BMN_MAX_FOTO_ + ' foto/dokumen per barang.' };
+
   var sh = bmnSheet_(), values = sh.getDataRange().getValues(), map = bmnMap_(values[0]), rowNo = -1, old = null;
   if (data.id) {
     var all = bmnRows_();
     for (var i = 0; i < all.length; i++) if (all[i].id === String(data.id)) { old = all[i]; rowNo = all[i]._row; break; }
-    if (rowNo > 0 && bmnIsOperator_(user) && bmnNormalSatker_(old.satker) !== bmnNormalSatker_(satker)) {
+    if (rowNo < 0) return { success: false, message: 'Data BMN tidak ditemukan.' };
+    if (bmnIsOperator_(user) && bmnNormalSatker_(old.satker) !== bmnNormalSatker_(satker)) {
       return { success: false, message: 'Anda tidak berhak mengubah BMN Satker lain.' };
     }
-    if (rowNo < 0) return { success: false, message: 'Data BMN tidak ditemukan.' };
+    if (bmnNormalSatker_(old.satker) !== bmnNormalSatker_(satker)) {
+      return { success: false, message: 'Satker tidak dapat diubah dari formulir Edit BMN.' };
+    }
+    if (old.jenis && old.jenis !== jenis) {
+      return { success: false, message: 'Jenis BMN tidak dapat diubah setelah Kode Barang terbentuk.' };
+    }
   }
+
+  // Nomor urut dibuat ulang di server saat SIMPAN, di dalam ScriptLock tangani_(),
+  // agar dua Operator yang menyimpan pada saat sama tidak memperoleh kode duplikat.
+  var kodeBarang = old && old.kodeBarang ? String(old.kodeBarang) : bmnGenerateKodeBarang_(satker, jenis);
   var id = data.id ? String(data.id) : 'BMN-' + Utilities.getUuid().replace(/-/g, '').substring(0, 16).toUpperCase();
   var created = old ? old.createdAt : new Date(), now = new Date();
   var valuesByHeader = {
-    'id': id, 'satker': satker, 'kodebarang': String(data.kodeBarang || '').trim(),
-    'namabarang': nama, 'jenis': jenis, 'tahunperolehan': String(data.tahunPerolehan || '').trim(),
-    'sumberperolehan': String(data.sumberPerolehan || '').trim(),
-    'nilaiperolehan': Number(String(data.nilaiPerolehan || '0').replace(/[^\d.-]/g, '')) || 0,
-    'kondisi': String(data.kondisi || 'Baik'), 'status': String(data.status || 'Digunakan'),
-    'lokasibarang': String(data.lokasiBarang || '').trim(), 'idbmn': String(data.idBMN || '').trim(),
+    'id': id, 'satker': satker, 'kodebarang': kodeBarang,
+    'namabarang': nama, 'jenis': jenis, 'tahunperolehan': tahun,
+    'sumberperolehan': sumber, 'nilaiperolehan': nilai,
+    'kondisi': kondisi, 'status': status,
+    'lokasibarang': lokasi, 'idbmn': String(data.idBMN || '').trim(),
     'keterangan': String(data.keterangan || '').trim(), 'fotosjson': JSON.stringify(photos),
     'createdat': created, 'updatedat': now
   };
@@ -275,7 +340,7 @@ function bmnSave_(data, user) {
   });
   if (rowNo > 0) sh.getRange(rowNo, 1, 1, row.length).setValues([row]);
   else sh.appendRow(row);
-  return { success: true, data: { id: id, satker: satker } };
+  return { success: true, data: { id: id, satker: satker, kodeBarang: kodeBarang } };
 }
 
 function bmnDelete_(id, user) {
