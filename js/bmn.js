@@ -309,6 +309,23 @@ function bmnSortRows(rows, key, dir, kind) {
   });
 }
 
+function bmnRefreshSortHeaders(kind) {
+  const root = kind === 'summary' ? $('bmnSatkerSummary') : $('bmnTable');
+  if (!root) return;
+  const state = kind === 'summary' ? BMN_UI.summarySort : BMN_UI.tableSort;
+  const attr = kind === 'summary' ? 'data-bmn-sort-summary' : 'data-bmn-sort-table';
+  root.querySelectorAll('[' + attr + ']').forEach(button => {
+    const key = button.getAttribute(attr);
+    const label = button.querySelector('span')?.textContent || '';
+    const active = state.key === key;
+    const icon = active ? (state.dir === 'asc' ? 'bx-sort-up' : 'bx-sort-down') : 'bx-sort';
+    button.classList.toggle('active', active);
+    button.innerHTML = '<span>' + esc(label) + '</span><i class="bx ' + icon + '"></i>';
+    const th = button.closest('th');
+    if (th) th.setAttribute('aria-sort', active ? (state.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+  });
+}
+
 function bmnSetSort(kind, key) {
   const state = kind === 'summary' ? BMN_UI.summarySort : BMN_UI.tableSort;
   if (state.key === key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
@@ -317,7 +334,10 @@ function bmnSetSort(kind, key) {
     state.dir = 'asc';
   }
   if (kind === 'summary') bmnRenderSatkerSummary();
-  else bmnRenderTable();
+  else {
+    bmnRenderTable();
+    bmnRefreshSortHeaders('table');
+  }
 }
 
 function bmnSummaryFilteredRows() {
@@ -418,10 +438,11 @@ function bmnRenderSatkerSummary() {
   $('bmnSummaryAll').onclick = bmnShowAllBMN;
   $('bmnSummarySearch').oninput = event => {
     BMN_UI.summarySearch = event.target.value;
+    const caret = event.target.selectionStart || event.target.value.length;
     bmnRenderSatkerSummary();
     const input = $('bmnSummarySearch');
     input?.focus();
-    if (input) input.setSelectionRange(input.value.length, input.value.length);
+    if (input) input.setSelectionRange(caret, caret);
   };
   $('bmnSummaryStatus').onchange = event => {
     BMN_UI.summaryStatus = event.target.value;
@@ -443,6 +464,7 @@ function bmnShowSatkerSummary() {
   $('bmnSatkerSummary')?.classList.remove('d-none');
   $('bmnSummaryToggle')?.classList.add('d-none');
   $('bmnBackSummary')?.classList.add('d-none');
+  $('bmnAdd')?.classList.add('d-none');
   bmnRenderSatkerSummary();
 }
 
@@ -456,6 +478,7 @@ function bmnShowSatkerDetail(key) {
   $('bmnTableView')?.classList.remove('d-none');
   $('bmnSummaryToggle')?.classList.add('d-none');
   $('bmnBackSummary')?.classList.remove('d-none');
+  $('bmnAdd')?.classList.remove('d-none');
   bmnRenderTable();
 }
 
@@ -476,6 +499,7 @@ function bmnShowAllBMN() {
   $('bmnTableView')?.classList.remove('d-none');
   $('bmnSummaryToggle')?.classList.remove('d-none');
   $('bmnBackSummary')?.classList.add('d-none');
+  $('bmnAdd')?.classList.remove('d-none');
   bmnRenderTable();
 }
 
@@ -508,6 +532,7 @@ function bmnRenderTable() {
   $('bmnTable').querySelectorAll('[data-bmn-sort-table]').forEach(button => {
     button.onclick = () => bmnSetSort('table', button.dataset.bmnSortTable);
   });
+  bmnRefreshSortHeaders('table');
 }
 
 function bmnFormHtml(row) {
@@ -856,7 +881,7 @@ async function bmnView(id) {
       <section class="bmn-detail-section">
         <div class="bmn-detail-section-heading"><span class="bmn-detail-section-icon info"><i class="bx bx-images"></i></span><div><h6>Foto dan Dokumen</h6><small>Pilih berkas untuk melihat pratinjau langsung</small></div></div>
         <div class="bmn-detail-files" id="bmnPhotoButtons">${fileHtml}</div>
-        ${photos.some(p => p.migrationStatus === 'pending' || !p.fileId) ? '<div class="bmn-detail-file-note"><i class="bx bx-info-circle"></i> Berkas yang masih menunggu migrasi perlu disalin terlebih dahulu melalui Pusat Migrasi Data BMN.</div>' : ''}
+        ${photos.some(p => p.migrationStatus === 'pending' || !p.fileId) ? '<div class="bmn-detail-file-note"><i class="bx bx-info-circle"></i> Berkas ini belum tersedia di folder arsip BIMASATU. Hubungi Admin untuk pemeriksaan lebih lanjut.</div>' : ''}
       </section>
     </div>
     <div class="bmn-detail-footer"><span><i class="bx bx-shield-quarter"></i> Data tersimpan di Spreadsheet BIMASATU</span><button type="button" class="btn btn-primary" id="bmnDetailDone"><i class="bx bx-check me-1"></i> Selesai</button></div>
