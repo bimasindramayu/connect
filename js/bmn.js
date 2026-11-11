@@ -39,7 +39,8 @@ function bmnBadge(v, group) {
   return '<span class="badge bg-label-' + (map[v] || 'secondary') + '">' + esc(v || '-') + '</span>';
 }
 function bmnPhotoList(row) {
-  return Array.isArray(row.fotos) ? row.fotos : [];
+  // Form Tambah BMN dipanggil dengan row=null; perlakukan sebagai belum memiliki lampiran.
+  return Array.isArray(row?.fotos) ? row.fotos : [];
 }
 function bmnNormalizeSatker(value) {
   return String(value || '').trim().toLowerCase().replace(/^kua\s*(kec\.?|kecamatan)?\s*/i, '').replace(/\s+/g, ' ');
