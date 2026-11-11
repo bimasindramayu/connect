@@ -41,7 +41,7 @@ function openReset(r) {
     <p class="mb-3">Akun: <b>${esc(r.nama)}</b> · ${esc(peranLabel(r.role))}${r.kua ? ' (' + esc(r.kua) + ')' : ''}${r.username ? ' · username <code>' + esc(r.username) + '</code>' : ''}</p>
     <div id="rmsg"></div>${pwPair('rp')}
     <button type="button" class="btn btn-sm btn-outline-secondary mb-3" id="gen"><i class="bx bx-refresh"></i> Buat password acak</button>
-    <p class="small">Password lama langsung tidak berlaku. Sampaikan password baru ini kepada pemilik akun, dan sarankan menggantinya lewat menu Pengaturan.</p>
+    <p class="small">Password lama langsung tidak berlaku. Sampaikan password baru ini kepada pemilik akun, dan sarankan menggantinya lewat menu Profil Saya.</p>
     <div class="d-flex justify-content-end gap-2">
       <button type="button" class="btn btn-outline-secondary" id="rx">Batal</button>
       <button class="btn btn-primary" id="rgo">Reset password</button></div></form>`;
@@ -129,7 +129,7 @@ function akunRender() {
   el.innerHTML = rows.length ? `<table class="table table-hover align-middle"><thead><tr><th>Nama</th><th>Username</th><th>Peran</th><th>Instansi</th><th class="text-end">Aksi</th></tr></thead><tbody>${
     rows.map(r => `<tr><td>${esc(r.nama)}${r.id === me.id ? ' <span class="badge bg-label-info">Anda</span>' : ''}</td><td><code>${esc(r.username)}</code></td>
       <td><span class="badge bg-label-${BADGE_PERAN[r.role] || 'secondary'}">${esc(peranLabel(r.role))}</span></td><td>${esc(r.kua || '-')}</td>
-      <td class="text-end text-nowrap"><button class="btn btn-sm btn-outline-secondary" data-ubah="${esc(r.id)}" aria-label="Ubah akun ${esc(r.nama)}"><i class="bx bx-edit-alt"></i> Ubah</button>
+      <td class="text-end text-nowrap">${r.id === me.id ? '<span class="small text-body-secondary">Kelola di Profil Saya</span>' : `<button class="btn btn-sm btn-outline-secondary" data-ubah="${esc(r.id)}" aria-label="Ubah akun ${esc(r.nama)}"><i class="bx bx-edit-alt"></i> Ubah</button> <button class="btn btn-sm btn-outline-primary" data-reset="${esc(r.id)}" aria-label="Reset password ${esc(r.nama)}"><i class="bx bx-key"></i> Reset password</button>`}</td></tr>`).join('')
       ${r.id === me.id ? '' : ` <button class="btn btn-sm btn-outline-primary" data-reset="${esc(r.id)}" aria-label="Reset password ${esc(r.nama)}"><i class="bx bx-key"></i> Reset password</button>`}</td></tr>`).join('')
   }</tbody></table>` : '<div class="text-muted py-3">Tidak ada akun yang cocok.</div>';
 }
