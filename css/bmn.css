@@ -686,3 +686,78 @@
   #view.bmn .bmn-summary-table tbody td,
   #view.bmn #bmnTable tbody td { font-size: .8125rem; }
 }
+
+/* Pengaturan BMN dipindahkan ke modal agar tetap mudah dijangkau dari toolbar. */
+#view.bmn #bmnSettingsOpen { min-height:36px; font-weight:600; }
+#dlg.bmn-settings-dialog {
+  width:min(560px,calc(100% - 2rem)); max-width:none;
+  max-height:calc(100vh - 2rem); padding:0; overflow:hidden;
+  border:0; border-radius:.85rem; background:#fff;
+  box-shadow:0 1rem 3rem rgba(40,48,100,.32);
+}
+#dlg.bmn-settings-dialog::before { display:none; }
+#dlg.bmn-settings-dialog::backdrop { background:rgba(35,41,90,.55); backdrop-filter:blur(3px); }
+#dlg.bmn-settings-dialog .bmn-settings-shell {
+  display:flex; flex-direction:column; max-height:calc(100vh - 2rem); background:#fff;
+}
+#dlg.bmn-settings-dialog .bmn-settings-header {
+  display:flex; align-items:center; justify-content:space-between; gap:1rem;
+  padding:1.25rem 1.35rem; color:#fff;
+  background:linear-gradient(125deg,#3730a3 0%,#696cff 58%,#0891b2 100%);
+}
+#dlg.bmn-settings-dialog .bmn-settings-header-main { display:flex; align-items:center; gap:.9rem; min-width:0; }
+#dlg.bmn-settings-dialog .bmn-settings-header-icon {
+  display:grid; place-items:center; flex:0 0 46px; width:46px; height:46px;
+  border:1px solid rgba(255,255,255,.24); border-radius:.7rem;
+  background:rgba(255,255,255,.16); font-size:1.4rem;
+}
+#dlg.bmn-settings-dialog .bmn-settings-eyebrow {
+  margin-bottom:.2rem; color:rgba(255,255,255,.78);
+  font-size:.65rem; font-weight:700; letter-spacing:.12em;
+}
+#dlg.bmn-settings-dialog .bmn-settings-header h5 { margin:0; color:#fff; font-size:1.1rem; font-weight:700; }
+#dlg.bmn-settings-dialog .bmn-settings-header p { margin:.2rem 0 0; color:rgba(255,255,255,.86); font-size:.8rem; }
+#dlg.bmn-settings-dialog .bmn-settings-body { display:grid; gap:1rem; padding:1.25rem 1.35rem; overflow-y:auto; }
+#dlg.bmn-settings-dialog .bmn-settings-card {
+  padding:1.1rem; border:1px solid #e3e7f0; border-left:4px solid #696cff;
+  border-radius:.7rem; background:#fff; box-shadow:0 4px 14px rgba(67,89,113,.06);
+}
+#dlg.bmn-settings-dialog .bmn-settings-card-top { display:flex; align-items:flex-start; gap:.75rem; }
+#dlg.bmn-settings-dialog .bmn-settings-card-icon {
+  display:grid; place-items:center; flex:0 0 38px; width:38px; height:38px;
+  border-radius:.6rem; background:rgba(105,108,255,.12); color:#696cff; font-size:1.2rem;
+}
+#dlg.bmn-settings-dialog .bmn-settings-card-copy { min-width:0; }
+#dlg.bmn-settings-dialog .bmn-settings-card-copy h6 { margin:0 0 .25rem; color:#566a7f; font-size:.95rem; font-weight:700; }
+#dlg.bmn-settings-dialog .bmn-settings-card-copy p { margin:0; color:#697a8d; font-size:.8125rem; line-height:1.5; }
+#dlg.bmn-settings-dialog .bmn-settings-divider { height:1px; margin:1rem 0; background:#eceef4; }
+#dlg.bmn-settings-dialog .bmn-settings-control-row { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+#dlg.bmn-settings-dialog .bmn-settings-control-row>div:first-child { display:grid; gap:.2rem; min-width:0; }
+#dlg.bmn-settings-dialog .bmn-settings-control-row strong { color:#566a7f; font-size:.875rem; font-weight:600; }
+#dlg.bmn-settings-dialog .bmn-settings-control-row span { color:#8592a3; font-size:.75rem; line-height:1.4; }
+#dlg.bmn-settings-dialog .bmn-settings-control-row .form-check-input { width:2.6rem; height:1.35rem; margin:0; cursor:pointer; }
+#dlg.bmn-settings-dialog .bmn-settings-control-row .form-check-input:disabled { cursor:wait; opacity:.6; }
+#dlg.bmn-settings-dialog .bmn-settings-state { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; margin-top:.9rem; }
+#dlg.bmn-settings-dialog .bmn-settings-state .badge { font-size:.72rem; font-weight:700; }
+#dlg.bmn-settings-dialog .bmn-settings-note {
+  display:flex; align-items:flex-start; gap:.55rem; padding:.8rem .9rem;
+  border-radius:.6rem; background:#f1f8ff; color:#52728b;
+}
+#dlg.bmn-settings-dialog .bmn-settings-note i { flex:none; margin-top:.05rem; color:#03a9d2; font-size:1.05rem; }
+#dlg.bmn-settings-dialog .bmn-settings-note p { margin:0; font-size:.78rem; line-height:1.5; }
+#dlg.bmn-settings-dialog .bmn-settings-note strong { color:#3d647f; }
+#dlg.bmn-settings-dialog .bmn-settings-footer {
+  display:flex; align-items:center; justify-content:space-between; gap:1rem;
+  padding:.9rem 1.35rem; border-top:1px solid #e9edf3; background:#fbfcfe;
+}
+#dlg.bmn-settings-dialog .bmn-settings-footer>span { color:#8592a3; font-size:.7rem; }
+#dlg.bmn-settings-dialog .bmn-settings-footer>span i { color:#28c76f; font-size:.95rem; }
+#dlg.bmn-settings-dialog .bmn-settings-footer .btn { min-width:96px; font-size:.8125rem; }
+@media(max-width:575.98px) {
+  #view.bmn #bmnSettingsOpen { flex:1 1 auto; }
+  #dlg.bmn-settings-dialog { width:calc(100% - 1rem); max-height:calc(100vh - 1rem); margin:auto; }
+  #dlg.bmn-settings-dialog .bmn-settings-header { padding:1rem; }
+  #dlg.bmn-settings-dialog .bmn-settings-body { padding:1rem; }
+  #dlg.bmn-settings-dialog .bmn-settings-footer { align-items:flex-start; flex-direction:column; padding:.85rem 1rem; }
+  #dlg.bmn-settings-dialog .bmn-settings-footer .btn { align-self:flex-end; }
+}
