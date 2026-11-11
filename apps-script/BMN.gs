@@ -280,56 +280,123 @@ function bmnDelete_(id) {
  * lokasi aktif; setiap foto disimpan sebagai legacyUrl agar admin dapat menyalinnya
  * ke folder master BIMASATU lewat fitur migrasi foto.
  */
-function bmnImportLegacy_(spreadsheetId) {
-  spreadsheetId = String(spreadsheetId || '').trim();
-  if (!/^[a-zA-Z0-9_-]{20,}$/.test(spreadsheetId)) return { success: false, message: 'ID Spreadsheet lama tidak valid.' };
-  var target = SpreadsheetApp.getActiveSpreadsheet();
-  if (target.getId() === spreadsheetId) return { success: false, message: 'Spreadsheet sumber dan tujuan tidak boleh sama.' };
-  var source;
-  try { source = SpreadsheetApp.openById(spreadsheetId).getSheetByName('BMN_Data'); }
-  catch (e) { return { success: false, message: 'Spreadsheet lama tidak dapat dibuka. Pastikan akun Apps Script memiliki akses ke file tersebut.' }; }
-  if (!source) return { success: false, message: 'Sheet BMN_Data tidak ditemukan di spreadsheet lama.' };
-  var old = source.getDataRange().getValues();
-  if (old.length < 2) return { success: true, data: { imported: 0, skipped: 0, fotoPending: 0 } };
-  var sourceMap = bmnMap_(old[0]), existing = {};
-  var sh = bmnSheet_(), current = bmnRows_();
-  current.forEach(function (r) { existing[r.id] = true; });
-  var imported = 0, skipped = 0, fotoPending = 0;
-  for (var i = 1; i < old.length; i++) {
-    var r = old[i], id = String(bmnCell_(r, sourceMap, ['ID']) || '').trim();
-    if (!id) { skipped++; continue; }
-    if (existing[id]) { skipped++; continue; }
-    var rawPhotos = bmnCell_(r, sourceMap, ['Fotos (JSON)', 'FotosJson', 'Fotos']);
-    var photos = [];
-    try { photos = Array.isArray(rawPhotos) ? rawPhotos : JSON.parse(String(rawPhotos || '[]')); } catch (e) { photos = []; }
+// URL Web App Apps Script lama (repo entry). Dibaca melalui endpoint /exec,
+// sehingga Apps Script BIMASATU tidak perlu diberi akses langsung ke Spreadsheet lama.
+var BMN_LEGACY_EXEC_URL_ = 'https://script.google.com/macros/s/AKfycbwQZiSPbvdnz-814dlNsdI6seG4SQG43JAqbX23RuYaGZR2_-V8i1BlkONATP6ZbeSi/exec';
+
+/**
+ * Impor BMN lama melalui Web App Apps Script project entry.
+ * ID/URL sumber sudah ditanam di kode; parameter lama diabaikan.
+ * Endpoint lama mengembalikan { success:true, data:[...] } dari aksi getBMNData.
+ */
+function bmnImportLegacy_() {
+  var response;
+  try {
+    response = UrlFetchApp.fetch(BMN_LEGACY_EXEC_URL_, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ action: 'getBMNData' }),
+      muteHttpExceptions: true,
+      followRedirects: true
+    });
+  } catch (e) {
+    return { success: false, message: 'Tidak dapat menghubungi Apps Script BMN lama: ' + e.message };
+  }
+
+  var status = response.getResponseCode();
+  var body = response.getContentText();
+  if (status < 200 || status >= 300) {
+    return { success: false, message: 'Apps Script lama mengembalikan HTTP ' + status + ': ' + body.substring(0, 300) };
+  }
+
+  var payload;
+  try { payload = JSON.parse(body); }
+  catch (e) {
+    return { success: false, message: 'Respons Apps Script lama bukan JSON. Pastikan deployment /exec lama masih aktif dan aksesnya dapat dibaca. Respons: ' + body.substring(0, 250) };
+  }
+  if (!payload || payload.success !== true || !Array.isArray(payload.data)) {
+    return { success: false, message: 'Apps Script lama tidak mengembalikan daftar BMN. ' + String(payload && payload.message || 'Format data tidak sesuai.') };
+  }
+
+  var old = payload.data;
+  var existing = {};
+  var current = bmnRows_();
+  current.forEach(function (r) { existing[String(r.id)] = true; });
+
+  var imported = 0, skipped = 0, fotoPending = 0, errors = [];
+  for (var i = 0; i < old.length; i++) {
+    var r = old[i] || {};
+    var id = String(r.id || '').trim();
+    if (!id || existing[id]) { skipped++; continue; }
+
+    var photos = r.fotos;
+    if (typeof photos === 'string') {
+      try { photos = JSON.parse(photos || '[]'); } catch (e) { photos = []; }
+    }
     if (!Array.isArray(photos)) photos = [];
     photos = photos.map(function (f) {
+      f = f || {};
       fotoPending++;
+      var fileId = String(f.fileId || f.id || '');
       return {
-        legacyFileId: String(f.fileId || f.id || ''),
-        legacyUrl: String(f.fileUrl || f.url || (f.fileId ? 'https://drive.google.com/file/d/' + f.fileId + '/view' : '')),
+        legacyFileId: fileId,
+        legacyUrl: String(f.fileUrl || f.url || (fileId ? 'https://drive.google.com/file/d/' + fileId + '/view' : '')),
         fileName: String(f.fileName || f.name || 'Dokumen BMN'),
-        fileSize: Number(f.fileSize || 0), mimeType: String(f.mimeType || ''),
+        fileSize: Number(f.fileSize || 0),
+        mimeType: String(f.mimeType || f.type || ''),
         migrationStatus: 'pending'
       };
     });
-    var satker = String(bmnCell_(r, sourceMap, ['KUA', 'Satker']) || '').trim();
-    if (satker && !/^KUA\b/i.test(satker) && !/^(MIN|MTSN|MAN)\b/i.test(satker)) satker = 'KUA Kec. ' + satker;
+
+    var satker = String(r.kua || r.satker || '').trim();
+    if (satker && !/^(KUA\\b|MIN\\b|MTSN\\b|MAN\\b)/i.test(satker)) satker = 'KUA ' + satker;
+    var jenis = String(r.jenis || '').trim();
+    if (BMN_JENIS_.indexOf(jenis) < 0) jenis = 'Aset Lainnya';
+    var kondisi = String(r.kondisi || 'Baik').trim();
+    if (BMN_KONDISI_.indexOf(kondisi) < 0) kondisi = 'Baik';
+    var statusBarang = String(r.status || 'Digunakan').trim();
+    if (BMN_STATUS_.indexOf(statusBarang) < 0) statusBarang = 'Digunakan';
+
     var mapped = {
-      id: id, satker: satker, kodeBarang: bmnCell_(r, sourceMap, ['Kode Barang', 'KodeBarang']),
-      namaBarang: bmnCell_(r, sourceMap, ['Nama Barang', 'NamaBarang']),
-      jenis: bmnCell_(r, sourceMap, ['Jenis']), tahunPerolehan: bmnCell_(r, sourceMap, ['Tahun Perolehan', 'TahunPerolehan']),
-      sumberPerolehan: bmnCell_(r, sourceMap, ['Sumber Perolehan', 'SumberPerolehan']),
-      nilaiPerolehan: bmnCell_(r, sourceMap, ['Nilai Perolehan', 'NilaiPerolehan']),
-      kondisi: bmnCell_(r, sourceMap, ['Kondisi']), status: bmnCell_(r, sourceMap, ['Status']),
-      lokasiBarang: bmnCell_(r, sourceMap, ['Lokasi Barang', 'LokasiBarang']),
-      idBMN: bmnCell_(r, sourceMap, ['ID BMN', 'IdBMN']),
-      keterangan: bmnCell_(r, sourceMap, ['Keterangan']), fotos: photos
+      id: id,
+      satker: satker,
+      kodeBarang: r.kodeBarang || '',
+      namaBarang: r.namaBarang || '(Nama barang kosong)',
+      jenis: jenis,
+      tahunPerolehan: r.tahunPerolehan || '',
+      sumberPerolehan: r.sumberPerolehan || '',
+      nilaiPerolehan: r.nilaiPerolehan || 0,
+      kondisi: kondisi,
+      status: statusBarang,
+      lokasiBarang: r.lokasiBarang || '',
+      idBMN: r.idBMN || '',
+      keterangan: r.keterangan || '',
+      fotos: photos
     };
-    var saved = bmnSave_(mapped, { role: 'admin', nama: 'Migrasi BMN' });
-    if (saved.success) { imported++; existing[id] = true; } else skipped++;
+
+    var saved;
+    try { saved = bmnSave_(mapped, { role: 'admin', nama: 'Migrasi BMN lama' }); }
+    catch (e) { saved = { success: false, message: e.message }; }
+    if (saved && saved.success) {
+      imported++;
+      existing[id] = true;
+    } else {
+      skipped++;
+      if (errors.length < 10) errors.push(id + ': ' + String(saved && saved.message || 'gagal disimpan'));
+    }
   }
-  return { success: true, data: { imported: imported, skipped: skipped, fotoPending: fotoPending } };
+
+  return {
+    success: true,
+    data: {
+      source: 'Apps Script /exec lama',
+      sourceCount: old.length,
+      imported: imported,
+      skipped: skipped,
+      fotoPending: fotoPending,
+      errors: errors
+    }
+  };
 }
 
 
