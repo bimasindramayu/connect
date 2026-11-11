@@ -44,7 +44,7 @@ const SUPABASE_KEY = 'sb_publishable_AfVmUT86ttPMaiO3iUmJew_u3l3IBPF';
 
 /* ========================================================================== */
 
-const VERSI_ = '1.2 (hak akses menu per peran; arsip BAST NR lewat folder master)';
+const VERSI_ = '1.3 (modul BMN; spreadsheet BIMASATU; Drive master)';
 
 const SHEET_MASJID = 'DataMasjid';
 const SHEET_PENGATURAN = 'Pengaturan';
@@ -125,7 +125,8 @@ function actions_() {
     }
   };
   const tambahan = typeof bastActions_ === 'function' ? bastActions_() : {};
-  return Object.assign({}, dasar, tambahan);
+  const bmn = typeof bmnActions_ === 'function' ? bmnActions_() : {};
+  return Object.assign({}, dasar, tambahan, bmn);
 }
 
 /**
@@ -363,6 +364,8 @@ function setupDatabase() {
 
   // Modul tambahan (Bast.gs) menyiapkan sheet-nya sendiri bila ada.
   if (typeof ensureBastSchemas_ === 'function') ensureBastSchemas_(ss);
+  // BMN berada di file spreadsheet BIMASATU yang sama, pada sheet terpisah.
+  if (typeof ensureBMNSchemas_ === 'function') ensureBMNSchemas_(ss);
 
   if (ss.getSheetByName('Users')) {
     Logger.log('Sheet "Users" tidak lagi dipakai (login lewat Supabase). Boleh dihapus setelah portal lama dipensiunkan.');
