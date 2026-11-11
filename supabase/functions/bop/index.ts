@@ -463,7 +463,7 @@ async function bmnFileSatker(auth: Auth, id: string): Promise<string | null> {
   return String(satker.name);
 }
 
-async function bmnUpload(req: Request, db: any, me: Me) {
+async function bmnUpload(req: Request, db: any, me: Me, jwt: string) {
   const form = await req.formData();
   const file = form.get('file');
   const satkerIn = String(form.get('satker') ?? '').trim();
@@ -471,6 +471,25 @@ async function bmnUpload(req: Request, db: any, me: Me) {
   if (!(file instanceof File) || !file.size) return json({ error: 'Pilih foto atau dokumen BMN.' }, 400);
   if (!satkerIn || !kode) return json({ error: 'Satker dan Kode Barang wajib diisi sebelum mengunggah.' }, 400);
   if (!await bmnMayWrite(db, me, satkerIn)) return json({ error: 'Anda tidak berhak mengunggah dokumen untuk Satker ini.' }, 403);
+  if (me.role === 'operator') {
+    try {
+      const check = await fetch(GAS_WEB_APP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'bmnCanWrite', token: jwt }),
+        redirect: 'follow',
+      });
+      const result = await check.json().catch(() => null);
+      if (!check.ok || !result?.success) {
+        return json({ error: result?.message || 'Tidak dapat memeriksa izin input BMN pada Apps Script.' }, 502);
+      }
+      if (result.data?.allowed !== true) {
+        return json({ error: result.data?.message || 'Input BMN sedang ditutup oleh Admin.' }, 403);
+      }
+    } catch {
+      return json({ error: 'Tidak dapat memeriksa izin input BMN. Coba lagi atau hubungi Admin.' }, 502);
+    }
+  }
   const ext = (file.name.split('.').pop() ?? '').toLowerCase(), type = EXT[ext];
   if (!type || !TYPES.includes(type)) return json({ error: 'Hanya PDF, JPG, atau PNG.' }, 400);
   if (file.size > MAX_BMN) return json({ error: 'Ukuran file maksimal ' + (MAX_BMN / 1024 / 1024) + ' MB.' }, 400);
@@ -601,7 +620,7 @@ Deno.serve(async (req) => {
     const bisa = await hakMenu(db, me);
     if (action.startsWith('bmn-')) {
       if (!bisa('bmn')) return json({ error: 'Anda tidak berhak mengakses menu BMN.' }, 403);
-      if (action === 'bmn-upload') return await bmnUpload(req, db, me);
+      if (action === 'bmn-upload') return await bmnUpload(req, db, me, jwt);
       if (action === 'bmn-salin') return await bmnSalin(req, db, me);
       if (action === 'bmn-file') return await bmnFile(url, db, me);
       return await bmnHapus(url, me);
