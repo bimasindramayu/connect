@@ -543,3 +543,146 @@
   box-shadow:0 0 0 .2rem rgba(105,108,255,.18);
 }
 
+/* ------------------------------------------------------------------
+   Penyesuaian akhir BMN: kontras header dan tipografi setara Sneat
+   ------------------------------------------------------------------ */
+#view.bmn {
+  font-size: .875rem;
+  line-height: 1.5;
+}
+
+/* Header ringkasan: aksen indigo-biru agar tidak tampak seperti area nonaktif. */
+#view.bmn .bmn-summary-header {
+  background: linear-gradient(120deg, #4f46e5 0%, #696cff 56%, #258fbd 100%);
+  border-bottom: 0;
+  color: #fff;
+}
+#view.bmn .bmn-summary-heading-icon {
+  border: 1px solid rgba(255,255,255,.24);
+  background: rgba(255,255,255,.16);
+  color: #fff;
+}
+#view.bmn .bmn-summary-heading-copy h5 {
+  color: #fff;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+#view.bmn .bmn-summary-heading-copy p {
+  color: rgba(255,255,255,.88);
+  font-size: .875rem;
+  line-height: 1.5;
+}
+#view.bmn #bmnSummaryAll {
+  min-height: 40px;
+  padding: .5rem .9rem;
+  border: 1px solid rgba(255,255,255,.5);
+  border-radius: .375rem;
+  background: rgba(255,255,255,.14);
+  color: #fff;
+  font-size: .875rem;
+  font-weight: 600;
+}
+#view.bmn #bmnSummaryAll:hover,
+#view.bmn #bmnSummaryAll:focus-visible {
+  border-color: #fff;
+  background: #fff;
+  color: #5146d8;
+}
+
+/* Ukuran teks konten utama mengikuti ukuran normal halaman Sneat. */
+#view.bmn .small,
+#view.bmn small {
+  font-size: .8125rem;
+}
+#view.bmn .bmn-summary-heading-copy h5 { font-size: 1.125rem; }
+#view.bmn .bmn-summary-heading-copy p { font-size: .875rem; }
+#view.bmn .bmn-summary-stat-label {
+  color: #697a8d;
+  font-size: .8125rem;
+  line-height: 1.4;
+}
+#view.bmn .bmn-summary-stat-value {
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+#view.bmn .bmn-summary-filter input,
+#view.bmn .bmn-summary-status {
+  font-size: .875rem;
+}
+#view.bmn .bmn-summary-result-count {
+  font-size: .8125rem;
+}
+#view.bmn .bmn-summary-table {
+  font-size: .875rem;
+}
+#view.bmn .bmn-summary-table tbody td {
+  font-size: .875rem;
+  line-height: 1.45;
+}
+#view.bmn .bmn-summary-kua-name {
+  font-size: .875rem;
+  line-height: 1.4;
+}
+#view.bmn .bmn-summary-kua-note,
+#view.bmn .bmn-summary-date {
+  font-size: .75rem;
+}
+#view.bmn .bmn-summary-quantity {
+  font-size: .875rem;
+}
+#view.bmn .bmn-summary-condition {
+  font-size: .8125rem;
+}
+#view.bmn .bmn-summary-status-pill {
+  font-size: .75rem;
+}
+#view.bmn .bmn-summary-action,
+#view.bmn .bmn-summary-disabled {
+  font-size: .8125rem;
+}
+#view.bmn .bmn-summary-footer {
+  font-size: .75rem;
+}
+
+/* Header tabel: lavender-indigo dengan teks kontras, bukan abu-abu pudar. */
+#view.bmn .bmn-summary-table thead th,
+#view.bmn #bmnTable thead th {
+  padding: .8rem .875rem;
+  border-bottom: 2px solid rgba(105,108,255,.38);
+  background: linear-gradient(180deg, #f0f0ff 0%, #e5e7ff 100%);
+  color: #4a4cc7;
+  font-size: .8125rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+#view.bmn .bmn-summary-table thead th .bmn-sort-button,
+#view.bmn #bmnTable thead th .bmn-sort-button {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+#view.bmn .bmn-summary-table thead th .bmn-sort-button i,
+#view.bmn #bmnTable thead th .bmn-sort-button i {
+  color: #7779df;
+}
+#view.bmn #bmnTable tbody td {
+  padding: .7rem .75rem;
+  font-size: .875rem;
+  line-height: 1.45;
+}
+
+/* Tetap nyaman dibaca pada layar ponsel. */
+@media (max-width: 575.98px) {
+  #view.bmn .bmn-summary-heading-copy h5 { font-size: 1.05rem; }
+  #view.bmn .bmn-summary-heading-copy p { font-size: .8125rem; }
+  #view.bmn .bmn-summary-stat-label { font-size: .75rem; }
+  #view.bmn .bmn-summary-stat-value { font-size: 1.3rem; }
+  #view.bmn .bmn-summary-table thead th,
+  #view.bmn #bmnTable thead th { font-size: .75rem; }
+  #view.bmn .bmn-summary-table tbody td,
+  #view.bmn #bmnTable tbody td { font-size: .8125rem; }
+}
