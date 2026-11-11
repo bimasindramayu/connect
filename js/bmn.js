@@ -22,22 +22,22 @@ function bmnPhotoList(row) {
 }
 
 async function pageBMN() {
-  $('view').innerHTML = \`
+  $('view').innerHTML = `
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
       <div><h4 class="mb-1"><i class="bx bx-building me-1"></i>Barang Milik Negara</h4>
         <div class="text-body-secondary small">Inventaris BMN Satker · Database Google Spreadsheet BIMASATU</div></div>
       <div class="d-flex gap-2 flex-wrap">
         <button class="btn btn-outline-success btn-sm" id="bmnRefresh"><i class="bx bx-refresh"></i> Muat ulang</button>
-        <button class="btn btn-primary btn-sm" id="bmnAdd" \${bmnCanWrite() ? '' : 'disabled'}><i class="bx bx-plus"></i> Tambah BMN</button>
+        <button class="btn btn-primary btn-sm" id="bmnAdd" ${bmnCanWrite() ? '' : 'disabled'}><i class="bx bx-plus"></i> Tambah BMN</button>
       </div>
     </div>
     <div id="bmnMessage"></div>
     <div class="row g-3 mb-3" id="bmnStats">
-      \${['Total Barang','Kondisi Baik','Rusak Ringan','Rusak Berat'].map(x => \`<div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-body-secondary small">\${x}</div><div class="placeholder-glow"><span class="placeholder col-4"></span></div></div></div></div>\`).join('')}
+      ${['Total Barang','Kondisi Baik','Rusak Ringan','Rusak Berat'].map(x => `<div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-body-secondary small">${x}</div><div class="placeholder-glow"><span class="placeholder col-4"></span></div></div></div></div>`).join('')}
     </div>
     <div class="card mb-3"><div class="card-body">
       <div class="row g-2 align-items-end">
-        <div class="col-12 col-md-3 \${me.role === 'operator' ? 'd-none' : ''}">
+        <div class="col-12 col-md-3 ${me.role === 'operator' ? 'd-none' : ''}">
           <label class="form-label" for="bmnFilterSatker">Satker</label><input class="form-control" id="bmnFilterSatker" placeholder="Semua Satker">
         </div>
         <div class="col-6 col-md-2"><label class="form-label" for="bmnFilterJenis">Jenis</label>
@@ -57,14 +57,14 @@ async function pageBMN() {
       <thead><tr><th>No</th><th>Satker</th><th>Kode Barang</th><th>Nama Barang</th><th>Jenis</th><th>Tahun</th><th>Nilai</th><th>Kondisi</th><th>Status</th><th>Foto</th><th>Aksi</th></tr></thead>
       <tbody><tr><td colspan="11" class="text-center py-4 text-body-secondary">Memuat data…</td></tr></tbody>
     </table></div></div>
-    \${bmnIsAdmin() ? \`<div class="card mt-3"><div class="card-body">
+    ${bmnIsAdmin() ? `<div class="card mt-3"><div class="card-body">
       <h6 class="mb-2">Pengaturan dan migrasi data lama</h6>
       <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" role="switch" id="bmnAllowEntry"><label class="form-check-label" for="bmnAllowEntry">Izinkan Operator KUA menambah/mengubah data BMN</label></div>
       <div class="row g-2 align-items-end"><div class="col-12 col-md-8"><label class="form-label" for="bmnLegacyId">ID Spreadsheet BMN lama (project entry)</label><input id="bmnLegacyId" class="form-control" placeholder="ID dari URL Google Spreadsheet lama"></div><div class="col-12 col-md-auto"><button class="btn btn-outline-primary" id="bmnImport">Impor data lama</button></div></div>
       <div class="small text-body-secondary mt-2">Impor aman diulang: ID barang yang sudah ada dilewati. Foto lama ditandai untuk disalin ke Drive BIMASATU.</div>
       <div class="mt-2"><button class="btn btn-outline-warning btn-sm" id="bmnMigratePhotos">Salin foto lama ke Drive BIMASATU</button></div>
-    </div></div>\` : ''}
-  \`;
+    </div></div>` : ''}
+  `;
   $('bmnRefresh').onclick = bmnLoad;
   $('bmnAdd').onclick = () => bmnOpenForm(null);
   ['bmnFilterSatker','bmnFilterJenis','bmnFilterKondisi','bmnFilterStatus','bmnSearch'].forEach(id => $(id)?.addEventListener('input', bmnRenderTable));
@@ -95,7 +95,7 @@ async function bmnLoad() {
     bmnRenderTable();
   } catch (e) {
     bmnNotice(e.message || 'Gagal memuat data BMN.', 'danger');
-    $('bmnTable').querySelector('tbody').innerHTML = \`<tr><td colspan="11" class="text-center text-danger py-4">\${esc(e.message)}</td></tr>\`;
+    $('bmnTable').querySelector('tbody').innerHTML = `<tr><td colspan="11" class="text-center text-danger py-4">${esc(e.message)}</td></tr>`;
   } finally { BMN_UI.busy = false; }
 }
 
@@ -106,11 +106,11 @@ function bmnRenderStats(s) {
     ['Rusak Ringan', s.rusakRingan || 0, 'bx-error-circle', 'warning'],
     ['Rusak Berat', s.rusakBerat || 0, 'bx-x-circle', 'danger']
   ];
-  $('bmnStats').innerHTML = cards.map(([label,val,icon,color]) => \`
+  $('bmnStats').innerHTML = cards.map(([label,val,icon,color]) => `
     <div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body d-flex align-items-center gap-3">
-      <span class="avatar avatar-md bg-label-\${color}"><i class="bx \${icon} fs-4"></i></span>
-      <div><div class="text-body-secondary small">\${label}</div><div class="fs-4 fw-semibold">\${Number(val).toLocaleString('id-ID')}</div></div>
-    </div></div></div>\`).join('');
+      <span class="avatar avatar-md bg-label-${color}"><i class="bx ${icon} fs-4"></i></span>
+      <div><div class="text-body-secondary small">${label}</div><div class="fs-4 fw-semibold">${Number(val).toLocaleString('id-ID')}</div></div>
+    </div></div></div>`).join('');
 }
 
 function bmnFilteredRows() {
@@ -128,10 +128,10 @@ function bmnRenderTable() {
   $('bmnCount').textContent = rows.length.toLocaleString('id-ID') + ' dari ' + BMN_UI.rows.length.toLocaleString('id-ID') + ' barang';
   $('bmnTable').querySelector('tbody').innerHTML = rows.length ? rows.map((r,i) => {
     const photos = bmnPhotoList(r);
-    const actions = \`<button class="btn btn-sm btn-outline-primary" data-bmn-view="\${esc(r.id)}" title="Detail"><i class="bx bx-show"></i></button> \` +
-      (bmnCanWrite() ? \`<button class="btn btn-sm btn-outline-secondary" data-bmn-edit="\${esc(r.id)}" title="Edit"><i class="bx bx-edit"></i></button>\` : '') +
-      (bmnIsAdmin() ? \` <button class="btn btn-sm btn-outline-danger" data-bmn-delete="\${esc(r.id)}" title="Hapus"><i class="bx bx-trash"></i></button>\` : '');
-    return \`<tr><td>\${i+1}</td><td>\${esc(r.satker)}</td><td class="text-nowrap">\${esc(r.kodeBarang)}</td><td class="bmn-name">\${esc(r.namaBarang)}</td><td>\${esc(r.jenis)}</td><td>\${esc(r.tahunPerolehan)}</td><td class="text-nowrap">\${bmnMoney(r.nilaiPerolehan)}</td><td>\${bmnBadge(r.kondisi,'kondisi')}</td><td>\${bmnBadge(r.status,'status')}</td><td>\${photos.length ? \`<span class="badge bg-label-info">\${photos.length} file</span>\` : '-'}</td><td class="text-nowrap">\${actions}</td></tr>\`;
+    const actions = `<button class="btn btn-sm btn-outline-primary" data-bmn-view="${esc(r.id)}" title="Detail"><i class="bx bx-show"></i></button> ` +
+      (bmnCanWrite() ? `<button class="btn btn-sm btn-outline-secondary" data-bmn-edit="${esc(r.id)}" title="Edit"><i class="bx bx-edit"></i></button>` : '') +
+      (bmnIsAdmin() ? ` <button class="btn btn-sm btn-outline-danger" data-bmn-delete="${esc(r.id)}" title="Hapus"><i class="bx bx-trash"></i></button>` : '');
+    return `<tr><td>${i+1}</td><td>${esc(r.satker)}</td><td class="text-nowrap">${esc(r.kodeBarang)}</td><td class="bmn-name">${esc(r.namaBarang)}</td><td>${esc(r.jenis)}</td><td>${esc(r.tahunPerolehan)}</td><td class="text-nowrap">${bmnMoney(r.nilaiPerolehan)}</td><td>${bmnBadge(r.kondisi,'kondisi')}</td><td>${bmnBadge(r.status,'status')}</td><td>${photos.length ? `<span class="badge bg-label-info">${photos.length} file</span>` : '-'}</td><td class="text-nowrap">${actions}</td></tr>`;
   }).join('') : '<tr><td colspan="11" class="text-center text-body-secondary py-4">Belum ada data BMN sesuai filter.</td></tr>';
   $('bmnTable').querySelectorAll('[data-bmn-view]').forEach(b => b.onclick = () => bmnView(b.dataset.bmnView));
   $('bmnTable').querySelectorAll('[data-bmn-edit]').forEach(b => b.onclick = () => bmnOpenForm(BMN_UI.rows.find(x=>x.id===b.dataset.bmnEdit)));
@@ -141,28 +141,28 @@ function bmnRenderTable() {
 function bmnFormHtml(row) {
   const r = row || {}, readonlySatker = me.role === 'operator';
   const photos = bmnPhotoList(r);
-  return \`<div class="d-flex justify-content-between align-items-center mb-3"><div><h5 class="mb-1">\${r.id ? 'Edit' : 'Tambah'} Data BMN</h5><small class="text-body-secondary">Perubahan disimpan ke Spreadsheet BIMASATU</small></div><button type="button" class="btn-close" id="bmnCloseForm"></button></div>
+  return `<div class="d-flex justify-content-between align-items-center mb-3"><div><h5 class="mb-1">${r.id ? 'Edit' : 'Tambah'} Data BMN</h5><small class="text-body-secondary">Perubahan disimpan ke Spreadsheet BIMASATU</small></div><button type="button" class="btn-close" id="bmnCloseForm"></button></div>
   <form id="bmnForm">
-    <input type="hidden" name="id" value="\${esc(r.id || '')}">
+    <input type="hidden" name="id" value="${esc(r.id || '')}">
     <div class="row g-3">
-      <div class="col-md-6"><label class="form-label">Satker *</label><input class="form-control" name="satker" value="\${esc(r.satker || bmnSatkerDefault())}" \${readonlySatker ? 'readonly' : 'required'}></div>
-      <div class="col-md-6"><label class="form-label">Kode Barang</label><input class="form-control" name="kodeBarang" value="\${esc(r.kodeBarang || '')}"></div>
-      <div class="col-md-8"><label class="form-label">Nama Barang *</label><input class="form-control" name="namaBarang" value="\${esc(r.namaBarang || '')}" required></div>
-      <div class="col-md-4"><label class="form-label">Jenis *</label><select class="form-select" name="jenis" required><option value="">Pilih jenis</option>\${['Tanah','Gedung/Bangunan','Kendaraan','Peralatan & Mesin','Aset Lainnya'].map(x=>\`<option \${r.jenis===x?'selected':''}>\${x}</option>\`).join('')}</select></div>
-      <div class="col-md-4"><label class="form-label">Tahun Perolehan</label><input class="form-control" name="tahunPerolehan" inputmode="numeric" value="\${esc(r.tahunPerolehan || '')}"></div>
-      <div class="col-md-4"><label class="form-label">Sumber Perolehan</label><input class="form-control" name="sumberPerolehan" value="\${esc(r.sumberPerolehan || '')}"></div>
-      <div class="col-md-4"><label class="form-label">Nilai Perolehan (Rp)</label><input class="form-control" name="nilaiPerolehan" inputmode="numeric" value="\${esc(r.nilaiPerolehan || 0)}"></div>
-      <div class="col-md-4"><label class="form-label">Kondisi</label><select class="form-select" name="kondisi">\${['Baik','Rusak Ringan','Rusak Berat'].map(x=>\`<option \${(r.kondisi||'Baik')===x?'selected':''}>\${x}</option>\`).join('')}</select></div>
-      <div class="col-md-4"><label class="form-label">Status Penggunaan</label><select class="form-select" name="status">\${['Digunakan','Tidak Digunakan','Diusulkan Penghapusan'].map(x=>\`<option \${(r.status||'Digunakan')===x?'selected':''}>\${x}</option>\`).join('')}</select></div>
-      <div class="col-md-4"><label class="form-label">ID BMN</label><input class="form-control" name="idBMN" value="\${esc(r.idBMN || '')}"></div>
-      <div class="col-12"><label class="form-label">Lokasi Barang</label><input class="form-control" name="lokasiBarang" value="\${esc(r.lokasiBarang || '')}"></div>
-      <div class="col-12"><label class="form-label">Keterangan</label><textarea class="form-control" name="keterangan" rows="2">\${esc(r.keterangan || '')}</textarea></div>
+      <div class="col-md-6"><label class="form-label">Satker *</label><input class="form-control" name="satker" value="${esc(r.satker || bmnSatkerDefault())}" ${readonlySatker ? 'readonly' : 'required'}></div>
+      <div class="col-md-6"><label class="form-label">Kode Barang</label><input class="form-control" name="kodeBarang" value="${esc(r.kodeBarang || '')}"></div>
+      <div class="col-md-8"><label class="form-label">Nama Barang *</label><input class="form-control" name="namaBarang" value="${esc(r.namaBarang || '')}" required></div>
+      <div class="col-md-4"><label class="form-label">Jenis *</label><select class="form-select" name="jenis" required><option value="">Pilih jenis</option>${['Tanah','Gedung/Bangunan','Kendaraan','Peralatan & Mesin','Aset Lainnya'].map(x=>`<option ${r.jenis===x?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="col-md-4"><label class="form-label">Tahun Perolehan</label><input class="form-control" name="tahunPerolehan" inputmode="numeric" value="${esc(r.tahunPerolehan || '')}"></div>
+      <div class="col-md-4"><label class="form-label">Sumber Perolehan</label><input class="form-control" name="sumberPerolehan" value="${esc(r.sumberPerolehan || '')}"></div>
+      <div class="col-md-4"><label class="form-label">Nilai Perolehan (Rp)</label><input class="form-control" name="nilaiPerolehan" inputmode="numeric" value="${esc(r.nilaiPerolehan || 0)}"></div>
+      <div class="col-md-4"><label class="form-label">Kondisi</label><select class="form-select" name="kondisi">${['Baik','Rusak Ringan','Rusak Berat'].map(x=>`<option ${(r.kondisi||'Baik')===x?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="col-md-4"><label class="form-label">Status Penggunaan</label><select class="form-select" name="status">${['Digunakan','Tidak Digunakan','Diusulkan Penghapusan'].map(x=>`<option ${(r.status||'Digunakan')===x?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="col-md-4"><label class="form-label">ID BMN</label><input class="form-control" name="idBMN" value="${esc(r.idBMN || '')}"></div>
+      <div class="col-12"><label class="form-label">Lokasi Barang</label><input class="form-control" name="lokasiBarang" value="${esc(r.lokasiBarang || '')}"></div>
+      <div class="col-12"><label class="form-label">Keterangan</label><textarea class="form-control" name="keterangan" rows="2">${esc(r.keterangan || '')}</textarea></div>
       <div class="col-12"><label class="form-label">Foto / Dokumen Barang</label><input type="file" class="form-control" name="files" id="bmnFiles" multiple accept=".jpg,.jpeg,.png,.pdf"><div class="form-text">PDF/JPG/PNG, maksimal 12 file per barang; file baru disimpan di Google Drive/BIMASATU/BMN.</div>
-        <div id="bmnExistingFiles" class="d-flex flex-wrap gap-2 mt-2">\${photos.map((p,i)=>\`<span class="badge bg-label-secondary">\${esc(p.fileName || 'File '+(i+1))}\${p.migrationStatus==='pending'?' · menunggu migrasi':''}</span>\`).join('')}</div>
+        <div id="bmnExistingFiles" class="d-flex flex-wrap gap-2 mt-2">${photos.map((p,i)=>`<span class="badge bg-label-secondary">${esc(p.fileName || 'File '+(i+1))}${p.migrationStatus==='pending'?' · menunggu migrasi':''}</span>`).join('')}</div>
       </div>
     </div>
     <div class="d-flex justify-content-end gap-2 mt-4"><button type="button" class="btn btn-outline-secondary" id="bmnCancel">Batal</button><button class="btn btn-primary" id="bmnSaveBtn">Simpan BMN</button></div>
-  </form>\`;
+  </form>`;
 }
 
 function bmnOpenForm(row) {
@@ -202,14 +202,14 @@ async function bmnView(id) {
   const r=BMN_UI.rows.find(x=>x.id===id); if(!r)return;
   const photos=bmnPhotoList(r);
   $('dlg').className='wide';
-  $('dlg').innerHTML=\`<div class="p-3 p-md-4">
-    <div class="d-flex justify-content-between align-items-center mb-3"><div><h5 class="mb-1">\${esc(r.namaBarang)}</h5><div class="text-body-secondary small">\${esc(r.satker)} · \${esc(r.kodeBarang)}</div></div><button class="btn-close" id="bmnDetailClose"></button></div>
+  $('dlg').innerHTML=`<div class="p-3 p-md-4">
+    <div class="d-flex justify-content-between align-items-center mb-3"><div><h5 class="mb-1">${esc(r.namaBarang)}</h5><div class="text-body-secondary small">${esc(r.satker)} · ${esc(r.kodeBarang)}</div></div><button class="btn-close" id="bmnDetailClose"></button></div>
     <div class="row g-3 mb-3">
-      \${[['Jenis',r.jenis],['Tahun Perolehan',r.tahunPerolehan],['Sumber Perolehan',r.sumberPerolehan],['Nilai Perolehan',bmnMoney(r.nilaiPerolehan)],['Kondisi',r.kondisi],['Status',r.status],['Lokasi',r.lokasiBarang],['ID BMN',r.idBMN],['Keterangan',r.keterangan]].map(([k,v])=>\`<div class="col-sm-6"><div class="bmn-detail-item"><div class="small text-body-secondary">\${k}</div><div class="fw-semibold text-break">\${esc(v||'-')}</div></div></div>\`).join('')}
+      ${[['Jenis',r.jenis],['Tahun Perolehan',r.tahunPerolehan],['Sumber Perolehan',r.sumberPerolehan],['Nilai Perolehan',bmnMoney(r.nilaiPerolehan)],['Kondisi',r.kondisi],['Status',r.status],['Lokasi',r.lokasiBarang],['ID BMN',r.idBMN],['Keterangan',r.keterangan]].map(([k,v])=>`<div class="col-sm-6"><div class="bmn-detail-item"><div class="small text-body-secondary">${k}</div><div class="fw-semibold text-break">${esc(v||'-')}</div></div></div>`).join('')}
     </div>
-    <h6>Foto / Dokumen (\${photos.length})</h6><div class="d-flex flex-wrap gap-2" id="bmnPhotoButtons">\${photos.length ? photos.map((p,i)=>\`<button class="btn btn-sm btn-outline-primary" data-bmn-photo="\${i}"><i class="bx \${(p.mimeType||'').includes('pdf')?'bx-file-pdf':'bx-image'}"></i> \${esc(p.fileName||'Dokumen '+(i+1))}\${p.migrationStatus==='pending'?' (belum dipindahkan)':''}</button>\`).join('') : '<span class="text-body-secondary small">Belum ada foto/dokumen.</span>'}</div>
+    <h6>Foto / Dokumen (${photos.length})</h6><div class="d-flex flex-wrap gap-2" id="bmnPhotoButtons">${photos.length ? photos.map((p,i)=>`<button class="btn btn-sm btn-outline-primary" data-bmn-photo="${i}"><i class="bx ${(p.mimeType||'').includes('pdf')?'bx-file-pdf':'bx-image'}"></i> ${esc(p.fileName||'Dokumen '+(i+1))}${p.migrationStatus==='pending'?' (belum dipindahkan)':''}</button>`).join('') : '<span class="text-body-secondary small">Belum ada foto/dokumen.</span>'}</div>
     <div class="d-flex justify-content-end mt-4"><button class="btn btn-secondary" id="bmnDetailDone">Tutup</button></div>
-  </div>\`;
+  </div>`;
   $('dlg').showModal(); const close=()=> $('dlg').close();
   $('bmnDetailClose').onclick=close; $('bmnDetailDone').onclick=close;
   $('bmnPhotoButtons').querySelectorAll('[data-bmn-photo]').forEach(btn=>btn.onclick=()=>bmnOpenFile(photos[Number(btn.dataset.bmnPhoto)]));
