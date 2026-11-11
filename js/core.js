@@ -33,7 +33,7 @@ const can = menu => !!me && Array.isArray(me.menus) && me.menus.includes(menu); 
 // Urutan mencari halaman awal bila alamat kosong atau menunya tidak boleh dibuka akun ini. Dashboard (khusus Operator KUA) menjadi halaman awal
 // operator; Pegawai KUA paling akhir supaya halaman awal peran lain tidak berubah.
 const HOME_ORDER = ['dashboard', 'bop', 'rpd', 'realisasi', 'verifikasi', 'sakti', 'metode', 'anggaran', 'laporan', 'config', 'impor',
-  'bast', 'bast-buat', 'bast-pegawai', 'bast-setting', 'sert-masjid', 'sert-kiblat', 'sert-pengaturan', 'jaspro', 'akses', 'pegawai'];
+  'bast', 'bast-buat', 'bast-pegawai', 'bast-setting', 'bmn', 'sert-masjid', 'sert-kiblat', 'sert-pengaturan', 'jaspro', 'akses', 'pegawai'];
 const homeMenu = () => HOME_ORDER.find(can) || 'pengaturan';
 // Hanya dipakai bila database belum diperbarui (fungsi akses_saya belum ada): perilaku lama, admin semua menu dan operator 4 menu.
 // Dashboard dan Pegawai KUA butuh tabel baru di bop.sql, jadi tidak ikut.
@@ -125,7 +125,7 @@ function route() {
   EP++;
   const sv = k === 'sert-masjid' || k === 'sert-kiblat' || k === 'sert-pengaturan';   // modul Sertifikat punya wadah sendiri (#sertView), tidak ditimpa innerHTML #view
   $('view').classList.toggle('d-none', sv); $('sertView').classList.toggle('d-none', !sv);
-  $('view').classList.toggle('bop', !/^(jaspro|bast|sert-)/.test(k));   // pewarnaan khusus halaman BOP dan akun (css/app.css)
+  $('view').classList.toggle('bop', !/^(jaspro|bast|bmn|sert-)/.test(k));   // pewarnaan khusus halaman BOP dan akun (css/app.css)
   pages[k]();
 }
 const rp = n => String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
