@@ -36,13 +36,27 @@ $('f').onsubmit = async e => {
 sb.auth.onAuthStateChange((ev, s) => { if (ev !== 'TOKEN_REFRESHED') setTimeout(() => boot(s), 0); });
 
 $('out').onclick = () => sb.auth.signOut();
-if (LS.getItem(SIDE_KEY) === 'off') document.body.classList.add('side-off');
+// Compatibilidad: la antigua preferencia "off" se migra al nuevo modo compacto de iconos.
+if (['mini', 'off'].includes(LS.getItem(SIDE_KEY))) document.body.classList.add('side-mini');
+
 $('burger').onclick = () => {
-  if (wideScreen()) LS.setItem(SIDE_KEY, document.body.classList.toggle('side-off') ? 'off' : 'on');
-  else $('side').classList.toggle('open');
+  if (wideScreen()) {
+    const compact = document.body.classList.toggle('side-mini');
+    LS.setItem(SIDE_KEY, compact ? 'mini' : 'full');
+  } else {
+    $('side').classList.toggle('open');
+  }
   syncSide();
 };
-addEventListener('resize', syncSide); syncSide();
+
+// Al volver a escritorio, cierra cualquier drawer móvil que hubiera quedado abierto.
+let sidebarWasWide = wideScreen();
+addEventListener('resize', () => {
+  const isWide = wideScreen();
+  if (isWide && !sidebarWasWide) $('side').classList.remove('open');
+  sidebarWasWide = isWide;
+  syncSide();
+});
 addEventListener('hashchange', route);
 
 // ---- Pemeriksaan pemasangan: js/config.js masih berisi nilai contoh? ----
