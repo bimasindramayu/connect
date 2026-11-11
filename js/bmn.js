@@ -1,5 +1,24 @@
 /* BIMASATU - BMN frontend. Data: Google Spreadsheet via Apps Script; files: Drive master via Edge Function. */
 const BMN_UI = { rows: [], settings: { allowDataEntry: true }, busy: false };
+const BMN_JENIS_FORM = ['Tanah', 'Gedung/Bangunan', 'Kendaraan', 'Peralatan & Mesin', 'Aset Lainnya'];
+const BMN_SUMBER_FORM = ['APBN', 'APBD', 'Hibah', 'Swadaya', 'Bantuan'];
+const BMN_KONDISI_FORM = ['Baik', 'Rusak Ringan', 'Rusak Berat'];
+const BMN_STATUS_FORM = ['Digunakan', 'Tidak Digunakan', 'Diusulkan Penghapusan'];
+const BMN_MAX_FILES = 5, BMN_MAX_FILE_SIZE = 5 * 1024 * 1024;
+const BMN_KUA_CODES = {
+  anjatan:'AJ', arahan:'AR', balongan:'BA', bangodua:'BG', bongas:'BS', cantigi:'CT',
+  cikedung:'CK', gantar:'GT', gabuswetan:'GB', haurgeulis:'HG', indramayu:'IM',
+  jatibarang:'JT', juntinyuat:'JN', kandanghaur:'KH', karangampel:'KA',
+  'kedokan bunder':'KB', kertasemaya:'KS', krangkeng:'KR', kroya:'KY', lelea:'LL',
+  lohbener:'LB', losarang:'LS', pasekan:'PS', patrol:'PT', sindang:'SD', sliyeg:'SL',
+  sukagumiwang:'SG', sukra:'SK', terisi:'TR', tukdana:'TK', widasari:'WD'
+};
+const BMN_KUA_NAMES = [
+  'Anjatan','Arahan','Balongan','Bangodua','Bongas','Cantigi','Cikedung','Gabuswetan',
+  'Gantar','Haurgeulis','Indramayu','Jatibarang','Juntinyuat','Kandanghaur','Karangampel',
+  'Kedokan Bunder','Kertasemaya','Krangkeng','Kroya','Lelea','Lohbener','Losarang',
+  'Pasekan','Patrol','Sindang','Sliyeg','Sukagumiwang','Sukra','Terisi','Tukdana','Widasari'
+];
 const bmnCanWrite = () => !!me && (
   me.role === 'admin' || (me.role === 'operator' && BMN_UI.settings.allowDataEntry !== false)
 );
@@ -21,6 +40,29 @@ function bmnBadge(v, group) {
 }
 function bmnPhotoList(row) {
   return Array.isArray(row.fotos) ? row.fotos : [];
+}
+function bmnNormalizeSatker(value) {
+  return String(value || '').trim().toLowerCase().replace(/^kua\\s*(kec\\.?|kecamatan)?\\s*/i, '').replace(/\\s+/g, ' ');
+}
+function bmnKodeBarangPreview(satker, jenis) {
+  const key = bmnNormalizeSatker(satker);
+  const kuaCode = BMN_KUA_CODES[key] || key.replace(/[^a-z0-9]/g, '').slice(0, 2).toUpperCase() || '00';
+  const jenisIndex = BMN_JENIS_FORM.indexOf(jenis);
+  if (!satker || jenisIndex < 0) return '';
+  const prefix = kuaCode + '-' + String(jenisIndex + 1).padStart(2, '0') + '-';
+  let max = 0;
+  BMN_UI.rows.forEach(row => {
+    const code = String(row.kodeBarang || '');
+    if (code.startsWith(prefix)) {
+      const n = parseInt(code.slice(prefix.length), 10);
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+  });
+  return prefix + String(max + 1).padStart(4, '0');
+}
+function bmnOptionList(items, selected, placeholder) {
+  return '<option value="">' + esc(placeholder || '— Pilih —') + '</option>' +
+    items.map(value => '<option value="' + esc(value) + '"' + (value === selected ? ' selected' : '') + '>' + esc(value) + '</option>').join('');
 }
 function bmnMimeType(photo) {
   const raw = String(photo?.mimeType || '').split(';')[0].trim().toLowerCase();
@@ -176,63 +218,286 @@ function bmnRenderTable() {
 }
 
 function bmnFormHtml(row) {
-  const r = row || {}, readonlySatker = me.role === 'operator';
-  const photos = bmnPhotoList(r);
-  return `<div class="d-flex justify-content-between align-items-center mb-3"><div><h5 class="mb-1">${r.id ? 'Edit' : 'Tambah'} Data BMN</h5><small class="text-body-secondary">Perubahan disimpan ke Spreadsheet BIMASATU</small></div><button type="button" class="btn-close" id="bmnCloseForm"></button></div>
-  <form id="bmnForm">
-    <input type="hidden" name="id" value="${esc(r.id || '')}">
-    <div class="row g-3">
-      <div class="col-md-6"><label class="form-label">Satker *</label><input class="form-control" name="satker" value="${esc(r.satker || bmnSatkerDefault())}" ${readonlySatker ? 'readonly' : 'required'}></div>
-      <div class="col-md-6"><label class="form-label">Kode Barang</label><input class="form-control" name="kodeBarang" value="${esc(r.kodeBarang || '')}"></div>
-      <div class="col-md-8"><label class="form-label">Nama Barang *</label><input class="form-control" name="namaBarang" value="${esc(r.namaBarang || '')}" required></div>
-      <div class="col-md-4"><label class="form-label">Jenis *</label><select class="form-select" name="jenis" required><option value="">Pilih jenis</option>${['Tanah','Gedung/Bangunan','Kendaraan','Peralatan & Mesin','Aset Lainnya'].map(x=>`<option ${r.jenis===x?'selected':''}>${x}</option>`).join('')}</select></div>
-      <div class="col-md-4"><label class="form-label">Tahun Perolehan</label><input class="form-control" name="tahunPerolehan" inputmode="numeric" value="${esc(r.tahunPerolehan || '')}"></div>
-      <div class="col-md-4"><label class="form-label">Sumber Perolehan</label><input class="form-control" name="sumberPerolehan" value="${esc(r.sumberPerolehan || '')}"></div>
-      <div class="col-md-4"><label class="form-label">Nilai Perolehan (Rp)</label><input class="form-control" name="nilaiPerolehan" inputmode="numeric" value="${esc(r.nilaiPerolehan || 0)}"></div>
-      <div class="col-md-4"><label class="form-label">Kondisi</label><select class="form-select" name="kondisi">${['Baik','Rusak Ringan','Rusak Berat'].map(x=>`<option ${(r.kondisi||'Baik')===x?'selected':''}>${x}</option>`).join('')}</select></div>
-      <div class="col-md-4"><label class="form-label">Status Penggunaan</label><select class="form-select" name="status">${['Digunakan','Tidak Digunakan','Diusulkan Penghapusan'].map(x=>`<option ${(r.status||'Digunakan')===x?'selected':''}>${x}</option>`).join('')}</select></div>
-      <div class="col-md-4"><label class="form-label">ID BMN</label><input class="form-control" name="idBMN" value="${esc(r.idBMN || '')}"></div>
-      <div class="col-12"><label class="form-label">Lokasi Barang</label><input class="form-control" name="lokasiBarang" value="${esc(r.lokasiBarang || '')}"></div>
-      <div class="col-12"><label class="form-label">Keterangan</label><textarea class="form-control" name="keterangan" rows="2">${esc(r.keterangan || '')}</textarea></div>
-      <div class="col-12"><label class="form-label">Foto / Dokumen Barang</label><input type="file" class="form-control" name="files" id="bmnFiles" multiple accept=".jpg,.jpeg,.png,.pdf"><div class="form-text">PDF/JPG/PNG, maksimal 12 file per barang; file baru disimpan di Google Drive/BIMASATU/BMN.</div>
-        <div id="bmnExistingFiles" class="d-flex flex-wrap gap-2 mt-2">${photos.map((p,i)=>`<span class="badge bg-label-secondary">${esc(p.fileName || 'File '+(i+1))}${p.migrationStatus==='pending'?' · menunggu migrasi':''}</span>`).join('')}</div>
+  const r = row || {}, isEdit = !!r.id, isOperator = me.role === 'operator';
+  const satker = r.satker || bmnSatkerDefault();
+  const jenis = r.jenis || '';
+  const kode = r.kodeBarang || bmnKodeBarangPreview(satker, jenis);
+  const sourceOptions = bmnOptionList(BMN_SUMBER_FORM, r.sumberPerolehan || '', '— Pilih Sumber Perolehan —');
+  const jenisOptions = bmnOptionList(BMN_JENIS_FORM, jenis, '— Pilih Jenis BMN —');
+  const kondisiOptions = bmnOptionList(BMN_KONDISI_FORM, r.kondisi || '', '— Pilih Kondisi —');
+  const statusOptions = bmnOptionList(BMN_STATUS_FORM, r.status || '', '— Pilih Status Penggunaan —');
+  const locationList = BMN_KUA_NAMES.map(name => '<option value="KUA ' + esc(name) + '"></option>').join('');
+  const existing = bmnPhotoList(r);
+  const photoCards = existing.length ? existing.map((photo, i) => {
+    const mime = bmnMimeType(photo), isPdf = mime === 'application/pdf';
+    const pending = photo.migrationStatus === 'pending' || !photo.fileId;
+    const icon = isPdf ? 'bx-file-pdf' : (mime.startsWith('image/') ? 'bx-image' : 'bx-file');
+    return `<div class="bmn-attachment-card">
+      <span class="bmn-attachment-icon ${isPdf ? 'pdf' : 'image'}"><i class="bx ${icon}"></i></span>
+      <span class="bmn-attachment-meta"><strong title="${esc(photo.fileName || 'Lampiran ' + (i + 1))}">${esc(photo.fileName || 'Lampiran ' + (i + 1))}</strong>
+        <small>${pending ? 'Masih menunggu migrasi' : 'Tersimpan di Drive BIMASATU'}</small></span>
+      <button type="button" class="bmn-attachment-remove" data-bmn-remove-photo="${i}" title="Lepas dari data BMN" aria-label="Lepas lampiran"><i class="bx bx-x"></i></button>
+    </div>`;
+  }).join('') : '<div class="bmn-attachment-empty">Belum ada lampiran tersimpan.</div>';
+
+  return `<div class="bmn-form-shell">
+    <header class="bmn-form-header">
+      <div class="bmn-form-header-main">
+        <span class="bmn-form-header-icon"><i class="bx bx-package"></i></span>
+        <div class="min-w-0"><div class="bmn-form-eyebrow">INVENTARISASI BARANG MILIK NEGARA</div>
+          <h4>${isEdit ? 'Edit Data BMN' : 'Tambah BMN Baru'}</h4>
+          <p>${isEdit ? 'Perbarui informasi aset dan dokumentasinya.' : 'Lengkapi data aset sesuai kondisi dan dokumen perolehan.'}</p></div>
+        <button type="button" class="btn-close btn-close-white ms-auto" id="bmnCloseForm" aria-label="Tutup"></button>
       </div>
-    </div>
-    <div class="d-flex justify-content-end gap-2 mt-4"><button type="button" class="btn btn-outline-secondary" id="bmnCancel">Batal</button><button class="btn btn-primary" id="bmnSaveBtn">Simpan BMN</button></div>
-  </form>`;
+      <div class="bmn-form-header-meta"><span><i class="bx bx-building-house"></i> ${esc(satker || 'Pilih Satker/KUA')}</span><span><i class="bx bx-shield-quarter"></i> Tersimpan di BIMASATU</span></div>
+    </header>
+
+    <form id="bmnForm" autocomplete="off">
+      <input type="hidden" name="id" value="${esc(r.id || '')}">
+      <div class="bmn-form-body">
+        <section class="bmn-form-section accent-indigo">
+          <div class="bmn-form-section-title"><span><i class="bx bx-barcode-reader"></i></span><div><h6>Identifikasi Barang</h6><small>Jenis, kode, dan identitas aset</small></div></div>
+          <div class="bmn-form-grid two">
+            <div class="bmn-form-field field-wide">
+              <label for="bmnSatker">Satker / KUA <em>*</em></label>
+              <input id="bmnSatker" class="form-control bmn-form-control" name="satker" list="bmnSatkerOptions"
+                value="${esc(satker)}" placeholder="Ketik atau pilih nama KUA" required
+                ${(isOperator || isEdit) ? 'readonly' : ''}>
+              ${!isOperator && !isEdit ? '<datalist id="bmnSatkerOptions">' + locationList + '</datalist>' : ''}
+              <small class="bmn-form-help">${isOperator ? 'Data otomatis mengikuti KUA pada akun Anda.' : 'Pilih nama KUA dari daftar agar kode barang mengikuti kode KUA.'}</small>
+            </div>
+            <div class="bmn-form-field">
+              <label for="bmnJenisSelect">Jenis BMN <em>*</em></label>
+              <select id="bmnJenisSelect" class="form-select bmn-form-control" required ${isEdit ? 'disabled' : ''}>${jenisOptions}</select>
+              <input type="hidden" name="jenis" id="bmnJenisValue" value="${esc(jenis)}">
+            </div>
+            <div class="bmn-form-field">
+              <label for="bmnKodeBarang">Kode Barang <span class="bmn-auto-tag"><i class="bx bx-magic-wand"></i> Otomatis</span></label>
+              <div class="bmn-code-input"><i class="bx bx-barcode"></i><input id="bmnKodeBarang" class="form-control bmn-form-control" name="kodeBarang" value="${esc(kode)}" readonly placeholder="Pilih Satker dan Jenis BMN"></div>
+              <small class="bmn-form-help">Kode dibuat otomatis saat disimpan dan tidak perlu diketik.</small>
+            </div>
+            <div class="bmn-form-field field-wide">
+              <label for="bmnNamaBarang">Nama Barang <em>*</em></label>
+              <input id="bmnNamaBarang" class="form-control bmn-form-control" name="namaBarang" value="${esc(r.namaBarang || '')}" placeholder="Contoh: Laptop Lenovo ThinkPad" required maxlength="180">
+            </div>
+            <div class="bmn-form-field">
+              <label for="bmnIdBMN">ID BMN / No. Registrasi</label>
+              <input id="bmnIdBMN" class="form-control bmn-form-control" name="idBMN" value="${esc(r.idBMN || '')}" placeholder="Opsional">
+            </div>
+            <div class="bmn-form-field">
+              <label for="bmnLokasi">Lokasi Barang <em>*</em></label>
+              <input id="bmnLokasi" class="form-control bmn-form-control" name="lokasiBarang" value="${esc(r.lokasiBarang || '')}" placeholder="Contoh: Ruang Kepala KUA" required maxlength="180">
+            </div>
+          </div>
+        </section>
+
+        <section class="bmn-form-section accent-blue">
+          <div class="bmn-form-section-title"><span><i class="bx bx-clipboard"></i></span><div><h6>Perolehan, Kondisi &amp; Status</h6><small>Informasi pengadaan dan penggunaan aset</small></div></div>
+          <div class="bmn-form-grid two">
+            <div class="bmn-form-field">
+              <label for="bmnTahun">Tahun Perolehan <em>*</em></label>
+              <input id="bmnTahun" type="number" class="form-control bmn-form-control" name="tahunPerolehan"
+                min="1900" max="2100" step="1" inputmode="numeric"
+                value="${esc(r.tahunPerolehan || new Date().getFullYear())}" required>
+              <small class="bmn-form-help">Hanya angka tahun, 1900–2100.</small>
+            </div>
+            <div class="bmn-form-field">
+              <label for="bmnSumber">Sumber Perolehan</label>
+              <select id="bmnSumber" class="form-select bmn-form-control" name="sumberPerolehan">${sourceOptions}</select>
+            </div>
+            <div class="bmn-form-field">
+              <label for="bmnNilai">Nilai Perolehan (Rp)</label>
+              <div class="bmn-number-input"><span>Rp</span><input id="bmnNilai" type="number" class="form-control bmn-form-control" name="nilaiPerolehan" min="0" step="1" inputmode="numeric" value="${esc(r.nilaiPerolehan || 0)}" placeholder="0"></div>
+              <small class="bmn-form-help">Masukkan angka tanpa titik atau koma.</small>
+            </div>
+            <div class="bmn-form-field">
+              <label for="bmnKondisi">Kondisi Barang <em>*</em></label>
+              <select id="bmnKondisi" class="form-select bmn-form-control" name="kondisi" required>${kondisiOptions}</select>
+            </div>
+            <div class="bmn-form-field field-wide">
+              <label for="bmnStatus">Status Penggunaan <em>*</em></label>
+              <select id="bmnStatus" class="form-select bmn-form-control" name="status" required>${statusOptions}</select>
+            </div>
+            <div class="bmn-form-field field-wide">
+              <label for="bmnKeterangan">Keterangan</label>
+              <textarea id="bmnKeterangan" class="form-control bmn-form-control" name="keterangan" rows="3" placeholder="Keterangan tambahan (opsional)...">${esc(r.keterangan || '')}</textarea>
+            </div>
+          </div>
+        </section>
+
+        <section class="bmn-form-section accent-orange">
+          <div class="bmn-form-section-title"><span><i class="bx bx-images"></i></span><div><h6>Foto dan Dokumen</h6><small>Foto kondisi barang atau dokumen pendukung</small></div></div>
+          <div class="bmn-upload-toolbar">
+            <button type="button" class="btn bmn-upload-choice" id="bmnPickFiles"><i class="bx bx-folder-open"></i> Pilih File</button>
+            <button type="button" class="btn bmn-upload-choice camera" id="bmnPickCamera"><i class="bx bx-camera"></i> Kamera</button>
+            <span class="bmn-upload-limit"><i class="bx bx-info-circle"></i> Maks. 5 file · 5 MB/file · PDF/JPG/PNG</span>
+            <input type="file" id="bmnFiles" multiple accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" hidden>
+            <input type="file" id="bmnCamera" accept="image/*" capture="environment" hidden>
+          </div>
+          <div class="bmn-attachment-block"><div class="bmn-attachment-heading">Lampiran tersimpan <span id="bmnExistingCount">${existing.length}</span></div><div class="bmn-attachment-list" id="bmnExistingFiles">${photoCards}</div></div>
+          <div class="bmn-attachment-block new d-none" id="bmnNewBlock"><div class="bmn-attachment-heading">File baru <span id="bmnNewCount">0</span></div><div class="bmn-attachment-list" id="bmnNewFiles"></div></div>
+          <div class="bmn-upload-footnote"><i class="bx bx-cloud-upload"></i> File baru akan diunggah ke Google Drive BIMASATU/BMN setelah data disimpan.</div>
+        </section>
+      </div>
+      <footer class="bmn-form-footer"><div class="bmn-form-footer-note"><i class="bx bx-lock-alt"></i> Pastikan data sesuai dokumen inventaris.</div>
+        <div class="d-flex gap-2"><button type="button" class="btn btn-light" id="bmnCancel">Batal</button><button class="btn btn-primary bmn-save-button" id="bmnSaveBtn"><i class="bx bx-save me-1"></i> Simpan BMN</button></div>
+      </footer>
+    </form>
+  </div>`;
 }
 
 function bmnOpenForm(row) {
-  if (!bmnCanWrite()) return;
-  $('dlg').className = 'wide';
-  $('dlg').innerHTML = '<div class="p-3 p-md-4">' + bmnFormHtml(row) + '</div>';
+  if (!bmnCanWrite()) return bmnNotice('Input BMN sedang ditutup oleh Admin.', 'warning');
+  const existingPhotos = bmnPhotoList(row).slice();
+  const pendingFiles = [];
+  $('dlg').className = 'wide bmn-form-dialog';
+  $('dlg').innerHTML = bmnFormHtml(row);
   $('dlg').showModal();
-  const close = () => $('dlg').close();
-  $('bmnCloseForm').onclick = close; $('bmnCancel').onclick = close;
+
+  const cleanup = () => pendingFiles.forEach(item => { if (item.previewUrl) URL.revokeObjectURL(item.previewUrl); });
+  const close = () => { cleanup(); $('dlg').close(); };
+  $('bmnCloseForm').onclick = close;
+  $('bmnCancel').onclick = close;
+  $('bmnPickFiles').onclick = () => $('bmnFiles').click();
+  $('bmnPickCamera').onclick = () => $('bmnCamera').click();
+
+  const updateCode = () => {
+    const type = $('bmnJenisSelect').value;
+    $('bmnJenisValue').value = type;
+    if (row && row.kodeBarang) { $('bmnKodeBarang').value = row.kodeBarang; return; }
+    $('bmnKodeBarang').value = bmnKodeBarangPreview($('bmnSatker').value, type);
+  };
+  $('bmnJenisSelect').onchange = updateCode;
+  $('bmnSatker').addEventListener('input', updateCode);
+  $('bmnSatker').addEventListener('change', updateCode);
+
+  const renderExisting = () => {
+    $('bmnExistingCount').textContent = existingPhotos.length;
+    $('bmnExistingFiles').innerHTML = existingPhotos.length ? existingPhotos.map((photo, i) => {
+      const mime = bmnMimeType(photo), isPdf = mime === 'application/pdf';
+      const pending = photo.migrationStatus === 'pending' || !photo.fileId;
+      return `<div class="bmn-attachment-card">
+        <span class="bmn-attachment-icon ${isPdf ? 'pdf' : 'image'}"><i class="bx ${isPdf ? 'bx-file-pdf' : 'bx-image'}"></i></span>
+        <span class="bmn-attachment-meta"><strong title="${esc(photo.fileName || 'Lampiran')}">${esc(photo.fileName || 'Lampiran')}</strong>
+          <small>${pending ? 'Menunggu migrasi' : 'Tersimpan di Drive BIMASATU'}</small></span>
+        <button type="button" class="bmn-attachment-remove" data-bmn-remove-photo="${i}" title="Lepas dari data BMN"><i class="bx bx-x"></i></button>
+      </div>`;
+    }).join('') : '<div class="bmn-attachment-empty">Belum ada lampiran tersimpan.</div>';
+    $('bmnExistingFiles').querySelectorAll('[data-bmn-remove-photo]').forEach(btn => {
+      btn.onclick = () => {
+        const i = Number(btn.dataset.bmnRemovePhoto);
+        const item = existingPhotos[i];
+        if (!item || !confirm('Lepas lampiran ini dari data BMN? File fisik di Google Drive tidak ikut dihapus.')) return;
+        existingPhotos.splice(i, 1);
+        renderExisting();
+        renderPending();
+      };
+    });
+  };
+  const renderPending = () => {
+    const block = $('bmnNewBlock');
+    block.classList.toggle('d-none', pendingFiles.length === 0);
+    $('bmnNewCount').textContent = pendingFiles.length;
+    $('bmnNewFiles').innerHTML = pendingFiles.map((item, i) => {
+      const isImage = item.file.type.startsWith('image/');
+      return `<div class="bmn-attachment-card new-file">
+        <span class="bmn-attachment-icon ${isImage ? 'image' : 'pdf'}">${isImage && item.previewUrl ? `<img src="${item.previewUrl}" alt="">` : `<i class="bx ${isImage ? 'bx-image' : 'bx-file-pdf'}"></i>`}</span>
+        <span class="bmn-attachment-meta"><strong title="${esc(item.file.name)}">${esc(item.file.name)}</strong><small>Siap diunggah · ${(item.file.size / 1024 / 1024).toFixed(2)} MB</small></span>
+        <button type="button" class="bmn-attachment-remove" data-bmn-remove-new="${i}" title="Batalkan file"><i class="bx bx-x"></i></button>
+      </div>`;
+    }).join('');
+    $('bmnNewFiles').querySelectorAll('[data-bmn-remove-new]').forEach(btn => {
+      btn.onclick = () => {
+        const item = pendingFiles.splice(Number(btn.dataset.bmnRemoveNew), 1)[0];
+        if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+        renderPending();
+      };
+    });
+  };
+  const addFiles = input => {
+    const incoming = Array.from(input.files || []);
+    input.value = '';
+    incoming.forEach(file => {
+      const validType = ['application/pdf','image/jpeg','image/png'].includes(file.type) || /\.(pdf|jpe?g|png)$/i.test(file.name);
+      if (!validType) { bmnNotice(file.name + ': hanya PDF, JPG, atau PNG.', 'warning'); return; }
+      if (file.size > BMN_MAX_FILE_SIZE) { bmnNotice(file.name + ': ukuran maksimal 5 MB.', 'warning'); return; }
+      if (existingPhotos.length + pendingFiles.length >= BMN_MAX_FILES) { bmnNotice('Maksimal 5 foto/dokumen per barang.', 'warning'); return; }
+      const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : '';
+      pendingFiles.push({ file, previewUrl });
+    });
+    renderPending();
+  };
+  $('bmnFiles').onchange = () => addFiles($('bmnFiles'));
+  $('bmnCamera').onchange = () => addFiles($('bmnCamera'));
+
   $('bmnForm').onsubmit = async e => {
     e.preventDefault();
-    const btn=$('bmnSaveBtn'); btn.disabled=true; btn.textContent='Menyimpan…';
+    const btn = $('bmnSaveBtn');
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Menyimpan…';
+    const fd = new FormData(e.currentTarget);
+    const data = {
+      id: fd.get('id') || null,
+      satker: String(fd.get('satker') || '').trim(),
+      namaBarang: String(fd.get('namaBarang') || '').trim(),
+      jenis: String(fd.get('jenis') || ''),
+      tahunPerolehan: String(fd.get('tahunPerolehan') || ''),
+      sumberPerolehan: String(fd.get('sumberPerolehan') || ''),
+      nilaiPerolehan: String(fd.get('nilaiPerolehan') || '0'),
+      kondisi: String(fd.get('kondisi') || ''),
+      status: String(fd.get('status') || ''),
+      lokasiBarang: String(fd.get('lokasiBarang') || '').trim(),
+      idBMN: String(fd.get('idBMN') || '').trim(),
+      keterangan: String(fd.get('keterangan') || '').trim(),
+      fotos: existingPhotos.slice()
+    };
     try {
-      const fd = new FormData(e.currentTarget), photos = bmnPhotoList(row).slice();
-      const files = Array.from($('bmnFiles').files || []);
-      if (photos.length + files.length > 12) throw new Error('Maksimal 12 foto/dokumen per barang.');
-      const satker = String(fd.get('satker')||'').trim(), kodeBarang=String(fd.get('kodeBarang')||'').trim();
-      for (const file of files) {
-        const form = new FormData(); form.set('file',file); form.set('satker',satker); form.set('kodeBarang',kodeBarang); form.set('bmnId',String(fd.get('id')||''));
-        const response = await api({action:'bmn-upload'},{method:'POST',body:form});
-        const item = await response.json();
-        photos.push({fileId:item.id,fileName:file.name,fileSize:file.size,mimeType:file.type,migrationStatus:'master'});
+      if (data.fotos.length + pendingFiles.length > BMN_MAX_FILES) throw new Error('Maksimal 5 foto/dokumen per barang.');
+      // Simpan dahulu agar kode final dibuat server dan folder unggahan memakai kode yang sama.
+      const saved = await gas('bmnSave', { data });
+      const record = saved.data || {};
+      data.id = record.id || data.id;
+      const finalCode = record.kodeBarang || $('bmnKodeBarang').value;
+      const uploadErrors = [];
+      for (const item of pendingFiles) {
+        try {
+          const form = new FormData();
+          form.set('file', item.file);
+          form.set('satker', data.satker);
+          form.set('kodeBarang', finalCode);
+          const response = await api({ action: 'bmn-upload' }, { method: 'POST', body: form });
+          const uploaded = await response.json();
+          if (!uploaded.id) throw new Error(uploaded.error || 'ID file hasil unggah tidak ditemukan.');
+          data.fotos.push({
+            fileId: uploaded.id, fileName: item.file.name, fileSize: item.file.size,
+            mimeType: item.file.type || bmnMimeType({ fileName: item.file.name }), migrationStatus: 'master'
+          });
+        } catch (uploadError) {
+          uploadErrors.push(item.file.name + ': ' + uploadError.message);
+        }
       }
-      const data = {
-        id: fd.get('id') || null, satker, kodeBarang, namaBarang: fd.get('namaBarang'), jenis: fd.get('jenis'),
-        tahunPerolehan: fd.get('tahunPerolehan'), sumberPerolehan: fd.get('sumberPerolehan'),
-        nilaiPerolehan: fd.get('nilaiPerolehan'), kondisi: fd.get('kondisi'), status: fd.get('status'),
-        lokasiBarang: fd.get('lokasiBarang'), idBMN: fd.get('idBMN'), keterangan: fd.get('keterangan'), fotos: photos
-      };
-      await gas('bmnSave',{data});
-      $('dlg').close(); bmnNotice('Data BMN berhasil disimpan.'); await bmnLoad();
-    } catch(err) { bmnNotice(err.message || 'Gagal menyimpan BMN.','danger'); btn.disabled=false; btn.textContent='Simpan BMN'; }
+      if (pendingFiles.length) {
+        data.kodeBarang = finalCode;
+        await gas('bmnSave', { data });
+      }
+      cleanup();
+      $('dlg').close();
+      await bmnLoad();
+      if (uploadErrors.length) {
+        bmnNotice('Data BMN tersimpan dengan Kode ' + finalCode + ', tetapi sebagian lampiran gagal diunggah: ' + uploadErrors.join(' | '), 'warning');
+      } else {
+        bmnNotice('Data BMN berhasil disimpan. Kode Barang: ' + finalCode + '.', 'success');
+      }
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bx bx-save me-1"></i> Simpan BMN';
+      bmnNotice(err.message || 'Gagal menyimpan BMN.', 'danger');
+    }
   };
+
+  updateCode();
+  renderExisting();
 }
 
 function bmnDetailField(label, value, icon, tone = 'primary') {
