@@ -20,6 +20,15 @@ function bmnBadge(v, group) {
 function bmnPhotoList(row) {
   return Array.isArray(row.fotos) ? row.fotos : [];
 }
+function bmnMimeType(photo) {
+  const raw = String(photo?.mimeType || '').split(';')[0].trim().toLowerCase();
+  if (['application/pdf', 'image/jpeg', 'image/png'].includes(raw)) return raw;
+  const name = String(photo?.fileName || '').toLowerCase();
+  if (/\.pdf$/.test(name)) return 'application/pdf';
+  if (/\.jpe?g$/.test(name)) return 'image/jpeg';
+  if (/\.png$/.test(name)) return 'image/png';
+  return '';
+}
 
 async function pageBMN() {
   $('view').innerHTML = `
@@ -240,14 +249,16 @@ async function bmnView(id) {
   ];
   const fileHtml = photos.length ? photos.map((p, i) => {
     const pending = p.migrationStatus === 'pending' || !p.fileId;
-    const isPdf = String(p.mimeType || '').toLowerCase().includes('pdf') || /\.pdf$/i.test(p.fileName || '');
-    const icon = isPdf ? 'bx-file-pdf' : 'bx-image';
-    const ext = isPdf ? 'PDF' : ((String(p.mimeType || '').split('/')[1] || (p.fileName || '').split('.').pop() || 'FILE').toUpperCase());
-    return `<button type="button" class="bmn-file-card text-start" data-bmn-photo="${i}" ${pending ? 'disabled' : ''}>
-      <span class="bmn-file-icon ${isPdf ? 'pdf' : 'image'}"><i class="bx ${icon}"></i></span>
+    const mime = bmnMimeType(p);
+    const isPdf = mime === 'application/pdf';
+    const isImage = mime.startsWith('image/');
+    const icon = isPdf ? 'bx-file-pdf' : (isImage ? 'bx-image' : 'bx-file');
+    const ext = isPdf ? 'PDF' : (mime === 'image/jpeg' ? 'JPG' : (mime === 'image/png' ? 'PNG' : ((p.fileName || '').split('.').pop() || 'FILE').toUpperCase()));
+    return `<button type="button" class="bmn-file-card text-start" data-bmn-photo="${i}" aria-label="${pending ? 'Dokumen menunggu migrasi' : 'Lihat pratinjau ' + esc(p.fileName || 'dokumen')}" ${pending ? 'disabled' : ''}>
+      <span class="bmn-file-icon ${isPdf ? 'pdf' : (isImage ? 'image' : 'other')}"><i class="bx ${icon}"></i></span>
       <span class="bmn-file-meta"><strong title="${esc(p.fileName || 'Dokumen ' + (i + 1))}">${esc(p.fileName || 'Dokumen ' + (i + 1))}</strong>
-        <small>${esc(ext)} · ${pending ? 'Belum dipindahkan' : 'Tersimpan di Drive BIMASATU'}</small></span>
-      <span class="bmn-file-action">${pending ? '<i class="bx bx-time-five"></i>' : '<i class="bx bx-show"></i>'}</span>
+        <small><span class="bmn-file-type">${esc(ext)}</span><span class="bmn-file-dot">•</span>${pending ? 'Belum dipindahkan' : 'Tersimpan di Drive BIMASATU'}</small></span>
+      <span class="bmn-file-action">${pending ? '<i class="bx bx-time-five"></i><small>Menunggu</small>' : '<i class="bx bx-show"></i><small>Lihat</small>'}</span>
     </button>`;
   }).join('') : '<div class="bmn-file-empty"><i class="bx bx-folder-open"></i><span>Belum ada foto atau dokumen untuk barang ini.</span></div>';
 
@@ -298,16 +309,36 @@ function bmnOpenFile(photo, photos = [photo]) {
   if (!photo || photo.migrationStatus === 'pending' || !photo.fileId) {
     return bmnNotice('Dokumen ini masih berada di lokasi lama. Admin perlu menyelesaikan migrasi ke folder BIMASATU/BMN terlebih dahulu.', 'warning');
   }
+  // Pola penampil sama dengan LPJ BOP: file diambil melalui Edge Function,
+  // lalu openViewer menangani PDF multi-halaman maupun gambar dengan zoom/putar.
   const files = photos
     .filter(p => p && p.fileId && p.migrationStatus !== 'pending')
     .map((p, i) => ({
-      id: p.fileId,
+      id: String(p.fileId),
       name: p.fileName || 'Dokumen BMN ' + (i + 1),
-      mimeType: p.mimeType || ''
+      mimeType: bmnMimeType(p)
     }));
-  const index = files.findIndex(f => f.id === photo.fileId);
+  const index = files.findIndex(f => f.id === String(photo.fileId));
   if (index < 0) return bmnNotice('Berkas BMN tidak ditemukan pada daftar.', 'danger');
-  openViewer(files, index, file => api({ action: 'bmn-file', id: file.id }));
+
+  openViewer(files, index, async file => {
+    const response = await api({ action: 'bmn-file', id: file.id });
+    const headerType = String(response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+    const fallbackType = file.mimeType;
+    const type = ['application/pdf', 'image/jpeg', 'image/png'].includes(headerType) ? headerType : fallbackType;
+    if (!type) {
+      throw new Error('Format dokumen tidak dikenali. Gunakan file PDF, JPG, atau PNG.');
+    }
+    if (headerType === 'application/json') {
+      const result = await response.json().catch(() => ({}));
+      throw new Error(result.message || result.error || 'Dokumen BMN tidak dapat dibaca.');
+    }
+    // Beberapa file lama tidak menyertakan MIME type pada metadata; normalkan dari ekstensi.
+    if (headerType !== type) {
+      return new Response(await response.blob(), { headers: { 'Content-Type': type } });
+    }
+    return response;
+  });
 }
 async function bmnDelete(id) {
   const r=BMN_UI.rows.find(x=>x.id===id); if(!r || !confirm('Hapus data BMN "'+r.namaBarang+'"? Data yang dihapus tidak dapat dikembalikan dari aplikasi.'))return;
