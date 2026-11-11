@@ -36,6 +36,7 @@ $('f').onsubmit = async e => {
 sb.auth.onAuthStateChange((ev, s) => { if (ev !== 'TOKEN_REFRESHED') setTimeout(() => boot(s), 0); });
 
 $('out').onclick = () => sb.auth.signOut();
+$('pageRefresh').onclick = refreshCurrentPage;
 if (LS.getItem(SIDE_KEY) === 'off') document.body.classList.add('side-off');
 $('burger').onclick = () => {
   if (wideScreen()) LS.setItem(SIDE_KEY, document.body.classList.toggle('side-off') ? 'off' : 'on');
