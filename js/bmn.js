@@ -57,12 +57,32 @@ async function pageBMN() {
       <thead><tr><th>No</th><th>Satker</th><th>Kode Barang</th><th>Nama Barang</th><th>Jenis</th><th>Tahun</th><th>Nilai</th><th>Kondisi</th><th>Status</th><th>Foto</th><th>Aksi</th></tr></thead>
       <tbody><tr><td colspan="11" class="text-center py-4 text-body-secondary">Memuat data…</td></tr></tbody>
     </table></div></div>
-    ${bmnIsAdmin() ? `<div class="card mt-3"><div class="card-body">
-      <h6 class="mb-2">Pengaturan dan migrasi data lama</h6>
+    ${bmnIsAdmin() ? `<div class="card mt-3" id="bmnMigrationCard"><div class="card-body">
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+        <div><h5 class="mb-1"><i class="bx bx-transfer-alt me-1"></i> Pusat Migrasi Data BMN</h5><div class="small text-body-secondary">Migrasi bertahap dari aplikasi BMN lama ke penyimpanan BIMASATU.</div></div>
+        <span class="badge bg-label-info">Khusus Admin</span>
+      </div>
       <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" role="switch" id="bmnAllowEntry"><label class="form-check-label" for="bmnAllowEntry">Izinkan Operator KUA menambah/mengubah data BMN</label></div>
-      <div class="d-flex flex-wrap align-items-center gap-2"><button class="btn btn-outline-primary" id="bmnImport">Impor data BMN lama</button><span class="small text-body-secondary">Sumber: Apps Script lama (sudah dikonfigurasi).</span></div>
-      <div class="small text-body-secondary mt-2">Impor aman diulang: ID barang yang sudah ada dilewati. Foto lama ditandai untuk disalin ke Drive BIMASATU.</div>
-      <div class="mt-2"><button class="btn btn-outline-warning btn-sm" id="bmnMigratePhotos">Salin foto lama ke Drive BIMASATU</button></div>
+      <div class="bmn-migration-step">
+        <div class="d-flex gap-3 align-items-start"><span class="bmn-step-number">1</span><div class="flex-grow-1">
+          <div class="fw-semibold">Impor data barang</div><div class="small text-body-secondary mb-2">Membaca Spreadsheet BMN lama dan menyalin data barang ke sheet BMN_Data pada Spreadsheet BIMASATU. ID yang sudah ada tidak ditimpa.</div>
+          <div class="d-flex flex-wrap align-items-center gap-2"><button class="btn btn-primary btn-sm" id="bmnImport"><i class="bx bx-import me-1"></i> Mulai / Ulangi Impor</button><span class="small text-body-secondary" id="bmnImportState">Belum ada proses pada sesi ini.</span></div>
+        </div></div>
+      </div>
+      <div class="bmn-migration-step mt-3">
+        <div class="d-flex gap-3 align-items-start"><span class="bmn-step-number">2</span><div class="flex-grow-1">
+          <div class="fw-semibold">Salin foto dan dokumen</div><div class="small text-body-secondary mb-2">Menyalin berkas lama ke folder Google Drive BIMASATU/BMN. File di lokasi lama tetap dipertahankan.</div>
+          <div class="row g-2 mb-2" id="bmnMigrationStats">
+            <div class="col-4"><div class="bmn-migration-stat"><div class="small text-body-secondary">Menunggu</div><div class="fw-semibold" id="bmnPendingCount">0</div></div></div>
+            <div class="col-4"><div class="bmn-migration-stat"><div class="small text-body-secondary">Sudah disalin</div><div class="fw-semibold" id="bmnDoneCount">0</div></div></div>
+            <div class="col-4"><div class="bmn-migration-stat"><div class="small text-body-secondary">Total berkas</div><div class="fw-semibold" id="bmnTotalPhotoCount">0</div></div></div>
+          </div>
+          <div class="progress mb-2" style="height:8px"><div class="progress-bar" id="bmnPhotoProgress" role="progressbar" style="width:0%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div></div>
+          <div class="d-flex flex-wrap align-items-center gap-2"><button class="btn btn-outline-warning btn-sm" id="bmnMigratePhotos"><i class="bx bx-cloud-upload me-1"></i> Salin / Lanjutkan Foto</button><span class="small text-body-secondary" id="bmnPhotoState">Belum ada foto yang diproses.</span></div>
+        </div></div>
+      </div>
+      <div class="alert alert-light border small mt-3 mb-0"><i class="bx bx-info-circle me-1"></i> Urutan yang disarankan: selesaikan impor data terlebih dahulu, lalu jalankan salin foto. Jika proses terhenti, jalankan ulang; data barang yang sudah masuk akan dilewati.</div>
+      <div id="bmnMigrationResult" class="mt-3" aria-live="polite"></div>
     </div></div>` : ''}
   `;
   $('bmnRefresh').onclick = bmnLoad;
@@ -76,7 +96,7 @@ async function pageBMN() {
       catch (err) { e.target.checked = !e.target.checked; bmnNotice(err.message, 'danger'); }
     };
     $('bmnImport').onclick = bmnImportLegacy;
-    $('bmnMigratePhotos').onclick = bmnMigrateLegacyPhotos;
+    $('bmnMigratePhotos').onclick = bmnMigrateLegacyPhotos;\n    bmnUpdateMigrationPanel();
   }
   await bmnLoad();
 }
@@ -248,29 +268,50 @@ async function bmnExport(format) {
   } catch(e){bmnNotice(e.message,'danger');}
 }
 
+function bmnPhotoMigrationCounts() {
+  let pending=0,done=0,total=0;
+  BMN_UI.rows.forEach(r=>(r.fotos||[]).forEach(p=>{total++;if(p.migrationStatus==='pending')pending++;else done++;}));
+  return {pending,done,total};
+}
+function bmnUpdateMigrationPanel() {
+  if (!$('bmnMigrationCard')) return;
+  const c=bmnPhotoMigrationCounts(), pct=c.total?Math.round(c.done/c.total*100):0;
+  $('bmnPendingCount').textContent=c.pending.toLocaleString('id-ID');
+  $('bmnDoneCount').textContent=c.done.toLocaleString('id-ID');
+  $('bmnTotalPhotoCount').textContent=c.total.toLocaleString('id-ID');
+  $('bmnPhotoProgress').style.width=pct+'%';
+  $('bmnPhotoProgress').setAttribute('aria-valuenow',String(pct));
+  $('bmnPhotoState').textContent=c.pending ? 'Masih ada '+c.pending+' berkas yang perlu disalin.' : (c.total?'Semua berkas sudah berstatus tersalin.':'Belum ada berkas foto/dokumen.');
+}
 async function bmnImportLegacy() {
-  if(!confirm('Impor data BMN dari Apps Script lama yang sudah dikonfigurasi? Data pada BIMASATU yang sudah ada tidak akan ditimpa.'))return;
+  if(!confirm('Impor data BMN dari sumber lama? Data yang sudah ada di BIMASATU tidak akan ditimpa.'))return;
+  const btn=$('bmnImport'), state=$('bmnImportState'); btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span> Mengimpor…'; state.textContent='Sedang membaca sumber dan memasukkan data…';
   try {
     const result=await gas('bmnImportLegacy',{});
     const d=result.data||{};
-    bmnNotice('Sumber: '+(d.source || 'BMN lama')+'. Data sumber: '+(d.sourceCount || 0)+'; masuk: '+d.imported+', dilewati: '+d.skipped+', foto menunggu migrasi: '+d.fotoPending+'.'+(d.endpointWarning ? ' Catatan endpoint: '+d.endpointWarning : '')+(d.errors && d.errors.length ? ' Gagal: '+d.errors.join(' | ') : ''));
+    const html='<div class="alert alert-success mb-2"><div class="fw-semibold mb-1">Hasil impor data</div><div class="row g-2"><div class="col-6 col-md-3"><span class="small text-body-secondary">Data sumber</span><div class="fw-semibold">'+Number(d.sourceCount||0).toLocaleString('id-ID')+'</div></div><div class="col-6 col-md-3"><span class="small text-body-secondary">Berhasil masuk</span><div class="fw-semibold">'+Number(d.imported||0).toLocaleString('id-ID')+'</div></div><div class="col-6 col-md-3"><span class="small text-body-secondary">Dilewati</span><div class="fw-semibold">'+Number(d.skipped||0).toLocaleString('id-ID')+'</div></div><div class="col-6 col-md-3"><span class="small text-body-secondary">Foto menunggu</span><div class="fw-semibold">'+Number(d.fotoPending||0).toLocaleString('id-ID')+'</div></div></div><div class="small mt-2">Sumber: '+esc(d.source||'BMN lama')+'</div></div>';
+    $('bmnMigrationResult').innerHTML=html+(d.endpointWarning?'<div class="alert alert-warning small">Catatan pembacaan endpoint: '+esc(d.endpointWarning)+'</div>':'')+(d.errors&&d.errors.length?'<div class="alert alert-warning small">Beberapa baris gagal: '+esc(d.errors.join(' | '))+'</div>':'');
+    state.textContent='Impor selesai · '+Number(d.imported||0)+' data baru.';
+    bmnNotice('Impor selesai. '+Number(d.imported||0)+' data berhasil masuk, '+Number(d.skipped||0)+' dilewati.','success');
     await bmnLoad();
-  } catch(e){bmnNotice(e.message,'danger');}
+  } catch(e){state.textContent='Impor gagal.';bmnNotice(e.message,'danger');$('bmnMigrationResult').innerHTML='<div class="alert alert-danger small">'+esc(e.message)+'</div>';}
+  finally{btn.disabled=false;btn.innerHTML='<i class="bx bx-import me-1"></i> Mulai / Ulangi Impor';}
 }
-
 async function bmnMigrateLegacyPhotos() {
   const pending=[];
-  BMN_UI.rows.forEach(r=>(r.fotos||[]).forEach((p,i)=>{if(p.migrationStatus==='pending' && p.legacyUrl)pending.push({r,p,i});}));
-  if(!pending.length)return bmnNotice('Tidak ada foto lama yang menunggu migrasi.','warning');
-  if(!confirm('Salin '+pending.length+' foto/dokumen lama ke folder BIMASATU? File lama tidak dihapus.'))return;
-  let ok=0, fail=0;
-  for(const item of pending){
+  BMN_UI.rows.forEach(r=>(r.fotos||[]).forEach((p,i)=>{if(p.migrationStatus==='pending' && (p.legacyUrl||p.legacyFileId))pending.push({r,p,i});}));
+  if(!pending.length){bmnUpdateMigrationPanel();return bmnNotice('Tidak ada foto lama yang menunggu migrasi.','warning');}
+  if(!confirm('Salin '+pending.length+' foto/dokumen lama ke folder BIMASATU/BMN? File lama tidak dihapus.'))return;
+  const btn=$('bmnMigratePhotos'),state=$('bmnPhotoState');let ok=0,fail=0;btn.disabled=true;
+  for(let n=0;n<pending.length;n++){
+    const item=pending[n];state.textContent='Memproses berkas '+(n+1)+' dari '+pending.length+'…';
     try{
-      const result=await api({action:'bmn-salin'},{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-        url:item.p.legacyUrl,satker:item.r.satker,kodeBarang:item.r.kodeBarang,bmnId:item.r.id,fileName:item.p.fileName
+      const response=await api({action:'bmn-salin'},{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        url:item.p.legacyUrl||('https://drive.google.com/file/d/'+item.p.legacyFileId+'/view'),satker:item.r.satker,kodeBarang:item.r.kodeBarang,bmnId:item.r.id,fileName:item.p.fileName
       })});
-      const data=await result.json();
-      const fresh=BMN_UI.rows.find(x=>x.id===item.r.id);
+      if(!response.ok)throw new Error('HTTP '+response.status);
+      const data=await response.json();if(!data.id)throw new Error(data.message||'ID file hasil salin tidak ditemukan.');
+      const fresh=BMN_UI.rows.find(x=>x.id===item.r.id);if(!fresh)throw new Error('Data BMN tidak ditemukan pada daftar.');
       fresh.fotos[item.i]={fileId:data.id,fileName:item.p.fileName,fileSize:item.p.fileSize,mimeType:item.p.mimeType,migrationStatus:'master'};
       await gas('bmnSave',{data:{
         id:fresh.id,satker:fresh.satker,kodeBarang:fresh.kodeBarang,namaBarang:fresh.namaBarang,jenis:fresh.jenis,
@@ -278,9 +319,13 @@ async function bmnMigrateLegacyPhotos() {
         kondisi:fresh.kondisi,status:fresh.status,lokasiBarang:fresh.lokasiBarang,idBMN:fresh.idBMN,keterangan:fresh.keterangan,fotos:fresh.fotos
       }});
       ok++;
-    }catch(e){fail++;}
+    }catch(e){fail++;if($('bmnMigrationResult'))$('bmnMigrationResult').innerHTML='<div class="alert alert-warning small">Berkas '+esc(item.p.fileName||'tanpa nama')+': '+esc(e.message)+'</div>';}
+    const pct=Math.round((n+1)/pending.length*100);$('bmnPhotoProgress').style.width=pct+'%';$('bmnPhotoProgress').setAttribute('aria-valuenow',String(pct));
   }
-  bmnNotice('Migrasi foto selesai. Berhasil: '+ok+', gagal: '+fail+(fail?' (periksa tautan/izin file lama).':''),fail?'warning':'success');
+  btn.disabled=false;
+  $('bmnPhotoState').textContent='Selesai diproses: '+ok+' berhasil, '+fail+' gagal.';
+  $('bmnMigrationResult').innerHTML='<div class="alert '+(fail?'alert-warning':'alert-success')+' mb-0 small"><b>Hasil salin foto:</b> '+ok+' berhasil · '+fail+' gagal. Berkas gagal tetap berstatus menunggu agar dapat dicoba lagi.</div>';
+  bmnNotice('Migrasi foto selesai. Berhasil: '+ok+', gagal: '+fail,fail?'warning':'success');
   await bmnLoad();
 }
 
