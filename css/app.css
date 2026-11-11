@@ -82,6 +82,104 @@ dialog.wide.xl{width:min(1400px,calc(100% - 1rem))}
   body.side-mini #side .nav-link .ms-auto{display:none!important}
   body.side-mini #side .nav-link.sub{padding-left:0}
 
+  /* Kelompok dan penanda pohon navigasi agar submenu mudah dikenali di rail ikon. */
+  body.side-mini #side details{
+    position:relative;
+    margin:.2rem .2rem .55rem;
+    padding:.08rem 0 .28rem;
+    border:1px solid transparent;
+    border-radius:.7rem;
+    transition:background-color .18s ease,border-color .18s ease;
+  }
+  body.side-mini #side details[open]{
+    background:rgba(105,108,255,.045);
+    border-color:rgba(105,108,255,.14);
+  }
+  body.side-mini #side details>summary.nav-link{
+    position:relative;
+    margin:.18rem .45rem .28rem;
+    padding:.68rem 0 .9rem;
+    color:#59617e;
+  }
+  body.side-mini #side details[open]>summary.nav-link{
+    background:rgba(105,108,255,.11);
+    color:#5558dc;
+    box-shadow:inset 0 0 0 1px rgba(105,108,255,.16);
+  }
+  /* Chevron kecil di bawah ikon induk menunjukkan bahwa ikon tersebut bisa dibuka/tutup. */
+  body.side-mini #side details>summary.nav-link::after{
+    content:"";
+    position:absolute;
+    left:50%;
+    bottom:3px;
+    width:0;
+    height:0;
+    border-left:4px solid transparent;
+    border-right:4px solid transparent;
+    border-top:4px solid currentColor;
+    opacity:.75;
+    transform:translateX(-50%);
+    transition:transform .18s ease;
+  }
+  body.side-mini #side details[open]>summary.nav-link::after{
+    transform:translateX(-50%) rotate(180deg);
+  }
+  /* Garis vertikal adalah batang kelompok; cabang pendek mengarah ke setiap ikon submenu. */
+  body.side-mini #side details[open]::before{
+    content:"";
+    position:absolute;
+    left:.45rem;
+    top:2.55rem;
+    bottom:.62rem;
+    width:2px;
+    border-radius:2px;
+    background:linear-gradient(180deg,rgba(105,108,255,.42),rgba(105,108,255,.12));
+    pointer-events:none;
+  }
+  body.side-mini #side details[open]>.nav-link.sub{
+    position:relative;
+    min-height:36px;
+    margin:.12rem .45rem;
+    padding:.22rem 0;
+    border-radius:.5rem;
+    z-index:1;
+  }
+  body.side-mini #side details[open]>.nav-link.sub::before{
+    content:"";
+    position:absolute;
+    left:0;
+    top:50%;
+    width:13px;
+    height:1px;
+    background:rgba(105,108,255,.38);
+    pointer-events:none;
+  }
+  body.side-mini #side details[open]>.nav-link.sub>i:first-child{
+    position:relative;
+    z-index:1;
+    display:grid;
+    place-items:center;
+    width:27px;
+    height:27px;
+    border:1px solid rgba(105,108,255,.22);
+    border-radius:.45rem;
+    background:#fff;
+    color:#696cff;
+    font-size:.95rem;
+    line-height:1;
+    box-shadow:0 1px 3px rgba(67,89,113,.08);
+  }
+  body.side-mini #side details[open]>.nav-link.sub.active>i:first-child{
+    border-color:#fff;
+    background:#fff;
+    color:#696cff;
+    box-shadow:0 1px 4px rgba(46,48,150,.18);
+  }
+  body.side-mini #side details[open]>.nav-link.sub:hover:not(.active)>i:first-child{
+    border-color:rgba(105,108,255,.48);
+    background:#f7f7ff;
+  }
+
   /* Tombol burger mengambang di atas rail dan selalu dapat dijangkau untuk membuka menu penuh. */
   body.side-mini #burger{
     position:fixed;
