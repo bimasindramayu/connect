@@ -253,7 +253,7 @@ async function bmnImportLegacy() {
   try {
     const result=await gas('bmnImportLegacy',{});
     const d=result.data||{};
-    bmnNotice('Impor selesai. Sumber: '+(d.sourceCount || 0)+' baris; masuk: '+d.imported+', dilewati: '+d.skipped+', foto menunggu migrasi: '+d.fotoPending+'.'+(d.errors && d.errors.length ? ' Sebagian gagal: '+d.errors.join(' | ') : ''));
+    bmnNotice('Sumber: '+(d.source || 'BMN lama')+'. Data sumber: '+(d.sourceCount || 0)+'; masuk: '+d.imported+', dilewati: '+d.skipped+', foto menunggu migrasi: '+d.fotoPending+'.'+(d.endpointWarning ? ' Catatan endpoint: '+d.endpointWarning : '')+(d.errors && d.errors.length ? ' Gagal: '+d.errors.join(' | ') : ''));
     await bmnLoad();
   } catch(e){bmnNotice(e.message,'danger');}
 }
