@@ -39,7 +39,36 @@ dialog.wide.xl{width:min(1400px,calc(100% - 1rem))}
 #vwa table{font-size:.875rem}   /* tiga kolom (POS, RPD, Realisasi) harus muat di panel yang sempit */
 @media(max-width:767px){#vwa{position:absolute;z-index:5;left:0;top:0;bottom:0;width:min(400px,94%);max-width:none;box-shadow:0 0 1rem rgba(0,0,0,.25)}}
 @media(max-width:575px){dialog.wide{width:100%;height:100%;border-radius:0}}
-@media(max-width:991px){#side{transform:translateX(-100%);visibility:hidden;transition:transform .2s,visibility 0s .2s}#side.open{transform:none;visibility:visible;transition:transform .2s,visibility 0s}#main{margin-left:0}#topbar{margin:.75rem}}
+@media(max-width:991px){
+  #side{transform:translateX(-100%);visibility:hidden;transition:transform .2s,visibility 0s .2s}
+  #side.open{transform:none;visibility:visible;transition:transform .2s,visibility 0s}
+  #main{margin-left:0}
+  #topbar{margin:.75rem}
+
+  /* Tombol navigasi selalu mengambang di atas drawer agar menu dapat ditutup kembali di HP/tablet. */
+  #burger{
+    position:fixed;
+    top:12px;
+    left:16px;
+    z-index:1100;
+    display:grid;
+    place-items:center;
+    width:42px;
+    height:42px;
+    padding:0;
+    border:1px solid #dfe1eb;
+    border-radius:.5rem;
+    background:#fff;
+    color:#696cff;
+    box-shadow:0 4px 14px rgba(67,89,113,.2);
+  }
+  #burger:hover{border-color:#696cff;background:rgba(105,108,255,.08)}
+  #burger:focus-visible{outline:3px solid rgba(105,108,255,.3);outline-offset:2px}
+  #burger i{font-size:1.35rem!important}
+
+  /* Beri ruang di atas logo agar tidak bertumpuk dengan tombol burger saat drawer terbuka. */
+  #side>.p-4:first-child{padding-top:4.35rem!important}
+}
 @media(min-width:992px){
   #side{transition:width .22s ease,transform .2s,visibility 0s}
   #main{transition:margin-left .22s ease}
