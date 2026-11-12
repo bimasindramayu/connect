@@ -20,6 +20,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const note = (t, type = 'danger') => `<div class="alert alert-${type} py-2">${esc(t)}</div>`;
 let me = null, token = null, wid = null;
 let EP = 0;   // nomor halaman aktif: naik tiap pindah menu. Hasil await dari halaman lama diabaikan (cek live) agar tidak menulis ke layar yang sudah diganti
+let REFRESH_PAGE_DATA = false; // true hanya saat tombol global meminta data terbaru dari server
+let REFRESH_PAGE_BUSY = false;
 const live = ep => ep === EP;
 
 /* ====== Peran dan hak akses menu ======
@@ -34,7 +36,7 @@ const can = menu => !!me && Array.isArray(me.menus) && me.menus.includes(menu); 
 // operator; Pegawai KUA paling akhir supaya halaman awal peran lain tidak berubah.
 const HOME_ORDER = ['dashboard', 'bop', 'rpd', 'realisasi', 'verifikasi', 'sakti', 'metode', 'anggaran', 'laporan', 'config', 'impor',
   'bast', 'bast-buat', 'bast-pegawai', 'bast-setting', 'bmn', 'sert-masjid', 'sert-kiblat', 'sert-pengaturan', 'jaspro', 'akses', 'pegawai'];
-const homeMenu = () => HOME_ORDER.find(can) || 'pengaturan';
+const homeMenu = () => HOME_ORDER.find(can) || 'profil';
 // Hanya dipakai bila database belum diperbarui (fungsi akses_saya belum ada): perilaku lama, admin semua menu dan operator 4 menu.
 // Dashboard dan Pegawai KUA butuh tabel baru di bop.sql, jadi tidak ikut.
 const MENU_LAMA = {
@@ -72,7 +74,22 @@ async function loadMenus(profil) {
 function applyMenus() {
   const side = $('side');
   side.querySelectorAll('[data-menu]').forEach(a => a.classList.toggle('d-none', !can(a.dataset.menu)));
+  const profileLink = side.querySelector('[data-profile]'); if (profileLink) profileLink.classList.remove('d-none');
+  const userAdminLink = side.querySelector('[data-admin-only]'); if (userAdminLink) userAdminLink.classList.toggle('d-none', me.role !== 'admin');
   side.querySelectorAll('details').forEach(g => g.classList.toggle('d-none', !g.querySelector('[data-menu]:not(.d-none)')));
+
+  // Label tooltip + nama aksesibel tetap tersedia saat sidebar dipadatkan menjadi ikon.
+  side.querySelectorAll('.nav-link, summary').forEach(el => {
+    const label = Array.from(el.childNodes)
+      .filter(n => n.nodeType === 3)
+      .map(n => n.textContent.trim())
+      .filter(Boolean)
+      .join(' ');
+    if (label) {
+      el.title = label;
+      el.setAttribute('aria-label', label);
+    }
+  });
   $('dbWarn').classList.toggle('d-none', !(menuLama && me.role === 'admin'));
 }
 
@@ -107,14 +124,24 @@ async function boot(session) {
 // Menu samping: layar lebar = sembunyikan/tampilkan (pilihan diingat di browser ini); layar sempit = geser masuk/keluar.
 // Daftar menu dapat digulir bila submenu yang dibuka lebih panjang daripada layar (CSS #side overflow-y).
 const SIDE_KEY = 'jalin.side', wideScreen = () => innerWidth >= 992;
-const syncSide = () => $('burger').setAttribute('aria-expanded', String(wideScreen() ? !document.body.classList.contains('side-off') : $('side').classList.contains('open')));
+const syncSide = () => {
+  const btn = $('burger'), wide = wideScreen();
+  const expanded = wide ? !document.body.classList.contains('side-mini') : $('side').classList.contains('open');
+  const label = wide
+    ? (expanded ? 'Ciutkan menu menjadi ikon' : 'Tampilkan menu lengkap')
+    : (expanded ? 'Tutup menu navigasi' : 'Buka menu navigasi');
+  btn.setAttribute('aria-expanded', String(expanded));
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+};
 
 const pages = {};
 function route() {
   if (!me) return;
   const h = location.hash.slice(1);
   let k = h in pages ? h : homeMenu();
-  if (k !== 'pengaturan' && !can(k)) {   // menu ini tidak diberikan ke peran akun ini: ke halaman awal. Server tetap menolak bila diakali lewat alamat.
+  if (k === 'pengaturan' && me.role !== 'admin') { k = 'profil'; if (location.hash !== '#profil') history.replaceState(null, '', '#profil'); }
+  if (k !== 'pengaturan' && k !== 'profil' && !can(k)) {   // menu ini tidak diberikan ke peran akun ini: ke halaman awal. Server tetap menolak bila diakali lewat alamat.
     k = homeMenu();
     if (h && location.hash !== '#' + k) history.replaceState(null, '', '#' + k);
   }
@@ -127,7 +154,43 @@ function route() {
   $('view').classList.toggle('d-none', sv); $('sertView').classList.toggle('d-none', !sv);
   $('view').classList.toggle('bop', !/^(jaspro|bast|bmn|sert-)/.test(k));   // pewarnaan khusus halaman BOP dan akun (css/app.css)
   $('view').classList.toggle('bmn', k === 'bmn'); // namespace CSS khusus halaman BMN (css/bmn.css)
-  pages[k]();
+  // BMN sudah memiliki tombol Muat Ulang di toolbar halamannya sendiri.
+  $('pageRefresh')?.classList.toggle('d-none', k === 'bmn');
+  return pages[k]();
+}
+
+async function refreshCurrentPage() {
+  const button = $('pageRefresh');
+  if (!me || !button || REFRESH_PAGE_BUSY) return;
+
+  REFRESH_PAGE_BUSY = true;
+  button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  button.querySelector('i')?.classList.add('bx-spin');
+
+  try {
+    // Data master BOP biasanya di-cache selama sesi; hapus agar konfigurasi/KUA/POS ikut diperbarui.
+    if (typeof M !== 'undefined') {
+      delete M.kua;
+      delete M.pos;
+      delete M.cfg;
+    }
+    REFRESH_PAGE_DATA = true;
+    await route();
+  } catch (error) {
+    const message = error?.message || 'Terjadi kesalahan saat memuat ulang halaman.';
+    if (typeof jpToast === 'function') jpToast('Gagal memuat data terbaru: ' + message, 'danger');
+    else {
+      const target = $('sertView').classList.contains('d-none') ? $('view') : $('sertView');
+      target.insertAdjacentHTML('afterbegin', note('Gagal memuat data terbaru: ' + message));
+    }
+  } finally {
+    REFRESH_PAGE_DATA = false;
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    button.querySelector('i')?.classList.remove('bx-spin');
+    REFRESH_PAGE_BUSY = false;
+  }
 }
 const rp = n => String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const num = s => parseInt(String(s).replace(/\D/g, '') || '0', 10);

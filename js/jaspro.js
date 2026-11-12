@@ -1483,7 +1483,7 @@ async function pageJaspro() {
       <div><h4 class="mb-1">Jaspro Transport</h4><p class="mb-0">Daftar nominatif Jasa Profesi &amp; Transport Penghulu (PNBP NR) dari data mentah. Hanya satu set data yang disimpan: unggahan baru menimpa yang lama.</p></div>
       <span id="jstat" class="badge bg-label-secondary">Memuat…</span></div>
     <div id="jmsg"></div><div id="jsteps"></div><div id="jpanel">Memuat…</div></div>`;
-  if (!J.on) {
+  if (!J.on || REFRESH_PAGE_DATA) {
     const { data, error } = await sb.from('jaspro_data').select('master,laporan,settings').eq('id', 1).maybeSingle();
     if (error) return $('jpanel').innerHTML = note('Gagal memuat data Jaspro: ' + error.message + ' (jalankan bop.sql terbaru di Supabase bila tabel jaspro_data belum ada).');
     Object.assign(J, { master: data?.master || [], laporan: data?.laporan || null, set: jpMuatSet(data?.settings), rows: null, stale: false, on: true });

@@ -40,7 +40,176 @@ dialog.wide.xl{width:min(1400px,calc(100% - 1rem))}
 @media(max-width:767px){#vwa{position:absolute;z-index:5;left:0;top:0;bottom:0;width:min(400px,94%);max-width:none;box-shadow:0 0 1rem rgba(0,0,0,.25)}}
 @media(max-width:575px){dialog.wide{width:100%;height:100%;border-radius:0}}
 @media(max-width:991px){#side{transform:translateX(-100%);visibility:hidden;transition:transform .2s,visibility 0s .2s}#side.open{transform:none;visibility:visible;transition:transform .2s,visibility 0s}#main{margin-left:0}#topbar{margin:.75rem}}
-@media(min-width:992px){body.side-off #side{transform:translateX(-100%);visibility:hidden;transition:transform .2s,visibility 0s .2s}body.side-off #main{margin-left:0}}   /* menu samping disembunyikan (layar lebar) */
+@media(min-width:992px){
+  #side{transition:width .22s ease,transform .2s,visibility 0s}
+  #main{transition:margin-left .22s ease}
+  body.side-mini #side{width:76px}
+  body.side-mini #main{margin-left:76px}
+
+  /* Brand tetap terlihat, tetapi label teks disembunyikan pada rail ikon. */
+  body.side-mini #side>.p-4:first-child{
+    padding:4.35rem .45rem .65rem!important;
+    text-align:center;
+  }
+  body.side-mini #side .brand{
+    justify-content:center;
+    gap:0;
+    font-size:0;
+  }
+  body.side-mini #side .brand-logo{
+    height:2rem;
+    max-width:2.1rem;
+  }
+
+  /* Semua item menu menjadi target ikon yang rata dan mudah disentuh. */
+  body.side-mini #side .nav-link{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:0;
+    width:calc(100% - .9rem);
+    margin:.18rem .45rem;
+    padding:.68rem 0;
+    font-size:0;
+    line-height:1;
+  }
+  body.side-mini #side .nav-link>i:first-child{
+    flex:none;
+    margin:0;
+    font-size:1.25rem;
+    line-height:1;
+  }
+  body.side-mini #side .nav-link .ms-auto{display:none!important}
+  body.side-mini #side .nav-link.sub{padding-left:0}
+
+  /* Kelompok dan penanda pohon navigasi agar submenu mudah dikenali di rail ikon. */
+  body.side-mini #side details{
+    position:relative;
+    margin:.2rem .2rem .55rem;
+    padding:.08rem 0 .28rem;
+    border:1px solid transparent;
+    border-radius:.7rem;
+    transition:background-color .18s ease,border-color .18s ease;
+  }
+  body.side-mini #side details[open]{
+    background:rgba(105,108,255,.045);
+    border-color:rgba(105,108,255,.14);
+  }
+  body.side-mini #side details>summary.nav-link{
+    position:relative;
+    margin:.18rem .45rem .28rem;
+    padding:.68rem 0 .9rem;
+    color:#59617e;
+  }
+  body.side-mini #side details[open]>summary.nav-link{
+    background:rgba(105,108,255,.11);
+    color:#5558dc;
+    box-shadow:inset 0 0 0 1px rgba(105,108,255,.16);
+  }
+  /* Chevron kecil di bawah ikon induk menunjukkan bahwa ikon tersebut bisa dibuka/tutup. */
+  body.side-mini #side details>summary.nav-link::after{
+    content:"";
+    position:absolute;
+    left:50%;
+    bottom:3px;
+    width:0;
+    height:0;
+    border-left:4px solid transparent;
+    border-right:4px solid transparent;
+    border-top:4px solid currentColor;
+    opacity:.75;
+    transform:translateX(-50%);
+    transition:transform .18s ease;
+  }
+  body.side-mini #side details[open]>summary.nav-link::after{
+    transform:translateX(-50%) rotate(180deg);
+  }
+  /* Garis vertikal adalah batang kelompok; cabang pendek mengarah ke setiap ikon submenu. */
+  body.side-mini #side details[open]::before{
+    content:"";
+    position:absolute;
+    left:.45rem;
+    top:2.55rem;
+    bottom:.62rem;
+    width:2px;
+    border-radius:2px;
+    background:linear-gradient(180deg,rgba(105,108,255,.42),rgba(105,108,255,.12));
+    pointer-events:none;
+  }
+  body.side-mini #side details[open]>.nav-link.sub{
+    position:relative;
+    min-height:36px;
+    margin:.12rem .45rem;
+    padding:.22rem 0;
+    border-radius:.5rem;
+    z-index:1;
+  }
+  body.side-mini #side details[open]>.nav-link.sub::before{
+    content:"";
+    position:absolute;
+    left:0;
+    top:50%;
+    width:13px;
+    height:1px;
+    background:rgba(105,108,255,.38);
+    pointer-events:none;
+  }
+  body.side-mini #side details[open]>.nav-link.sub>i:first-child{
+    position:relative;
+    z-index:1;
+    display:grid;
+    place-items:center;
+    width:27px;
+    height:27px;
+    border:1px solid rgba(105,108,255,.22);
+    border-radius:.45rem;
+    background:#fff;
+    color:#696cff;
+    font-size:.95rem;
+    line-height:1;
+    box-shadow:0 1px 3px rgba(67,89,113,.08);
+  }
+  body.side-mini #side details[open]>.nav-link.sub.active>i:first-child{
+    border-color:#fff;
+    background:#fff;
+    color:#696cff;
+    box-shadow:0 1px 4px rgba(46,48,150,.18);
+  }
+  body.side-mini #side details[open]>.nav-link.sub:hover:not(.active)>i:first-child{
+    border-color:rgba(105,108,255,.48);
+    background:#f7f7ff;
+  }
+
+  /* Tombol burger mengambang di atas rail dan selalu dapat dijangkau untuk membuka menu penuh. */
+  body.side-mini #burger{
+    position:fixed;
+    top:12px;
+    left:16px;
+    z-index:1100;
+    display:grid;
+    place-items:center;
+    width:42px;
+    height:42px;
+    padding:0;
+    border:1px solid #dfe1eb;
+    border-radius:.5rem;
+    background:#fff;
+    color:#696cff;
+    box-shadow:0 4px 14px rgba(67,89,113,.2);
+  }
+  body.side-mini #burger:hover{
+    border-color:#696cff;
+    background:rgba(105,108,255,.08);
+  }
+  body.side-mini #burger:focus-visible{
+    outline:3px solid rgba(105,108,255,.3);
+    outline-offset:2px;
+  }
+  body.side-mini #burger i{font-size:1.35rem!important}
+}
+@media(prefers-reduced-motion:reduce){
+  #side,#main{transition:none!important}
+}
 .bg-label-success{background:rgba(113,221,55,.16)!important;color:#71dd37!important}
 .bg-label-warning{background:rgba(255,171,0,.16)!important;color:#ffab00!important}
 .bg-label-danger{background:rgba(255,62,29,.16)!important;color:#ff3e1d!important}
@@ -168,3 +337,27 @@ dialog.dlg-lg{width:min(1000px,calc(100% - 1rem))}
 .dash-rb>span{display:block;height:100%;border-radius:0 4px 4px 0}
 .dash-rv{text-align:right;font-weight:600;color:#3d4465;font-variant-numeric:tabular-nums}
 @media(prefers-reduced-motion:no-preference){.dash-meter>span,.dash-rb>span{transition:width .35s ease-out}}
+
+
+/* Tombol global untuk mengambil ulang data halaman aktif. */
+#pageRefresh {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.25rem;
+  min-height:34px;
+  white-space:nowrap;
+  flex:none;
+  font-weight:600;
+}
+#pageRefresh i { font-size:1.05rem; line-height:1; }
+#pageRefresh:disabled { opacity:.7; cursor:wait; }
+#pageRefresh .bx-spin { animation:pageRefreshSpin .8s linear infinite; }
+@keyframes pageRefreshSpin { to { transform:rotate(360deg); } }
+@media(max-width:575.98px) {
+  #topbar { gap:.45rem!important; padding:.55rem .65rem; }
+  #pageRefresh { width:34px; min-width:34px; padding:0; }
+  #pageRefresh span { display:none!important; }
+  #topbar .avatar { width:32px; height:32px; }
+  #out { padding:.35rem .5rem; }
+}

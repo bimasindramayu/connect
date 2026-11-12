@@ -39,7 +39,7 @@
         }
 
         function loadPengaturan() {
-          callApi('getPengaturan', {})
+          return callApi('getPengaturan', {})
             .then(function (res) {
               if (res.success) {
                 PENGATURAN_KUNCI.forEach(function (kunci) {

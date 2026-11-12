@@ -70,7 +70,7 @@ async function pageAnggaran() {
     };
   };
   $('ay').onchange = () => { $('amsg').innerHTML = ''; load(); };
-  load();
+  await load();
 }
 
 const ST = { waiting: ['bg-warning', 'Menunggu verifikasi'], approved: ['bg-info', 'Disetujui'], rejected: ['bg-danger', 'Ditolak'], paid: ['bg-success', 'Dibayar'] };
@@ -200,7 +200,7 @@ async function pageRpd() {
     kid ? list() : listAll();
   };
   ['ry', 'rk'].forEach(id => { if ($(id)) $(id).onchange = () => { $('xmsg').innerHTML = ''; load(); }; });
-  load();
+  await load();
 }
 
 /* ====== Realisasi (Operator KUA): daftar bulan dulu. Hanya yang belum diisi / ditolak yang bisa diedit ======
@@ -348,7 +348,7 @@ async function pageRealisasi() {
   };
   $('lm').onchange = () => list();
   $('lt').onchange = () => { $('lmsg').innerHTML = ''; $('lbody').textContent = 'Memuat…'; load(); };
-  load();
+  await load();
 }
 
 /* ====== Verifikasi (menu verifikasi: Admin, Bendahara BOP, Verifikator BOP): filter kecamatan/tahun/status, tabel dulu,
@@ -443,7 +443,7 @@ async function pageVerifikasi() {
     G = r.data; list();
   };
   ['vk', 'vy', 'vb', 'vs'].forEach(id => $(id).onchange = () => { $('vmsg').innerHTML = ''; load(); });
-  load();
+  await load();
 }
 
 /* ====== Pengaturan SAKTI (menu metode: bawaan hanya Admin): ceklis GLOBAL per KUA + POS (Listrik dan Telepon/Internet). Tanpa bulan/tahun berlaku ====== */
@@ -489,7 +489,7 @@ async function pageMetode() {
     if (r.error) return $('mbody').innerHTML = note(r.error.message);
     vers = r.data; draw();
   };
-  load();
+  await load();
 }
 
 /* ====== Realisasi SAKTI (menu sakti: Admin, Bendahara BOP): tampilan sama dengan Pengaturan SAKTI, tetapi ceklis diganti kolom nominal (per bulan) ======
@@ -602,7 +602,7 @@ async function pageSakti() {
   };
   $('sy').onchange = () => { $('smsg').innerHTML = ''; load(); };
   $('sm').onchange = () => { $('smsg').innerHTML = ''; draw(); };   // data satu tahun sudah dimuat: pindah bulan tidak perlu mengambil ulang
-  load();
+  await load();
 }
 
 /* ====== Impor Data Lama (admin): ambil data dari Spreadsheet/Apps Script sistem lama, tulis ke BIMASATU, dan SALIN berkas LPJ-nya ke
