@@ -40,12 +40,29 @@ dialog.wide.xl{width:min(1400px,calc(100% - 1rem))}
 @media(max-width:767px){#vwa{position:absolute;z-index:5;left:0;top:0;bottom:0;width:min(400px,94%);max-width:none;box-shadow:0 0 1rem rgba(0,0,0,.25)}}
 @media(max-width:575px){dialog.wide{width:100%;height:100%;border-radius:0}}
 @media(max-width:991px){
-  #side{transform:translateX(-100%);visibility:hidden;transition:transform .2s,visibility 0s .2s}
-  #side.open{transform:none;visibility:visible;transition:transform .2s,visibility 0s}
-  #main{margin-left:0}
+  /* HP hanya memiliki dua keadaan: sidebar penuh atau tersembunyi (tanpa rail ikon). */
+  #side{
+    width:min(260px,78vw);
+    transform:translateX(-100%);
+    visibility:hidden;
+    transition:transform .22s ease,visibility 0s .22s;
+  }
+  #side.open{
+    transform:none;
+    visibility:visible;
+    transition:transform .22s ease,visibility 0s;
+  }
+  #main{
+    width:100%;
+    margin-left:0;
+    transform:translateX(0);
+    transition:transform .22s ease;
+  }
+  /* Dorong konten ke kanan saat menu dibuka agar drawer tidak menimpa konten. */
+  #side.open ~ #main{transform:translateX(min(260px,78vw))}
   #topbar{margin:.75rem}
 
-  /* Tombol navigasi selalu mengambang di atas drawer agar menu dapat ditutup kembali di HP/tablet. */
+  /* Tombol tetap di atas sidebar, baik saat drawer terbuka maupun tertutup. */
   #burger{
     position:fixed;
     top:12px;
@@ -65,8 +82,6 @@ dialog.wide.xl{width:min(1400px,calc(100% - 1rem))}
   #burger:hover{border-color:#696cff;background:rgba(105,108,255,.08)}
   #burger:focus-visible{outline:3px solid rgba(105,108,255,.3);outline-offset:2px}
   #burger i{font-size:1.35rem!important}
-
-  /* Beri ruang di atas logo agar tidak bertumpuk dengan tombol burger saat drawer terbuka. */
   #side>.p-4:first-child{padding-top:4.35rem!important}
 }
 @media(min-width:992px){
