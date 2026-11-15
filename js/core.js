@@ -123,16 +123,18 @@ async function boot(session) {
 }
 // Menu samping: layar lebar = sembunyikan/tampilkan (pilihan diingat di browser ini); layar sempit = geser masuk/keluar.
 // Daftar menu dapat digulir bila submenu yang dibuka lebih panjang daripada layar (CSS #side overflow-y).
-const SIDE_KEY = 'jalin.side', wideScreen = () => innerWidth >= 992;
+const SIDE_KEY = 'jalin.side';
+const SIDE_STATES = ['hidden', 'full', 'mini'];
+const wideScreen = () => innerWidth >= 992;
 const syncSide = () => {
-  const btn = $('burger'), wide = wideScreen();
-  const expanded = wide ? !document.body.classList.contains('side-mini') : $('side').classList.contains('open');
-  const label = wide
-    ? (expanded ? 'Ciutkan menu menjadi ikon' : 'Tampilkan menu lengkap')
-    : (expanded ? 'Tutup menu navigasi' : 'Buka menu navigasi');
-  btn.setAttribute('aria-expanded', String(expanded));
-  btn.setAttribute('aria-label', label);
-  btn.title = label;
+  const btn = $('burger');
+  if (!btn) return;
+  const state = document.body.classList.contains('side-hidden') ? 'hidden'
+    : document.body.classList.contains('side-mini') ? 'mini' : 'full';
+  const labels = {hidden:'Tampilkan menu lengkap',full:'Ciutkan menu menjadi ikon',mini:'Sembunyikan menu navigasi'};
+  btn.setAttribute('aria-expanded', String(state !== 'hidden'));
+  btn.setAttribute('aria-label', labels[state]);
+  btn.title = labels[state];
 };
 
 const pages = {};

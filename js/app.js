@@ -37,27 +37,23 @@ sb.auth.onAuthStateChange((ev, s) => { if (ev !== 'TOKEN_REFRESHED') setTimeout(
 
 $('out').onclick = () => sb.auth.signOut();
 $('pageRefresh').onclick = refreshCurrentPage;
-// Preferensi lama "off" dipetakan ke mode rail ikon agar tombol navigasi tidak pernah ikut hilang.
-if (['mini', 'off'].includes(LS.getItem(SIDE_KEY))) document.body.classList.add('side-mini');
-
+// Preferensi sidebar tiga keadaan: hidden -> full -> mini -> hidden.
+let sideState = LS.getItem(SIDE_KEY);
+if (sideState === 'off') sideState = 'mini'; // kompatibilitas dengan preferensi versi lama
+if (!SIDE_STATES.includes(sideState)) sideState = 'full';
+function applySideState(state, persist = false) {
+  sideState = SIDE_STATES.includes(state) ? state : 'full';
+  document.body.classList.toggle('side-hidden', sideState === 'hidden');
+  document.body.classList.toggle('side-mini', sideState === 'mini');
+  if (persist) LS.setItem(SIDE_KEY, sideState);
+  syncSide();
+}
+applySideState(sideState);
 $('burger').onclick = () => {
-  if (wideScreen()) {
-    const compact = document.body.classList.toggle('side-mini');
-    LS.setItem(SIDE_KEY, compact ? 'mini' : 'full');
-  } else {
-    $('side').classList.toggle('open');
-  }
-  syncSide();
+  const next = SIDE_STATES[(SIDE_STATES.indexOf(sideState) + 1) % SIDE_STATES.length];
+  applySideState(next, true);
 };
-
-// Saat kembali dari drawer mobile ke desktop, tutup drawer yang mungkin masih terbuka.
-let sidebarWasWide = wideScreen();
-addEventListener('resize', () => {
-  const isWide = wideScreen();
-  if (isWide && !sidebarWasWide) $('side').classList.remove('open');
-  sidebarWasWide = isWide;
-  syncSide();
-});
+addEventListener('resize', syncSide);
 addEventListener('hashchange', route);
 
 // ---- Pemeriksaan pemasangan: js/config.js masih berisi nilai contoh? ----
