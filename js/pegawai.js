@@ -69,16 +69,16 @@ const pegUrut = (a, b) => (pegPeringkat(b) - pegPeringkat(a)) || (PEG_JENIS.inde
   || (pegGolIdx(b) - pegGolIdx(a)) || String(a.nama).localeCompare(String(b.nama), 'id');
 const pegHitung = list => { const c = Object.fromEntries(PEG_JENIS.map(j => [j, 0])); list.forEach(p => { if (p.jenis_asn in c) c[p.jenis_asn]++; }); return c; };
 const pegWaktu = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' }); };
-const pegTanggal = iso => { const m = String(iso ?? '').match(/^(\\d{4})-(\\d{2})-(\\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'; };
+const pegTanggal = iso => { const m = String(iso ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'; };
 // Perkiraan usia pensiun: NIP dipakai untuk memastikan tanggal lahir terbaca; jenjang JF menentukan kelompok usia.
 // Hasilnya estimasi awal (58/60/65), bukan penetapan hukum; operator dapat mengganti secara manual.
 const pegPensiun = (jabatan, nip) => {
-  const n = String(nip ?? '').replace(/\\D/g, ''); if (n.length !== 18) return null;
+  const n = String(nip ?? '').replace(/\D/g, ''); if (n.length !== 18) return null;
   const y = +n.slice(0, 4), m = +n.slice(4, 6), d = +n.slice(6, 8), t = new Date(Date.UTC(y, m - 1, d));
   if (t.getUTCFullYear() !== y || t.getUTCMonth() !== m - 1 || t.getUTCDate() !== d) return null;
   const j = String(jabatan ?? '').toLowerCase();
-  if (/\\butama\\b/.test(j)) return 65;
-  if (/\\bmadya\\b/.test(j)) return 60;
+  if (/\butama\b/.test(j)) return 65;
+  if (/\bmadya\b/.test(j)) return 60;
   return 58;
 };
 const pegPerluDilengkapi = p => pegJabatanLama(p?.jabatan) || /^perlu dilengkapi$/i.test(p?.jabatan || '');
@@ -485,7 +485,7 @@ async function pagePegawai() {
       const roman = PEG_GOL_PPPK.slice().sort((a,b) => b.length-a.length);
       const golongan = (jenis, x) => {
         const t = String(x || '').toUpperCase();
-        if (jenis === 'PNS') return t.match(/\b((?:I{1,3}|IV)\/[A-E])\b/)?.[1] || '';
+        if (jenis === 'PNS') { const m = t.match(/\b((?:I{1,3}|IV)\/[A-E])\b/); return m ? m[1].replace(/\/([A-E])$/, (_, c) => '/' + c.toLowerCase()) : ''; }
         const m = t.match(/\b(I{1,3}|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI|XVII)\b/);
         return m && roman.includes(m[1]) ? m[1] : '';
       };
@@ -500,9 +500,10 @@ async function pagePegawai() {
       const bool = x => /^(1|true|ya|yes|y|x|✓|✔)$/i.test(String(x || '').trim());
       const nips = new Set(rows.map(p => String(p.nip || '').replace(/\D/g, '')).filter(Boolean));
       const kepala = new Set(rows.filter(p => p.jabatan_tambahan).map(p => `${p.kua_id}:${p.jabatan_tambahan}`));
-      const staged = [], masalah = [], total = Math.max(0, ws.rowCount - 1);
+      const staged = [], masalah = []; let total = 0;
       ws.eachRow((row, no) => {
         if (no === 1 || !row.values.slice(1).some(v => v != null && String(v).trim() !== '')) return;
+        total++;
         const nama = ambil(row, 'Nama');
         const tempat = ambil(row, 'Tempat Tugas');
         const kua = cariKua(tempat);
