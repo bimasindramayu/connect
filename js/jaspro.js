@@ -1684,6 +1684,45 @@ async function jpMExp() {
   } catch (e) { jpToast(e.message, 'danger'); }
 }
 
+/* ---- Riwayat historis Jaspro Transport ---- */
+function pRiwayat() {
+  const years=[...new Set([...J.periods.filter(p=>p.laporan).map(p=>Number(p.tahun)),Number(J.set.tahun)])].filter(Number.isFinite).sort((a,b)=>b-a);
+  if(!years.includes(Number(J.historyYear)))J.historyYear=years[0]||new Date().getFullYear();
+  const records=J.periods.filter(p=>p.laporan&&Number(p.tahun)===Number(J.historyYear)).sort((a,b)=>a.bulan-b.bulan);
+  const sums=records.map(p=>({period:p,...jpHitung(p.laporan,jpMuatSet(p.settings))}));
+  const total=k=>sums.reduce((n,x)=>n+x[k],0);
+  const selected=J.periods.find(p=>p.id===J.historySelected);
+  return `<div class="card mb-4"><div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <div><h5 class="mb-1">Riwayat Tahunan Jaspro Transport</h5><p class="text-body-secondary mb-0">Rekap nominal dari seluruh laporan bulanan yang tersimpan.</p></div>
+      <div><label class="form-label mb-1">Tahun</label><select class="form-select" data-history-year>${years.map(y=>`<option value="${y}"${Number(y)===Number(J.historyYear)?' selected':''}>${y}</option>`).join('')}</select></div>
+    </div>
+    ${records.length?`<div class="row g-3 mb-4">
+      ${jpCard('bx-wallet','primary','Rp '+rp(Math.round(total('jaspro'))),'Total Jaspro bersih')}
+      ${jpCard('bx-bus','info','Rp '+rp(Math.round(total('transport'))),'Total Transport')}
+      ${jpCard('bx-calculator','success','Rp '+rp(Math.round(total('total'))),'Total nominal diterima')}
+      ${jpCard('bx-calendar-check','warning',total('peristiwa'),'Total peristiwa')}
+    </div>
+    <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Bulan</th><th class="text-end">Baris</th><th class="text-end">Peristiwa</th><th class="text-end">Jaspro bersih</th><th class="text-end">Transport</th><th class="text-end">Total nominal</th><th class="text-end">Aksi</th></tr></thead><tbody>
+      ${sums.map(x=>`<tr><td class="fw-semibold">${esc(JX.BULAN_LIST[x.period.bulan-1])}</td><td class="text-end">${x.rows.length}</td><td class="text-end">${x.peristiwa}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(x.jaspro))}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(x.transport))}</td><td class="text-end text-nowrap fw-semibold">Rp ${rp(Math.round(x.total))}</td><td class="text-end text-nowrap">
+        <button class="btn btn-sm btn-outline-primary" data-act="hdetail" data-id="${x.period.id}">${J.historySelected===x.period.id?'Tutup':'Detail'}</button>
+        <button class="btn btn-sm btn-outline-secondary" data-act="hedit" data-id="${x.period.id}" title="Buka periode untuk unggah ulang"><i class="bx bx-edit"></i></button>
+        <button class="btn btn-sm btn-outline-danger" data-act="hdel" data-id="${x.period.id}" title="Hapus arsip periode"><i class="bx bx-trash"></i></button>
+      </td></tr>`).join('')}
+    </tbody><tfoot><tr class="fw-bold"><td colspan="3">TOTAL TAHUN ${J.historyYear}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('jaspro')))}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('transport')))}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('total')))}</td><td></td></tr></tfoot></table></div>`:'<div class="text-center py-5 text-body-secondary">Belum ada laporan tersimpan untuk tahun ini.</div>'}
+  </div></div>${selected&&Number(selected.tahun)===Number(J.historyYear)?jpDetailPeriode(selected):''}`;
+}
+function jpDetailPeriode(period) {
+  const s=jpMuatSet(period.settings),data=jpHitung(period.laporan,s),f=n=>'Rp '+rp(Math.round(n||0));
+  return `<div class="card"><div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3"><div><h5 class="mb-1">Rincian ${esc(jpPeriodLabel(period.id))}</h5><small class="text-body-secondary">Sumber: ${esc(period.laporan?.fileName||'Laporan Nominatif')}</small></div><span class="badge bg-label-primary">${data.rows.length} baris</span></div>
+    <div class="row g-3 mb-3">${jpCard('bx-wallet','primary',f(data.jasproBruto),'Jaspro bruto')}${jpCard('bx-receipt','warning',f(data.pph),'Potongan PPh')}${jpCard('bx-wallet','success',f(data.jaspro),'Jaspro bersih')}${jpCard('bx-bus','info',f(data.transport),'Transport')}${jpCard('bx-calculator','primary',f(data.total),'Total nominal diterima')}</div>
+    <div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Tanggal</th><th class="text-end">Peristiwa</th><th class="text-end">Jaspro bruto</th><th class="text-end">PPh</th><th class="text-end">Jaspro bersih</th><th class="text-end">Transport</th><th class="text-end">Total</th></tr></thead><tbody>
+      ${data.rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td><td>${esc(r.golongan)}</td><td class="text-nowrap">${JX.tglSah(r.tanggal)?JX.tglID(r.tanggal):'–'}</td><td class="text-end">${r.jumlahPeristiwa}</td><td class="text-end text-nowrap">${f(r.jasproSubtotal)}</td><td class="text-end text-nowrap">${f(r.jasproPph)}</td><td class="text-end text-nowrap">${f(r.jasproDiterima)}</td><td class="text-end text-nowrap">${f(r.transpoDiterima)}</td><td class="text-end text-nowrap fw-semibold">${f(r.jasproDiterima+r.transpoDiterima)}</td></tr>`).join('')}
+    </tbody><tfoot><tr class="fw-bold"><td colspan="6">TOTAL</td><td class="text-end">${data.peristiwa}</td><td class="text-end text-nowrap">${f(data.jasproBruto)}</td><td class="text-end text-nowrap">${f(data.pph)}</td><td class="text-end text-nowrap">${f(data.jaspro)}</td><td class="text-end text-nowrap">${f(data.transport)}</td><td class="text-end text-nowrap">${f(data.total)}</td></tr></tfoot></table></div>
+  </div></div>`;
+}
+
 /* ---- Langkah 3: Proses & Unduh ---- */
 // Tarif dasar + perubahan tarif menurut tanggal. Baris pertama = tarif dasar (berlaku sejak awal); baris berikutnya = perubahan yang
 // berlaku MULAI tanggalnya. Nominal dikosongkan bila tarif itu tidak ikut berubah (Jasa Profesi dan Transport bisa berubah sendiri-sendiri).
@@ -1812,6 +1851,9 @@ function jpClick(e) {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const a = b.dataset.act, id = b.dataset.id;
   if (a === 'tab') { J.tab = b.dataset.tab; $('jmsg').innerHTML = ''; jpRender(); }
+  else if (a === 'hdetail') { J.historySelected=J.historySelected===id?'':id; jpRender(); }
+  else if (a === 'hedit') { const p=J.periods.find(x=>x.id===id); if(p){jpLoadPeriod(id);J.tab='input';$('jmsg').innerHTML=note('Periode '+esc(jpPeriodLabel(id))+' dibuka. Unggah file baru untuk mengganti arsip periode ini.','info');jpRender();} }
+  else if (a === 'hdel') { const p=J.periods.find(x=>x.id===id); if(p) jpAsk('Hapus arsip '+jpPeriodLabel(id)+'?','Laporan, pengaturan tarif, dan rincian periode ini akan dihapus permanen. Periode lain dan Master Rekening tidak terpengaruh.','Hapus Periode',async()=>{const {error}=await sb.from('jaspro_periode').delete().eq('id',id);if(error)return jpToast('Gagal menghapus periode: '+error.message,'danger');J.periods=J.periods.filter(x=>x.id!==id);if(J.periodId===id)jpLoadPeriod(jpPeriodId(jpDef()));if(J.historySelected===id)J.historySelected='';jpRender();jpToast('Arsip '+jpPeriodLabel(id)+' berhasil dihapus.');},true); }
   else if (a === 'upl') $('jfl').click();
   else if (a === 'clr') jpAsk('Hapus laporan tersimpan?', 'Laporan Nominatif yang tersimpan di server akan dihapus.', 'Hapus', async () => { J.laporan = null; J.rows = null; if (await jpSave({ laporan: null })) jpRender(); }, true);
   else if (a === 'mimp') $('jfm').click();
@@ -1838,6 +1880,12 @@ function jpChange(e) {
   const t = e.target, d = t.dataset;
   if (t.id === 'jfl') { jpLaporan(t.files[0]); t.value = ''; }
   else if (t.id === 'jfm') { jpImport(t.files[0]); t.value = ''; }
+  else if (d.period) {
+    const next={...J.set,[d.period]:d.period==='bulan'?t.value:Number(t.value)},id=jpPeriodId(next);
+    if(!id){t.value=d.period==='bulan'?J.set.bulan:J.set.tahun;return jpToast('Tahun harus berupa angka 1900 sampai 2200.','warning');}
+    if(id!==J.periodId){clearTimeout(J.t);jpLoadPeriod(id);jpRender();$('jmsg').innerHTML=J.laporan?note('Memuat arsip '+esc(jpPeriodLabel(id))+'.','info'):note('Periode '+esc(jpPeriodLabel(id))+' belum memiliki laporan.','info');}
+  }
+  else if(d.historyYear!=null){J.historyYear=Number(t.value);J.historySelected='';jpRender();}
   else if (d.i != null && J.rows) {
     const r = J.rows[d.i];
     if (d.f === 'gol') { r.golongan = t.value; Object.assign(r, JX.classifyRow(r, J.set)); jpReview(); }
