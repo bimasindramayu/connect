@@ -391,3 +391,187 @@ dialog.dlg-lg{width:min(1000px,calc(100% - 1rem))}
   #topbar .avatar { width:32px; height:32px; }
   #out { padding:.35rem .5rem; }
 }
+
+/* Jaspro Transport — satu halaman riwayat dan dialog pengelolaan */
+.jp-page-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:1rem;
+  margin-bottom:1.25rem;
+}
+.jp-page-title{min-width:15rem}
+.jp-page-title h4{font-size:1.25rem;color:#566a7f;font-weight:600}
+.jp-page-title p{max-width:42rem;color:#697a8d;font-size:.9rem;line-height:1.5}
+.jp-page-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.5rem}
+.jp-page-actions .btn{white-space:nowrap}
+.jp-history-head,.jp-detail-title,.jp-review-head,.jp-detail-top{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:1rem;
+}
+.jp-history-head{margin-bottom:1.25rem}
+.jp-year-control{width:9.5rem;flex:none}
+.jp-year-control .form-label{font-size:.8rem;color:#566a7f;font-weight:600}
+.jp-table-wrap,.jp-master-table-wrap{width:100%;overflow:auto;overscroll-behavior-x:contain}
+.jp-history-table{min-width:1050px}
+.jp-detail-table{min-width:1500px}
+.jp-review-table{min-width:1420px}
+.jp .table{font-size:.875rem}
+.jp .table th,.jp .table td{vertical-align:middle}
+.jp .table tfoot td{background:rgba(67,89,113,.045);font-weight:600}
+.jp-empty{
+  display:flex;
+  min-height:250px;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:2rem 1rem;
+  border:1px dashed #d9dee3;
+  border-radius:.5rem;
+  text-align:center;
+}
+.jp-empty p{max-width:34rem}
+.jp-empty-icon{
+  display:grid;
+  width:48px;
+  height:48px;
+  place-items:center;
+  margin-bottom:.8rem;
+  border-radius:.6rem;
+  background:rgba(105,108,255,.08);
+  color:#696cff;
+  font-size:1.5rem;
+}
+.jp-detail-top{align-items:center;margin-bottom:1rem}
+.jp-detail-title{align-items:center;margin-bottom:1.25rem}
+.jp-download-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:.75rem;
+  padding-top:1rem;
+  margin-top:1rem;
+  border-top:1px solid #e6e9ed;
+}
+.jp-csv-menu{position:relative}
+.jp-csv-menu>summary{list-style:none;cursor:pointer}
+.jp-csv-menu>summary::-webkit-details-marker{display:none}
+.jp-csv-options{
+  position:absolute;
+  z-index:210;
+  right:0;
+  bottom:calc(100% + .35rem);
+  display:grid;
+  min-width:160px;
+  padding:.35rem;
+  border:1px solid #d9dee3;
+  border-radius:.5rem;
+  background:#fff;
+  box-shadow:0 .25rem .9rem rgba(67,89,113,.16);
+}
+.jp-csv-options button{
+  padding:.5rem .65rem;
+  border:0;
+  border-radius:.3rem;
+  background:transparent;
+  color:#566a7f;
+  text-align:left;
+}
+.jp-csv-options button:hover,.jp-csv-options button:focus-visible{background:rgba(105,108,255,.08);outline:none}
+.jp-upload-pick{
+  display:flex;
+  min-height:150px;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:.35rem;
+  padding:1.25rem;
+  border:1.5px dashed #c7ccd4;
+  border-radius:.6rem;
+  background:#fafbfc;
+  color:#566a7f;
+  text-align:center;
+  cursor:pointer;
+  transition:border-color .15s,background-color .15s;
+}
+.jp-upload-pick:hover{border-color:#696cff;background:rgba(105,108,255,.035)}
+.jp-upload-pick:focus-within{outline:2px solid #696cff;outline-offset:2px}
+.jp-upload-pick small{color:#697a8d}
+.jp-upload-symbol{
+  display:grid;
+  width:42px;
+  height:42px;
+  place-items:center;
+  border-radius:.55rem;
+  background:rgba(105,108,255,.09);
+  color:#696cff;
+  font-size:1.35rem;
+}
+.jp-master-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:.75rem;
+  margin-bottom:1rem;
+}
+.jp-master-table-wrap{
+  max-height:min(54vh,540px);
+  border:1px solid #e6e9ed;
+  border-radius:.45rem;
+}
+.jp-master-table-wrap table{min-width:720px}
+.jp-master-table-wrap thead th{
+  position:sticky;
+  top:0;
+  z-index:1;
+  background:#f8f9fb;
+}
+.jp-signatory-card{
+  height:100%;
+  padding:1rem;
+  border:1px solid #e6e9ed;
+  border-radius:.5rem;
+  background:#fff;
+}
+.jp-signatory-card .form-label{font-size:.8rem;color:#566a7f}
+dialog.jp-dialog-upload{width:min(620px,calc(100% - 1.25rem));max-height:calc(100dvh - 2rem);overflow:auto}
+dialog.jp-dialog-settings{width:min(880px,calc(100% - 1.25rem));max-height:calc(100dvh - 2rem);overflow:auto}
+dialog.jp-dialog-master{width:min(1160px,calc(100% - 1.25rem));max-height:calc(100dvh - 2rem);overflow:auto}
+dialog.jp-dialog-master>.p-4,dialog.jp-dialog-settings>.p-4{padding:1.25rem!important}
+.jp button:focus-visible,.jp a:focus-visible,.jp [tabindex]:focus-visible{
+  outline:2px solid #696cff;
+  outline-offset:2px;
+}
+@media(max-width:991.98px){
+  .jp-detail-table{min-width:1380px}
+  .jp-review-table{min-width:1300px}
+}
+@media(max-width:767.98px){
+  .jp-page-head{display:block}
+  .jp-page-actions{justify-content:flex-start;margin-top:1rem}
+  .jp-page-actions .btn{flex:1 1 auto}
+  .jp-history-head{align-items:flex-end}
+  .jp-detail-title{align-items:flex-start}
+  .jp-detail-top{align-items:center}
+  .jp-download-row{align-items:flex-start;flex-direction:column}
+  dialog.jp-dialog-master,dialog.jp-dialog-settings,dialog.jp-dialog-upload{
+    width:calc(100% - 1rem);
+    max-height:calc(100dvh - 1rem);
+  }
+}
+@media(max-width:480px){
+  .jp-page-actions{display:grid;grid-template-columns:1fr 1fr}
+  .jp-page-actions .btn:first-child{grid-column:1/-1}
+  .jp-history-head{align-items:flex-start;flex-direction:column}
+  .jp-year-control{width:100%;max-width:180px}
+  .jp-detail-top{align-items:flex-start}
+  .jp-detail-title{flex-direction:column}
+}
+@media(prefers-reduced-motion:reduce){
+  .jp-upload-pick{transition:none}
+}
+
