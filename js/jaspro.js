@@ -1497,7 +1497,15 @@ function jpLoadPeriod(id) {
   J.set.tahun=year;J.set.bulan=JX.BULAN_LIST[month-1]||J.set.bulan;
   J.laporan=record?.laporan||null;J.periodId=id;J.rows=null;J.stale=false;
 }
-const jpSetSimpan = () => { clearTimeout(J.t); J.t=setTimeout(()=>jpSave({settings:jpSetOut()}),800); };
+const jpSetSimpan = () => {
+  clearTimeout(J.t);
+  J.t = setTimeout(() => { J.t = null; jpSave({ settings: jpSetOut() }); }, 800);
+};
+async function jpSetFlush() {
+  if (J.t === null) return true;
+  clearTimeout(J.t); J.t = null;
+  return jpSave({ settings: jpSetOut() });
+}
 const jpX = () => loadJs(CDN.exceljs);   // ExcelJS hanya dimuat saat dibutuhkan
 const JST = { OTOMATIS: ['success', 'Cocok otomatis'], OTOMATIS_FUZZY: ['warning', 'Cocok (mirip)'], AMBIGU: ['warning', 'Ambigu'], TIDAK_DITEMUKAN: ['danger', 'Tidak ditemukan'], MANUAL: ['secondary', 'Diisi manual'] };
 
@@ -1876,14 +1884,19 @@ function jpClick(e) {
   else if (a === 'dcj') jpDl('jaspro');
   else if (a === 'dct') jpDl('transpo');
 }
-function jpChange(e) {
+async function jpChange(e) {
   const t = e.target, d = t.dataset;
   if (t.id === 'jfl') { jpLaporan(t.files[0]); t.value = ''; }
   else if (t.id === 'jfm') { jpImport(t.files[0]); t.value = ''; }
   else if (d.period) {
     const next={...J.set,[d.period]:d.period==='bulan'?t.value:Number(t.value)},id=jpPeriodId(next);
     if(!id){t.value=d.period==='bulan'?J.set.bulan:J.set.tahun;return jpToast('Tahun harus berupa angka 1900 sampai 2200.','warning');}
-    if(id!==J.periodId){clearTimeout(J.t);jpLoadPeriod(id);jpRender();$('jmsg').innerHTML=J.laporan?note('Memuat arsip '+esc(jpPeriodLabel(id))+'.','info'):note('Periode '+esc(jpPeriodLabel(id))+' belum memiliki laporan.','info');}
+    if(id!==J.periodId){
+      const saved = await jpSetFlush();
+      if(!saved){t.value=d.period==='bulan'?J.set.bulan:J.set.tahun;return;}
+      jpLoadPeriod(id);jpRender();
+      $('jmsg').innerHTML=J.laporan?note('Memuat arsip '+esc(jpPeriodLabel(id))+'.','info'):note('Periode '+esc(jpPeriodLabel(id))+' belum memiliki laporan.','info');
+    }
   }
   else if(d.historyYear!=null){J.historyYear=Number(t.value);J.historySelected='';jpRender();}
   else if (d.i != null && J.rows) {
