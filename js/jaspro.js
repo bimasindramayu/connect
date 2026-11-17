@@ -1621,7 +1621,7 @@ const pIn = () => {
       <div class="col-12"><small class="text-body-secondary">Periode dipilih: <b>${esc(jpPeriodLabel(J.periodId))}</b>${J.laporan ? ' · Sudah ada laporan tersimpan; unggahan berikutnya dapat menggantinya.' : ' · Belum ada laporan tersimpan.'}</small></div>
     </div>
     <div class="jp-drop" data-act="upl"><div class="avatar rounded bg-label-primary mx-auto mb-2"><i class="bx bx-cloud-upload fs-3"></i></div>
-      <div class="fw-semibold">Seret file ke sini, atau klik untuk memilih</div><small>Format .xlsx · Kolom wajib: Nama Penghulu, KUA, NIP, Golongan, Jumlah Peristiwa · Kolom opsional: No Rekening, Tanggal</small></div>
+      <div class="fw-semibold">Seret file ke sini, atau klik untuk memilih</div><small>Format .xlsx · Kolom wajib: Nama Penghulu, KUA, NIP, Golongan, G-J (Peristiwa, Jasa Profesi, Transport, Diterima) · Kolom opsional: No Rekening, Tanggal</small></div>
     <input type="file" id="jfl" accept=".xlsx" hidden>
     <p class="small text-body-secondary mt-2 mb-0">Nominal per peristiwa dibaca langsung dari file: kolom <b>G</b> = jumlah peristiwa, <b>H</b> = Jasa Profesi, <b>I</b> = Transport, dan <b>J</b> = Jumlah Diterima dari file sebagai pembanding. Aplikasi menghitung ulang nominal dan PPh dari nilai H dan I.</p>
     ${R.length ? `<div class="row g-3 mt-1">${jpCard('bx-list-ul', 'primary', R.length, 'Total baris')}${jpCard('bx-user', 'info', u, 'Penghulu')}${jpCard('bx-calendar-check', 'success', tp, 'Total peristiwa')}${bt ? jpCard('bx-calendar', 'warning', bt, 'Baris bertanggal') : ''}</div>
