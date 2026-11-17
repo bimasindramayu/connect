@@ -198,6 +198,7 @@ async function pagePegawai() {
     drawStat();
     $('pflt').classList.toggle('d-none', tab === 'rekap');
     $('pxls').classList.toggle('d-none', tab === 'rekap');
+    if (kelola) $('pimp').classList.toggle('d-none', tab === 'rekap');
     if (tab === 'rekap') drawRekap(); else drawDaftar();
   };
   const refresh = async () => { if (await load()) { draw(); } };
@@ -615,9 +616,12 @@ async function pagePegawai() {
       await loadJs(CDN.exceljs);
       const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Pegawai KUA');
       ws.columns = [{ header: 'No', width: 5 }, ...(pu ? [{ header: 'KUA', width: 26 }] : []), { header: 'Nama lengkap + gelar', width: 38 }, { header: 'NIP', width: 22 },
-        { header: 'Jenis ASN', width: 18 }, { header: 'Pangkat / golongan', width: 28 }, { header: 'Jabatan', width: 36 }, { header: 'Jabatan tambahan', width: 18 }, { header: 'HP / WA', width: 16 }];
+        { header: 'Jenis ASN', width: 18 }, { header: 'Pangkat / golongan', width: 28 }, { header: 'Jabatan', width: 36 }, { header: 'Kepala KUA', width: 22 },
+        { header: 'Operator SIMKAH', width: 18 }, { header: 'Operator BOP', width: 16 }, { header: 'TMT di KUA saat ini', width: 18 },
+        { header: 'TMT pertama menjabat Kepala KUA', width: 24 }, { header: 'Usia pensiun (tahun)', width: 18 }, { header: 'Sumber usia pensiun', width: 18 }, { header: 'HP / WA', width: 16 }];
       // NIP dan nomor HP ditulis sebagai teks supaya Excel tidak membulatkan 18 angka atau menghapus angka 0 di depan
-      list.forEach((p, i) => ws.addRow([i + 1, ...(pu ? [kn[p.kua_id] || ''] : []), p.nama, p.nip || '', p.jenis_asn, p.pangkat_golongan ? pegGol(p.jenis_asn, p.pangkat_golongan) : '', p.jabatan, p.jabatan_tambahan || '', p.no_hp]));
+      list.forEach((p, i) => ws.addRow([i + 1, ...(pu ? [kn[p.kua_id] || ''] : []), p.nama, p.nip || '', p.jenis_asn, p.pangkat_golongan ? pegGol(p.jenis_asn, p.pangkat_golongan) : '', p.jabatan,
+        p.jabatan_tambahan || '', p.operator_simkah ? 'Ya' : 'Tidak', p.operator_bop ? 'Ya' : 'Tidak', p.tmt_kua || '', p.tmt_kepala_kua || '', p.usia_pensiun ?? '', p.sumber_usia_pensiun || '', p.no_hp || '']));
       const h = ws.getRow(1); h.font = { bold: true }; h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9EBFF' } };
       ws.views = [{ state: 'frozen', ySplit: 1 }];
       const slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -654,12 +658,16 @@ async function pagePegawai() {
   };
   $('phis').onclick = riwayat;
   $('pxls').onclick = unduh;
-  if (kelola) $('padd').onclick = () => form(null);
+  if (kelola) {
+    $('padd').onclick = () => form(null);
+    $('pimp').onclick = () => $('pfile').click();
+    $('pfile').onchange = async e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) await imporExcel(file); };
+  }
 
   if (!(await load())) return;
   if (pu) $('pkf').innerHTML = '<option value="0">Semua KUA</option>' + kuas.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('');
   $('pxls').disabled = false;
-  if (kelola) $('padd').disabled = false;
+  if (kelola) { $('padd').disabled = false; $('pimp').disabled = false; }
   draw();
 }
 
