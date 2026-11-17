@@ -24,7 +24,6 @@ Yang perlu disiapkan:
 | Urut | Berkas | Dijalankan di | Menghasilkan | Dibutuhkan oleh |
 |---|---|---|---|---|
 | 1 | `bop.sql` | Supabase > SQL Editor | tabel utama, aturan, peran dan hak akses menu, data awal | langkah 3: `bop.mjs akun` butuh tabel `profiles` dan trigger-nya |
-| 1a | `jaspro-history.sql` | Supabase > SQL Editor (sesudah `bop.sql`) | arsip Jaspro bulanan, validasi jadwal ganda, migrasi laporan lama | menu Jaspro Transport |
 | 2 | (pengaturan dashboard) | Supabase dan Cloudflare | pendaftaran mandiri mati, captcha Turnstile | keamanan dan login |
 | 3 | `bop.mjs akun` | terminal | 1 admin + 31 Operator KUA (`akun.csv`); akun peran lain dibuat di aplikasi | login pertama |
 | 4 | `bop.mjs drive` | terminal | folder master Drive, `DRIVE_ROOT_FOLDER_ID`, token Google | langkah 5 (rahasia Edge Function) |
@@ -34,7 +33,7 @@ Yang perlu disiapkan:
 
 Urutan ini tidak boleh dibalik: `bop.mjs akun` sebelum `bop.sql` gagal (tabel belum ada); Edge Function sebelum `bop.mjs drive` tidak punya rahasia Google; website paling akhir karena butuh URL Web App. Apps Script tidak lagi memerlukan id folder Drive, jadi langkah 6 tidak bergantung pada langkah 4. Bagian 2 sampai 8 di bawah mengikuti urutan yang sama.
 
-Isi folder proyek ini (lihat `README.md` bagian 2 untuk penjelasan tiap berkas): `index.html`, `css/`, `js/`, `views/`, `bop.sql`, `jaspro-history.sql`, `bop.mjs`, `supabase/functions/bop/`, `apps-script/`, `assets/`.
+Isi folder proyek ini (lihat `README.md` bagian 2 untuk penjelasan tiap berkas): `index.html`, `css/`, `js/`, `views/`, `bop.sql`, `bop.mjs`, `supabase/functions/bop/`, `apps-script/`, `assets/`.
 
 ## 2. Supabase: proyek dan database
 
@@ -44,7 +43,7 @@ Isi folder proyek ini (lihat `README.md` bagian 2 untuk penjelasan tiap berkas):
    - **Publishable key** (`sb_publishable_...`): aman dipasang di website.
    - **Secret key** (`sb_secret_...`, atau `service_role` pada tampilan lama): **RAHASIA**, hanya untuk `.env` di komputer Anda.
 3. **SQL Editor > New query**: tempel **seluruh isi `bop.sql`** > **Run**. Hasil `Success`. Aman dijalankan ulang kapan pun. Ini membuat tabel, aturan (trigger), hak akses (RLS), tujuh peran, hak akses menu bawaan tiap peran, dan data awal (31 KUA, 11 POS, pengaturan bawaan). Hak akses menu bawaan hanya diisi **sekali**: menjalankan ulang `bop.sql` tidak mengembalikan menu yang sudah Anda cabut di halaman Hak Akses Menu.
-4. Setelah `bop.sql` berhasil, buka **SQL Editor > New query**, tempel seluruh isi `jaspro-history.sql`, lalu **Run**. Ini membuat penyimpanan arsip Jaspro per bulan dan memindahkan laporan lama dari format satu-periode ke arsip bulanan. Jalankan sebelum website versi baru dipakai. Aman dijalankan ulang.
+3a. Bagian **12) JASPRO TRANSPORT** di `bop.sql` sekarang juga membuat tabel arsip bulanan, aturan akses, validasi jadwal ganda, dan memindahkan laporan lama secara non-destruktif. Tidak ada file SQL tambahan yang perlu dijalankan.
 5. **Authentication > Sign In / Providers** (di tampilan lama: *Settings*): matikan **Allow new users to sign up**. **Wajib.** Semua akun dibuat oleh admin (lewat `bop.mjs` atau menu Pengaturan di aplikasi). Bila pendaftaran dibiarkan terbuka, siapa pun yang tahu URL dan publishable key bisa mendaftar dengan peran apa pun (termasuk `role=admin`) di metadata dan otomatis memilikinya.
 6. **Authentication > URL Configuration**: isi **Site URL** dengan alamat website nanti, mis. `https://bimasindramayu.github.io/connect/`.
 
