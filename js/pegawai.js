@@ -77,7 +77,7 @@ const pegPensiun = (jabatan, nip) => {
   const y = +n.slice(0, 4), m = +n.slice(4, 6), d = +n.slice(6, 8), t = new Date(Date.UTC(y, m - 1, d));
   if (t.getUTCFullYear() !== y || t.getUTCMonth() !== m - 1 || t.getUTCDate() !== d) return null;
   const j = String(jabatan ?? '').trim().toLowerCase();
-  if (!j || /perlu dilengkapi|kepala\\s+(kua|kantor urusan agama)/i.test(j)) return null;
+  if (!j || /perlu dilengkapi|kepala/i.test(j)) return null;
   if (/\butama\b/.test(j)) return 65;
   if (/\bmadya\b/.test(j)) return 60;
   return 58;
