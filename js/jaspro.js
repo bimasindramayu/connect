@@ -1700,29 +1700,384 @@ const pIn = () => {
       <tbody>${R.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td><td>${esc(r.golongan)}</td>${bt ? `<td class="text-nowrap">${JX.tglSah(r.tanggal) ? JX.tglID(r.tanggal) : '<span class="text-body-secondary">–</span>'}</td>` : ''}<td class="text-end">${esc(r.jumlahPeristiwa)}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(r.jasproTotalSumber || 0))}</td><td class="text-end text-nowrap">Rp ${rp(r.jumlahPeristiwa>0?Math.round(r.jasproTotalSumber/r.jumlahPeristiwa):0)}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(r.transportTotalSumber || 0))}</td><td class="text-end text-nowrap">Rp ${rp(r.jumlahPeristiwa>0?Math.round(r.transportTotalSumber/r.jumlahPeristiwa):0)}</td><td class="text-end text-nowrap">${r.jumlahDiterimaSumber == null ? "–" : "Rp " + rp(Math.round(r.jumlahDiterimaSumber))}</td></tr>`).join('')}</tbody></table></div>` : ''}
   </div></div>`;
 };
-async function jpLaporan(f) {
-  if(!f)return;
-  if(!/\.xlsx$/i.test(f.name))return jpToast('Format file harus .xlsx','danger');
-  const id=jpPeriodId(J.set);if(!id)return jpToast('Pilih bulan dan tahun laporan yang sah.','danger');
-  jpStat('Membaca file…','secondary');
-  let r;try{await jpX();r=await JX.parseLaporanFile(f);}catch(e){r={ok:false,error:e.message};}
-  if(r.ok&&r.rows.length>5000)r={ok:false,error:'Maksimal 5.000 baris per laporan.'};
-  if(!r.ok){jpStat('Tersimpan','success');return $('jmsg').innerHTML=note(r.error);}
-  const duplicates=jpDuplikatJadwal(r.rows);
-  if(duplicates.length){
-    jpStat('Duplikasi ditemukan','danger');
-    const sample=duplicates.slice(0,8).map(d=>`Baris ${d.baris} memiliki jadwal ganda dengan baris ${d.pertama} (${esc(d.nama)} · ${esc(d.tanggal?JX.tglID(d.tanggal):'tanpa tanggal')}).`).join('<br>');
-    return $('jmsg').innerHTML=note(`Ditemukan ${duplicates.length} jadwal duplikat pada file. Data tidak disimpan. ${sample}`,'danger');
+async function jpLaporan(file, options = {}) {
+  if (!file) return false;
+  if (!/\.xlsx$/i.test(file.name)) {
+    jpToast('Format file harus .xlsx.', 'danger');
+    return false;
   }
-  const nextReport={fileName:f.name,rows:r.rows,tanggalTakSah:r.tanggalTakSah||0},existing=J.periods.find(p=>p.id===id);
-  const save=async()=>{
-    const ok=await jpSave({laporan:nextReport,settings:jpSetOut()});if(!ok)return;
-    J.laporan=nextReport;J.rows=null;J.stale=true;J.periodId=id;jpRender();
-    const bt=r.rows.filter(x=>x.tanggal).length;
-    $('jmsg').innerHTML=note(`${r.rows.length} baris dimuat dari "${esc(f.name)}" untuk ${esc(jpPeriodLabel(id))}${r.skipped?` (${r.skipped} baris jumlah dilewati)`:''}${bt?`, ${bt} di antaranya bertanggal`:''}. ${existing?.laporan?'Arsip bulan ini berhasil diperbarui; arsip bulan lainnya tetap tersimpan.':'Arsip periode berhasil dibuat.'}`,'success');
+  const id = options.periodId || jpPeriodId(J.set);
+  if (!id) return jpToast('Bulan dan tahun laporan tidak sah.', 'danger'), false;
+  const [year, month] = id.split('-').map(Number);
+  const existing = J.periods.find(p => p.id === id);
+  const settings = options.settings
+    ? jpMuatSet(options.settings)
+    : id === J.periodId ? jpMuatSet(jpSetOut()) : jpMuatSet(existing?.settings);
+  settings.tahun = year;
+  settings.bulan = JX.BULAN_LIST[month - 1];
+
+  return jpBusy(options.button, 'Menyimpan laporan…', async () => {
+    jpStat('Membaca file…', 'secondary');
+    let parsed;
+    try {
+      await jpX();
+      parsed = await JX.parseLaporanFile(file);
+    } catch (error) {
+      parsed = { ok: false, error: error.message };
+    }
+    if (parsed.ok && parsed.rows.length > 5000) {
+      parsed = { ok: false, error: 'Maksimal 5.000 baris per laporan.' };
+    }
+    if (!parsed.ok) {
+      jpStat('Tersimpan', 'success');
+      jpToast(parsed.error, 'danger');
+      return false;
+    }
+    const duplicates = jpDuplikatJadwal(parsed.rows);
+    if (duplicates.length) {
+      jpStat('Duplikasi ditemukan', 'danger');
+      const sample = duplicates.slice(0, 8).map(d =>
+        \`Baris \${d.baris} memiliki jadwal ganda dengan baris \${d.pertama} (\${esc(d.nama)} · \${esc(d.tanggal ? JX.tglID(d.tanggal) : 'tanpa tanggal')}).\`
+      ).join('<br>');
+      jpToast(\`Ditemukan \${duplicates.length} jadwal duplikat. Data tidak disimpan. \${sample.replace(/<br>/g, ' ')}\`, 'danger');
+      return false;
+    }
+    const nextReport = { fileName: file.name, rows: parsed.rows, tanggalTakSah: parsed.tanggalTakSah || 0 };
+    const save = async () => {
+      const ok = await jpSavePeriod(id, { laporan: nextReport, settings });
+      if (!ok) return false;
+      J.historyYear = year;
+      J.historySelected = '';
+      J.showPreview = false;
+      J.periodId = id;
+      J.set = jpMuatSet(settings);
+      J.laporan = nextReport;
+      J.rows = null;
+      J.stale = false;
+      options.dialog?.close();
+      jpRender();
+      const dated = parsed.rows.filter(row => JX.tglSah(row.tanggal)).length;
+      $('jmsg').innerHTML = note(
+        \`\${parsed.rows.length} baris berhasil disimpan untuk \${esc(jpPeriodLabel(id))}.\${parsed.skipped ? ' ' + parsed.skipped + ' baris jumlah dilewati.' : ''}\${dated ? ' ' + dated + ' baris memiliki tanggal.' : ''} \${existing?.laporan ? 'Arsip periode ini telah diperbarui; periode lain tetap tersimpan.' : 'Arsip periode baru berhasil dibuat.'}\`,
+        'success'
+      );
+      return true;
+    };
+    if (existing?.laporan) {
+      jpAsk(
+        'Perbarui arsip ' + jpPeriodLabel(id) + '?',
+        'Laporan lama pada periode ini akan diganti dengan file baru. Arsip periode lain tidak akan berubah.',
+        'Perbarui Periode',
+        async () => {
+          const confirmButton = $('dlg')?.querySelector('[data-ok]');
+          await jpBusy(confirmButton, 'Menyimpan…', save);
+        },
+        true
+      );
+      return true;
+    }
+    return save();
+  });
+}
+
+/* ---- Dialog pengelolaan Jaspro ---- */
+function jpUploadDialog(periodId) {
+  const id = periodId || J.periodId || jpPeriodId(jpDef());
+  const [year, month] = id.split('-').map(Number);
+  const period = J.periods.find(p => p.id === id);
+  jpDlg(\`<h5 class="mb-1">Upload laporan XLS</h5>
+    <p class="text-body-secondary mb-3">Pilih periode dan file laporan nominatif (.xlsx). Laporan tersimpan per bulan sehingga tidak menimpa periode lain.</p>
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6"><label class="form-label" for="jp-upload-month">Bulan laporan</label>
+        <select id="jp-upload-month" class="form-select">\${JX.BULAN_LIST.map((m, i) => \`<option value="\${i + 1}"\${i + 1 === month ? ' selected' : ''}>\${m[0] + m.slice(1).toLowerCase()}</option>\`).join('')}</select>
+      </div>
+      <div class="col-sm-6"><label class="form-label" for="jp-upload-year">Tahun laporan</label>
+        <input id="jp-upload-year" class="form-control" type="number" min="1900" max="2200" step="1" value="\${year}">
+      </div>
+    </div>
+    <label class="jp-upload-pick" for="jp-upload-file">
+      <span class="jp-upload-symbol"><i class="bx bx-file"></i></span>
+      <strong id="jp-upload-name">Pilih file laporan XLS</strong>
+      <small>Format .xlsx · Maksimal 5.000 baris</small>
+    </label>
+    <input id="jp-upload-file" type="file" accept=".xlsx" hidden>
+    \${period?.laporan ? '<div class="alert alert-warning py-2 mt-3 mb-0">Periode ini sudah memiliki arsip. Simpan akan meminta konfirmasi sebelum menggantinya.</div>' : ''}
+    <div class="d-flex justify-content-end gap-2 mt-4">
+      <button class="btn btn-outline-secondary" data-x>Batal</button>
+      <button class="btn btn-primary" data-upload-save disabled><i class="bx bx-save"></i> Simpan laporan</button>
+    </div>\`,
+  d => {
+    d.classList.remove('jp-dialog-master', 'jp-dialog-settings');
+    d.classList.add('jp-dialog-upload');
+    d.querySelector('[data-x]').onclick = () => d.close();
+    const input = d.querySelector('#jp-upload-file');
+    const saveButton = d.querySelector('[data-upload-save]');
+    input.onchange = () => {
+      const file = input.files?.[0];
+      d.querySelector('#jp-upload-name').textContent = file ? file.name : 'Pilih file laporan XLS';
+      saveButton.disabled = !file;
+    };
+    saveButton.onclick = async () => {
+      const file = input.files?.[0];
+      const targetYear = Number(d.querySelector('#jp-upload-year').value);
+      const targetMonth = Number(d.querySelector('#jp-upload-month').value);
+      if (!Number.isInteger(targetYear) || targetYear < 1900 || targetYear > 2200) {
+        jpToast('Tahun harus berupa angka 1900 sampai 2200.', 'warning');
+        return;
+      }
+      const targetId = String(targetYear).padStart(4, '0') + '-' + String(targetMonth).padStart(2, '0');
+      await jpLaporan(file, { periodId: targetId, dialog: d, button: saveButton });
+    };
+  });
+}
+
+function jpMasterDialog(preserve = false) {
+  if (!preserve || !Array.isArray(J.masterDraft)) J.masterDraft = J.master.map(m => ({ ...m }));
+  const rows = J.masterDraft.map((m, i) => \`<tr>
+    <td><input class="form-control form-control-sm" data-mi="\${i}" data-mf="nama" value="\${esc(m.nama)}" aria-label="Nama penghulu baris \${i + 1}"></td>
+    <td><input class="form-control form-control-sm" data-mi="\${i}" data-mf="namaPemilik" value="\${esc(m.namaPemilik || '')}" aria-label="Nama pemilik rekening baris \${i + 1}"></td>
+    <td><input class="form-control form-control-sm" data-mi="\${i}" data-mf="noRekening" value="\${esc(m.noRekening)}" aria-label="Nomor rekening baris \${i + 1}"></td>
+    <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" data-master-remove="\${i}" aria-label="Hapus baris \${i + 1}"><i class="bx bx-trash"></i></button></td>
+  </tr>\`).join('');
+  jpDlg(\`<h5 class="mb-1">Master Rekening</h5>
+    <p class="text-body-secondary mb-3">Atur nama penghulu dan nomor rekening. Pencocokan nama digunakan saat membuka rincian laporan.</p>
+    <div class="jp-master-toolbar">
+      <span class="small text-body-secondary">\${J.masterDraft.length} data rekening</span>
+      <div class="d-flex flex-wrap gap-2">
+        <input id="jp-master-file" type="file" accept=".xlsx" hidden>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-master-import><i class="bx bx-upload"></i> Impor XLS</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-master-export><i class="bx bx-download"></i> Ekspor XLS</button>
+        <button type="button" class="btn btn-sm btn-outline-primary" data-master-add><i class="bx bx-plus"></i> Tambah baris</button>
+      </div>
+    </div>
+    <div class="jp-master-table-wrap">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead><tr><th>Nama penghulu</th><th>Nama pemilik rekening</th><th>Nomor rekening</th><th></th></tr></thead>
+        <tbody>\${rows || '<tr><td colspan="4" class="text-center text-body-secondary py-4">Belum ada data. Tambahkan baris atau impor file Excel.</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div id="jp-master-error" class="small text-danger mt-2" role="alert"></div>
+    <div class="d-flex justify-content-between align-items-center gap-2 mt-4">
+      <button class="btn btn-outline-secondary" data-x>Batal</button>
+      <button class="btn btn-primary" data-master-save><i class="bx bx-save"></i> Simpan Master Rekening</button>
+    </div>\`,
+  d => {
+    d.classList.remove('jp-dialog-upload', 'jp-dialog-settings');
+    d.classList.add('jp-dialog-master');
+    d.onclick = async e => {
+      const button = e.target.closest('button');
+      if (!button) return;
+      if (button.hasAttribute('data-x')) return d.close();
+      if (button.hasAttribute('data-master-add')) {
+        J.masterDraft.push({ id: 'm_' + Date.now() + '_' + Math.floor(Math.random() * 1e6), nama: '', namaPemilik: '', noRekening: '' });
+        jpMasterDialog(true);
+        d.querySelector('[data-mi="' + (J.masterDraft.length - 1) + '"][data-mf="nama"]')?.focus();
+      } else if (button.hasAttribute('data-master-remove')) {
+        J.masterDraft.splice(Number(button.getAttribute('data-master-remove')), 1);
+        jpMasterDialog(true);
+      } else if (button.hasAttribute('data-master-import')) {
+        d.querySelector('#jp-master-file').click();
+      } else if (button.hasAttribute('data-master-export')) {
+        jpMExp(J.masterDraft);
+      } else if (button.hasAttribute('data-master-save')) {
+        const cleaned = J.masterDraft.map(m => ({
+          id: m.id || ('m_' + Date.now() + '_' + Math.floor(Math.random() * 1e6)),
+          nama: String(m.nama || '').trim(),
+          namaPemilik: String(m.namaPemilik || '').trim() || String(m.nama || '').trim(),
+          noRekening: String(m.noRekening || '').trim()
+        }));
+        const invalid = cleaned.findIndex(m => !m.nama || !m.noRekening);
+        if (invalid >= 0) {
+          d.querySelector('#jp-master-error').textContent = 'Nama penghulu dan nomor rekening wajib diisi pada baris ' + (invalid + 1) + '.';
+          d.querySelector('[data-mi="' + invalid + '"][data-mf="' + (!cleaned[invalid].nama ? 'nama' : 'noRekening') + '"]')?.focus();
+          return;
+        }
+        await jpBusy(button, 'Menyimpan…', async () => {
+          const ok = await jpSave({ master: cleaned });
+          if (!ok) return false;
+          J.masterDraft = null;
+          J.stale = true;
+          d.close();
+          jpRender();
+          jpToast('Master Rekening berhasil disimpan.');
+          return true;
+        });
+      }
+    };
+    d.oninput = e => {
+      const input = e.target;
+      if (input.dataset.mi == null || !input.dataset.mf) return;
+      const row = J.masterDraft[Number(input.dataset.mi)];
+      if (row) row[input.dataset.mf] = input.value;
+    };
+    d.onchange = async e => {
+      if (e.target.id !== 'jp-master-file') return;
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      if (!/\.xlsx$/i.test(file.name)) return jpToast('Format file harus .xlsx.', 'danger');
+      let parsed;
+      try { await jpX(); parsed = await JX.parseMasterFile(file); }
+      catch (error) { parsed = { ok: false, error: error.message }; }
+      if (!parsed.ok) return jpToast(parsed.error, 'danger');
+      const merge = () => {
+        const index = JX.buildMasterIndex(J.masterDraft);
+        let added = 0, updated = 0;
+        parsed.entries.forEach(entry => {
+          const matches = index[JX.normalizeCoreName(entry.nama)];
+          if (matches?.length === 1) {
+            Object.assign(matches[0], { nama: entry.nama, namaPemilik: entry.namaPemilik, noRekening: entry.noRekening });
+            updated++;
+          } else {
+            J.masterDraft.push(entry);
+            added++;
+          }
+        });
+        jpMasterDialog(true);
+        jpToast(added + ' data ditambahkan, ' + updated + ' data diperbarui.', 'success');
+      };
+      const replace = () => {
+        J.masterDraft = parsed.entries.map(({ id, nama, namaPemilik, noRekening }) => ({
+          id: id || ('m_' + Date.now() + '_' + Math.floor(Math.random() * 1e6)), nama, namaPemilik, noRekening
+        }));
+        jpMasterDialog(true);
+        jpToast('Data Master Rekening diganti dari file.', 'success');
+      };
+      jpDlg(\`<h5 class="mb-2">Impor \${parsed.entries.length} data rekening</h5>
+        <p>\${J.masterDraft.length ? 'Pilih apakah data dari “' + esc(file.name) + '” akan digabungkan atau mengganti seluruh isi Master Rekening.' : 'Data dari “' + esc(file.name) + '” akan ditambahkan.'}</p>
+        <div class="d-grid gap-2">
+          <button class="btn btn-primary" data-merge>Gabungkan data</button>
+          \${J.masterDraft.length ? '<button class="btn btn-outline-danger" data-replace>Ganti seluruh data</button>' : ''}
+          <button class="btn btn-outline-secondary" data-x>Kembali</button>
+        </div>\`,
+      confirm => {
+        confirm.classList.add('jp-dialog-settings');
+        confirm.querySelector('[data-x]').onclick = () => jpMasterDialog(true);
+        confirm.querySelector('[data-merge]').onclick = () => merge();
+        confirm.querySelector('[data-replace]')?.addEventListener('click', () => {
+          jpAsk('Ganti seluruh Master Rekening?', 'Data yang sekarang ada di daftar akan diganti dengan isi file.', 'Ganti data', replace, true);
+        });
+      });
+    };
+  });
+}
+
+function jpMExp(entries = J.master) {
+  if (!entries.length) return jpToast('Belum ada data untuk diekspor.', 'warning');
+  jpX().then(() => {
+    const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('MASTER');
+    ws.columns = [{ width: 5 }, { width: 32 }, { width: 26 }, { width: 20 }];
+    ws.addRow(['No', 'Nama', 'NamaPemilik', 'NomorRekening']).font = { bold: true };
+    entries.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).forEach((m, i) => {
+      ws.addRow([i + 1, m.nama, m.namaPemilik, m.noRekening]).getCell(4).numFmt = '@';
+    });
+    return JX.downloadWorkbook(wb, 'MASTER_REKENING.xlsx');
+  }).then(() => jpToast('Master Rekening diekspor.')).catch(error => jpToast(error.message, 'danger'));
+}
+
+function jpSettingsCollect(dialog) {
+  const values = { ...J.settingsDraft.values };
+  dialog.querySelectorAll('[data-setting]').forEach(input => {
+    const key = input.dataset.setting;
+    values[key] = key.startsWith('pph') ? Number(input.value || 0) : input.value.trim();
+  });
+  return values;
+}
+
+function jpSettingsDialog(periodId) {
+  const id = periodId || J.periodId || jpPeriodId(jpDef());
+  const record = J.periods.find(p => p.id === id);
+  J.settingsDraft = {
+    periodId: id,
+    values: jpMuatSet(record?.settings),
+    cache: {}
   };
-  if(existing?.laporan)jpAsk('Perbarui arsip '+jpPeriodLabel(id)+'?','Laporan lama pada periode ini akan diganti dengan file baru. Data periode lain tidak akan berubah.','Perbarui Periode',save,true);
-  else save();
+  jpSettingsDialogRender();
+}
+
+function jpSettingsDialogRender() {
+  const state = J.settingsDraft;
+  const [year, month] = state.periodId.split('-').map(Number);
+  const value = state.values;
+  jpDlg(\`<h5 class="mb-1">Pejabat &amp; PPh</h5>
+    <p class="text-body-secondary mb-3">Pengaturan disimpan bersama periode yang dipilih agar tanda tangan dan tarif PPh mengikuti laporan bulan tersebut.</p>
+    <div class="row g-3 mb-4">
+      <div class="col-sm-6"><label class="form-label" for="jp-setting-month">Bulan laporan</label>
+        <select id="jp-setting-month" class="form-select">\${JX.BULAN_LIST.map((m, i) => \`<option value="\${i + 1}"\${i + 1 === month ? ' selected' : ''}>\${m[0] + m.slice(1).toLowerCase()}</option>\`).join('')}</select>
+      </div>
+      <div class="col-sm-6"><label class="form-label" for="jp-setting-year">Tahun laporan</label>
+        <input id="jp-setting-year" class="form-control" type="number" min="1900" max="2200" step="1" value="\${year}">
+      </div>
+    </div>
+    <h6 class="mb-2">Tarif PPh Jasa Profesi (%)</h6>
+    <p class="small text-body-secondary">PPh dipotong dari Jaspro. Transport tidak dikenakan PPh.</p>
+    <div class="row g-3 mb-4">
+      \${[['pphII', 'PNS Golongan II'], ['pphIII', 'PNS Golongan III'], ['pphIV', 'PNS Golongan IV'], ['pphPPPK', 'PPPK']].map(([key, label]) => \`<div class="col-6 col-lg-3"><label class="form-label" for="jp-\${key}">\${label}</label><input id="jp-\${key}" class="form-control" type="number" min="0" max="100" step="0.01" data-setting="\${key}" value="\${esc(value[key])}"></div>\`).join('')}
+    </div>
+    <h6 class="mb-2">Pejabat penandatangan</h6>
+    <div class="row g-3">
+      \${[['kpa', 'Kuasa Pengguna Anggaran'], ['ppk', 'Pejabat Pembuat Komitmen'], ['bendahara', 'Bendahara']].map(([prefix, label]) => \`<div class="col-lg-4"><div class="jp-signatory-card"><div class="fw-semibold mb-2">\${label}</div>
+        <label class="form-label" for="jp-\${prefix}-jabatan">Jabatan</label><input id="jp-\${prefix}-jabatan" class="form-control mb-2" data-setting="\${prefix}Jabatan" value="\${esc(value[prefix + 'Jabatan'])}">
+        <label class="form-label" for="jp-\${prefix}-nama">Nama</label><input id="jp-\${prefix}-nama" class="form-control mb-2" data-setting="\${prefix}Nama" value="\${esc(value[prefix + 'Nama'])}">
+        <label class="form-label" for="jp-\${prefix}-nip">NIP</label><input id="jp-\${prefix}-nip" class="form-control" data-setting="\${prefix}Nip" value="\${esc(value[prefix + 'Nip'])}">
+      </div></div>\`).join('')}
+      <div class="col-12"><label class="form-label" for="jp-setting-place">Tempat &amp; tanggal</label><input id="jp-setting-place" class="form-control" data-setting="tempatTanggal" value="\${esc(value.tempatTanggal)}" placeholder="Indramayu, 30 November 2026"></div>
+    </div>
+    <div class="d-flex justify-content-end gap-2 mt-4">
+      <button class="btn btn-outline-secondary" data-x>Batal</button>
+      <button class="btn btn-primary" data-settings-save><i class="bx bx-save"></i> Simpan pengaturan</button>
+    </div>\`,
+  d => {
+    d.classList.remove('jp-dialog-upload', 'jp-dialog-master');
+    d.classList.add('jp-dialog-settings');
+    d.querySelector('[data-x]').onclick = () => { J.settingsDraft = null; d.close(); };
+    d.onchange = e => {
+      if (!['jp-setting-month', 'jp-setting-year'].includes(e.target.id)) return;
+      const currentValues = jpSettingsCollect(d);
+      J.settingsDraft.cache[J.settingsDraft.periodId] = currentValues;
+      const nextYear = Number(d.querySelector('#jp-setting-year').value);
+      const nextMonth = Number(d.querySelector('#jp-setting-month').value);
+      if (!Number.isInteger(nextYear) || nextYear < 1900 || nextYear > 2200 || !Number.isInteger(nextMonth) || nextMonth < 1 || nextMonth > 12) {
+        jpToast('Periode harus berupa bulan dan tahun yang sah.', 'warning');
+        return;
+      }
+      const nextId = String(nextYear).padStart(4, '0') + '-' + String(nextMonth).padStart(2, '0');
+      const cached = J.settingsDraft.cache[nextId];
+      const nextRecord = J.periods.find(p => p.id === nextId);
+      J.settingsDraft.periodId = nextId;
+      J.settingsDraft.values = cached || jpMuatSet(nextRecord?.settings);
+      J.settingsDraft.values.tahun = nextYear;
+      J.settingsDraft.values.bulan = JX.BULAN_LIST[nextMonth - 1];
+      jpSettingsDialogRender();
+    };
+    d.onclick = async e => {
+      const button = e.target.closest('[data-settings-save]');
+      if (!button) return;
+      const targetId = J.settingsDraft.periodId;
+      const values = jpSettingsCollect(d);
+      const [targetYear, targetMonth] = targetId.split('-').map(Number);
+      values.tahun = targetYear;
+      values.bulan = JX.BULAN_LIST[targetMonth - 1];
+      const invalid = ['pphII', 'pphIII', 'pphIV', 'pphPPPK'].some(key =>
+        !Number.isFinite(values[key]) || values[key] < 0 || values[key] > 100
+      );
+      if (invalid) return jpToast('Tarif PPh harus berupa angka 0 sampai 100 persen.', 'warning');
+      await jpBusy(button, 'Menyimpan…', async () => {
+        const ok = await jpSavePeriod(targetId, { settings: values });
+        if (!ok) return false;
+        if (J.periodId === targetId) {
+          J.set = jpMuatSet(values);
+          J.rows = null;
+          J.showPreview = false;
+        }
+        J.settingsDraft = null;
+        d.close();
+        jpRender();
+        jpToast('Pengaturan Pejabat & PPh berhasil disimpan.');
+        return true;
+      });
+    };
+  });
 }
 
 /* ---- Langkah 2: Master Rekening ---- */
