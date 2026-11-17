@@ -30,7 +30,7 @@ begin
     if not public.can_menu('pegawai') then raise exception 'Anda tidak berhak mengelola data pegawai.'; end if;
     if public.my_kua() is null or public.my_kua() is distinct from new.kua_id or (tg_op = 'UPDATE' and public.my_kua() is distinct from old.kua_id) then raise exception 'Anda hanya dapat mengelola pegawai KUA Anda sendiri.'; end if;
   end if;
-  new.nama := btrim(regexp_replace(coalesce(new.nama, ''), '\s+', ' ', 'g'));
+  new.nama := upper(btrim(regexp_replace(coalesce(new.nama, ''), '\s+', ' ', 'g')));
   if new.nama = '' then raise exception 'Nama lengkap wajib diisi.'; end if;
   if char_length(new.nama) > 150 then raise exception 'Nama lengkap maksimal 150 karakter.'; end if;
   new.jabatan := btrim(regexp_replace(coalesce(new.jabatan, ''), '\s+', ' ', 'g'));
@@ -78,22 +78,6 @@ begin
   if tg_op = 'INSERT' then new.created_by := auth.uid(); new.created_at := now(); end if;
   new.updated_by := auth.uid(); new.updated_at := now();
   return new;
-end $$;
-
-create or replace function public.pegawai_log() returns trigger
-language plpgsql security definer set search_path = public as $$
-declare d jsonb := '{}'::jsonb; f text; o jsonb; n jsonb; who text := (select p.nama from public.profiles p where p.id = auth.uid());
-begin
-  if tg_op = 'INSERT' then insert into public.pegawai_riwayat (aksi, pegawai_id, nama, nip, ke_kua, oleh, oleh_nama) values ('tambah', new.id, new.nama, new.nip, new.kua_id, auth.uid(), who);
-  elsif tg_op = 'UPDATE' then
-    o := to_jsonb(old); n := to_jsonb(new);
-    foreach f in array array['nama','nip','jenis_asn','pangkat_golongan','jabatan','jabatan_tambahan','no_hp','usia_pensiun','sumber_usia_pensiun','tmt_kua','tmt_kepala_kua','operator_simkah','operator_bop'] loop
-      if o -> f is distinct from n -> f then d := d || jsonb_build_object(f, jsonb_build_array(o -> f, n -> f)); end if;
-    end loop;
-    if new.kua_id is distinct from old.kua_id then insert into public.pegawai_riwayat (aksi, pegawai_id, nama, nip, dari_kua, ke_kua, oleh, oleh_nama, rincian) values ('transfer', new.id, new.nama, new.nip, old.kua_id, new.kua_id, auth.uid(), who, d);
-    elsif d <> '{}'::jsonb then insert into public.pegawai_riwayat (aksi, pegawai_id, nama, nip, dari_kua, ke_kua, oleh, oleh_nama, rincian) values ('ubah', new.id, new.nama, new.nip, new.kua_id, new.kua_id, auth.uid(), who, d); end if;
-  else insert into public.pegawai_riwayat (aksi, pegawai_id, nama, nip, dari_kua, oleh, oleh_nama, rincian) values ('hapus', old.id, old.nama, old.nip, old.kua_id, auth.uid(), who, to_jsonb(old)); end if;
-  return null;
 end $$;
 
 -- Tugas operator dan TMT KUA melekat pada KUA asal; reset saat transfer.
