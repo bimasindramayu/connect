@@ -1145,6 +1145,18 @@ begin
           raise exception 'Jadwal duplikat ditemukan untuk % pada tanggal %. Periksa file sebelum menyimpan.', coalesce(e ->> 'nama', 'penghulu'), tg;
         end if;
         seen := seen || k;
+        -- Nominal per peristiwa dari file nominatif: H = Jasa Profesi, I = Transport.
+        foreach field_name in array array['tarifJasproSumber', 'tarifTransportSumber', 'jumlahDiterimaSumber'] loop
+          if e ? field_name and jsonb_typeof(e -> field_name) is distinct from 'null' then
+            if jsonb_typeof(e -> field_name) is distinct from 'number' then
+              raise exception 'Nilai % pada laporan Jaspro harus berupa angka.', field_name;
+            end if;
+            nominal := (e ->> field_name)::numeric;
+            if nominal < 0 or (field_name <> 'jumlahDiterimaSumber' and nominal > 1000000000) then
+              raise exception 'Nilai % pada laporan Jaspro berada di luar rentang yang diperbolehkan.', field_name;
+            end if;
+          end if;
+        end loop;
       end loop;
     end if;
   end if;
