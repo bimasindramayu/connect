@@ -98,14 +98,18 @@ function jpUiUploadModal() {
       const errorBox = dialog.querySelector('#jp-upload-error');
       let file = null;
       let prepared = null;
-      const setFile = function (next) {
-        file = next || null;
+      const resetPrepared = function () {
         prepared = null;
         confirmBox.classList.add('d-none');
-        errorBox.innerHTML = '';
-        save.dataset.labelIdle = '';
+        save.removeAttribute('aria-busy');
         save.innerHTML = 'Simpan Laporan';
+        delete save.dataset.labelIdle;
         save.disabled = !file;
+      };
+      const setFile = function (next) {
+        file = next || null;
+        resetPrepared();
+        errorBox.innerHTML = '';
         selected.textContent = file ? file.name + ' · ' + Math.max(1, Math.round(file.size / 1024)) + ' KB' : 'Belum ada file dipilih.';
       };
       dialog.querySelectorAll('[data-x]').forEach(function (button) { button.onclick = function () { dialog.close(); }; });
@@ -120,8 +124,8 @@ function jpUiUploadModal() {
         setFile(event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]);
       };
       fileInput.onchange = function () { setFile(fileInput.files && fileInput.files[0]); };
-      dialog.querySelector('#jp-upload-month').onchange = function () { prepared = null; confirmBox.classList.add('d-none'); };
-      dialog.querySelector('#jp-upload-year').onchange = function () { prepared = null; confirmBox.classList.add('d-none'); };
+      dialog.querySelector('#jp-upload-month').onchange = resetPrepared;
+      dialog.querySelector('#jp-upload-year').onchange = resetPrepared;
       save.onclick = async function () {
         errorBox.innerHTML = '';
         const month = dialog.querySelector('#jp-upload-month').value;
@@ -156,6 +160,7 @@ function jpUiUploadModal() {
           const existing = jpUiPeriod(id);
           prepared = { id: id, report: { fileName: file.name, rows: parsed.rows, tanggalTakSah: parsed.tanggalTakSah || 0 } };
           if (existing && existing.laporan) {
+            jpUiBusy(save, false);
             confirmBox.classList.remove('d-none');
             save.dataset.labelIdle = 'Ganti & Simpan';
             save.innerHTML = 'Ganti & Simpan';
