@@ -723,13 +723,13 @@ const JX = (() => {
                     var transportRate = parseNumberID(rawTransport);
                     var jumlahDiterimaSumber = diterimaText === '' ? null : parseNumberID(rawDiterima);
 
-                    if (!jasproText || !/\\d/.test(jasproText) || !isFinite(jasproRate) || jasproRate < 0 || jasproRate > TARIF_MAKS) {
+                    if (!jasproText || !/\d/.test(jasproText) || !isFinite(jasproRate) || jasproRate < 0 || jasproRate > TARIF_MAKS) {
                         throw new Error('Nominal Jasa Profesi pada kolom H tidak valid di baris ' + rowNum + '.');
                     }
-                    if (!transportText || !/\\d/.test(transportText) || !isFinite(transportRate) || transportRate < 0 || transportRate > TARIF_MAKS) {
+                    if (!transportText || !/\d/.test(transportText) || !isFinite(transportRate) || transportRate < 0 || transportRate > TARIF_MAKS) {
                         throw new Error('Nominal Transport pada kolom I tidak valid di baris ' + rowNum + '.');
                     }
-                    if (diterimaText !== '' && !/\\d/.test(diterimaText)) {
+                    if (diterimaText !== '' && !/\d/.test(diterimaText)) {
                         throw new Error('Jumlah Diterima pada kolom J tidak valid di baris ' + rowNum + '.');
                     }
                     rows.push({
@@ -1358,13 +1358,21 @@ function classifyRow(row, settings) {
                         PPPK: settings.pphPPPK / 100
                     };
                     var pphRate = pphRateMap.hasOwnProperty(golClass) ? pphRateMap[golClass] : null;
-                    // Tarif per peristiwa menurut tanggal baris (kolom Tanggal di laporan) atau tanggal acuan bila baris tanpa tanggal.
+                    // File nominatif terbaru membawa tarif per peristiwa pada kolom H dan I.
+                    // Arsip lama tanpa kedua nilai itu tetap memakai tarif tersimpan agar histori lama tetap dapat dihitung.
                     var tanggalTarif = tanggalBaris(row, settings);
-                    var tarif = tarifPada(tanggalTarif, settings);
+                    var tarifLama = tarifPada(tanggalTarif, settings);
+                    var tarif = {
+                        jaspro: row.tarifJasproSumber != null ? Number(row.tarifJasproSumber) : tarifLama.jaspro,
+                        transport: row.tarifTransportSumber != null ? Number(row.tarifTransportSumber) : tarifLama.transport
+                    };
                     var jasproSubtotal = row.jumlahPeristiwa * tarif.jaspro;
                     var jasproPph = pphRate != null ? Math.round(jasproSubtotal * pphRate) : 0;
                     var jasproDiterima = jasproSubtotal - jasproPph;
                     var transpoSubtotal = row.jumlahPeristiwa * tarif.transport;
+                    var jumlahDiterimaHitung = jasproDiterima + transpoSubtotal;
+                    var jumlahDiterimaSumber = row.jumlahDiterimaSumber == null ? null : Number(row.jumlahDiterimaSumber);
+                    var selisihJumlahDiterima = jumlahDiterimaSumber == null ? null : jumlahDiterimaHitung - jumlahDiterimaSumber;
                     return {
                         golClass: golClass,
                         pphRate: pphRate,
@@ -1376,6 +1384,10 @@ function classifyRow(row, settings) {
                         jasproDiterima: jasproDiterima,
                         transpoSubtotal: transpoSubtotal,
                         transpoDiterima: transpoSubtotal,
+                        jumlahDiterimaSumber: jumlahDiterimaSumber,
+                        jumlahDiterimaHitung: jumlahDiterimaHitung,
+                        selisihJumlahDiterima: selisihJumlahDiterima,
+                        jumlahDiterimaCocok: selisihJumlahDiterima == null || Math.abs(selisihJumlahDiterima) <= 1,
                     };
                 }
 function csvFieldSafe(val) {
