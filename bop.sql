@@ -1243,7 +1243,7 @@ end;
 $jaspro_migrate$;
 
 
--- 13) PEGAWAI KUA, RIWAYAT MUTASI, ALAMAT KUA (dashboard Operator KUA) -------------------------------------------------------
+-- 13) PEGAWAI KUA DAN ALAMAT KUA (dashboard Operator KUA) -------------------------------------------------------
 -- Dua menu baru (Hak Akses Menu): "dashboard" (halaman awal Operator KUA; khusus Operator KUA) dan "pegawai" (Pegawai KUA).
 --   Admin            : melihat dan mengelola pegawai SEMUA KUA (tambah, ubah, hapus, transfer).
 --   Operator KUA     : (menu pegawai) tambah, ubah, hapus, dan transfer pegawai KUA-nya SENDIRI.
@@ -1258,7 +1258,6 @@ $jaspro_migrate$;
 --   - NIP unik di seluruh KUA: pegawai yang pindah tugas DIPINDAHKAN (pegawai_transfer), bukan dibuat ulang. KUA pegawai hanya
 --     berubah lewat pegawai_transfer().
 -- Semua aturan ditegakkan di sini (trigger pegawai_guard dan RLS), tampilan hanya mengikuti. Tambah/ubah/transfer/hapus dicatat
--- otomatis di pegawai_riwayat (siapa, kapan, apa; baris "hapus" menyimpan salinan lengkap supaya dapat dipulihkan).
 -- Alamat KUA disimpan di kolom kua.alamat (dikelola Operator KUA lewat dashboard atau Admin) lewat set_alamat_kua().
 
 alter table public.kua add column if not exists alamat text;
@@ -1286,7 +1285,7 @@ create table if not exists public.pegawai (
   pangkat_golongan text,                                -- PNS: 'III/b'; PPPK dan PPPK Paruh Waktu: 'IX'; Honor: kosong
   jabatan text not null,                                -- jabatan pokok (fungsional/pelaksana), bukan Kepala KUA
   jabatan_tambahan text,                                -- 'Kepala KUA' | 'Plt. Kepala KUA' | kosong (constraint pegawai_tambahan_cek)
-  no_hp text,                                           -- 08xxxxxxxxxx; boleh kosong untuk data hasil impor
+  no_hp text not null,                                  -- 08xxxxxxxxxx
   usia_pensiun integer,
   sumber_usia_pensiun text,
   tmt_kua date,
@@ -1298,7 +1297,7 @@ create table if not exists public.pegawai (
 );
 -- Untuk database yang sudah memakai versi sebelumnya (jenis ASN hanya PNS/PPPK/Honor dan belum ada jabatan tambahan).
 alter table public.pegawai add column if not exists jabatan_tambahan text;
-alter table public.pegawai alter column no_hp drop not null;
+alter table public.pegawai alter column no_hp set not null;
 alter table public.pegawai
   add column if not exists usia_pensiun integer,
   add column if not exists sumber_usia_pensiun text,
@@ -1374,13 +1373,11 @@ begin
   end if;
 
   -- nomor HP/WA: boleh ditulis dengan spasi, strip, atau awalan +62/62; disimpan sebagai 08xxxxxxxxxx (10 sampai 14 angka)
-  new.no_hp := nullif(regexp_replace(coalesce(new.no_hp, ''), '[\s().-]', '', 'g'), '');
-  if new.no_hp is not null then
-    new.no_hp := regexp_replace(new.no_hp, '^\+?62', '0');
-    if new.no_hp ~ '^8' then new.no_hp := '0' || new.no_hp; end if;
-    if new.no_hp !~ '^08[0-9]{8,12}$' then
-      raise exception 'Nomor HP/WA tidak valid. Isi nomor aktif 10 sampai 14 angka yang diawali 08 (contoh 081234567890).'; end if;
-  end if;
+  new.no_hp := regexp_replace(coalesce(new.no_hp, ''), '[\s().-]', '', 'g');
+  new.no_hp := regexp_replace(new.no_hp, '^\+?62', '0');
+  if new.no_hp ~ '^8' then new.no_hp := '0' || new.no_hp; end if;
+  if new.no_hp !~ '^08[0-9]{8,12}$' then
+    raise exception 'Nomor HP/WA wajib diisi dan harus valid (08xxxxxxxxxx).'; end if;
   if new.usia_pensiun is not null and new.usia_pensiun not between 40 and 75 then
     raise exception 'Usia pensiun harus antara 40 sampai 75 tahun.'; end if;
   new.sumber_usia_pensiun := upper(nullif(btrim(coalesce(new.sumber_usia_pensiun, '')), ''));
