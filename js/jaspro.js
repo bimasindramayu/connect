@@ -1622,6 +1622,9 @@ async function jpBusy(btn, label, action) {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>' + esc(label || 'Menyimpan…');
   try {
     return await action();
+  } catch (error) {
+    jpToast('Proses tidak berhasil: ' + (error?.message || error), 'danger');
+    return false;
   } finally {
     if (btn.isConnected) {
       btn.disabled = false;
