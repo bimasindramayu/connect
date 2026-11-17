@@ -35,7 +35,7 @@ declare
   nominal numeric;
   field_name text;
 begin
-  if new.id <> new.tahun::text || '-' || lpad(new.bulan::text, 2, '0') then
+  if new.id <> (new.tahun::text || '-' || lpad(new.bulan::text, 2, '0')) then
     raise exception 'ID periode Jaspro tidak sesuai dengan tahun dan bulan.';
   end if;
 
@@ -69,10 +69,10 @@ begin
         end if;
 
         who := nullif(regexp_replace(coalesce(e ->> 'nip', ''), '[^0-9]', '', 'g'), '');
-        if who is null then
-          who := upper(regexp_replace(btrim(coalesce(e ->> 'nama', '')), '\s+', ' ', 'g'));
+        if who is null or length(who) < 10 then
+          who := upper(regexp_replace(regexp_replace(regexp_replace(btrim(coalesce(e ->> 'nama', '')), ',.*$', ''), '[.]', ' ', 'g'), '\s+', ' ', 'g'));
         end if;
-        kua := upper(regexp_replace(btrim(coalesce(e ->> 'kua', '')), '\s+', ' ', 'g'));
+        kua := upper(regexp_replace(regexp_replace(btrim(coalesce(e ->> 'kua', '')), '[.]', ' ', 'g'), '\s+', ' ', 'g'));
         k := coalesce(who, '') || chr(31) || coalesce(kua, '') || chr(31) || tg;
 
         if k = any(seen) then
