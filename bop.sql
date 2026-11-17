@@ -1024,11 +1024,13 @@ drop function if exists public.auto_items(int, int, int);
 drop function if exists public.auto_year(int, int, int);
 drop function if exists public.set_autopayment(jsonb);
 delete from public.config where key in ('sakti_migrasi_autopayment', 'wajib_lpj');
--- 12) JASPRO TRANSPORT (alat sekali pakai: Laporan Nominatif PNBP NR) ---------------------------------------
--- Hemat kuota: HANYA SATU baris (id = 1). Setiap simpan menimpa kolom yang dikirim; tanpa riwayat, log, atau tabel per bulan.
--- master = Master Rekening [{id,nama,namaPemilik,noRekening}] | laporan = {fileName, rows:[...]} terakhir (null = belum ada)
--- settings = periode, tarif, PPh, blok tanda tangan. Hanya yang punya menu jaspro (admin dan, bawaan, PNBP NR) yang boleh membaca
--- dan menulis (RLS).
+-- 12) JASPRO TRANSPORT (Laporan Nominatif PNBP NR + arsip historis bulanan) -------------------------------
+-- public.jaspro_data id=1 dipertahankan untuk Master Rekening dan kompatibilitas data lama.
+-- Laporan baru + pengaturannya disimpan satu baris per bulan pada public.jaspro_periode (mis. 2026-01).
+-- Laporan/settings lama di jaspro_data tidak dihapus atau ditimpa; salinannya dimigrasikan ke tabel periode satu kali.
+-- Upload baru: G = jumlah peristiwa, H/I = nominal per peristiwa (Jaspro/Transport), J = pembanding jumlah diterima.
+-- H/I menjadi dasar hitung ulang; PPh tetap dihitung oleh aplikasi. Arsip lama tanpa H/I memakai pengaturan tarif lama.
+-- Hanya akun yang memiliki menu jaspro (admin dan, bawaan, PNBP NR) yang boleh membaca/menulis (RLS).
 -- Tarif berubah menurut tanggal: settings.tarifJaspro / tarifTransport = tarif dasar (berlaku sejak awal) dan
 -- settings.tarifRiwayat = [{"mulai":"YYYY-MM-DD","jaspro":<angka|null>,"transport":<angka|null>}]: mulai tanggal itu tarif berubah
 -- (null = tidak berubah). Jaspro dan Transport berubah sendiri-sendiri. settings.tanggalAcuan ("" = akhir bulan periode) dipakai
@@ -1092,6 +1094,154 @@ create policy jaspro_menu on public.jaspro_data for all to authenticated
 revoke all on public.jaspro_data from anon;
 grant select, insert, update on public.jaspro_data to authenticated;
 insert into public.jaspro_data (id) values (1) on conflict (id) do nothing;
+
+-- Arsip bulanan Jaspro Transport. Tabel jaspro_data di atas tetap dipertahankan.
+-- Master Rekening dan seluruh data historis lama tidak dihapus atau diubah.
+create table if not exists public.jaspro_periode (
+  id text primary key check (id ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
+  tahun int not null check (tahun between 1900 and 2200),
+  bulan int not null check (bulan between 1 and 12),
+  laporan jsonb,
+  settings jsonb not null default '{}'::jsonb,
+  updated_by uuid references auth.users(id),
+  updated_at timestamptz not null default now(),
+  constraint jaspro_periode_id_consistent check (id = (tahun::text || '-' || lpad(bulan::text, 2, '0'))),
+  constraint jaspro_periode_tahun_bulan_unique unique (tahun, bulan)
+);
+
+create or replace function public.jaspro_periode_guard()
+returns trigger language plpgsql set search_path = public as $$
+declare
+  e jsonb; tg text; d date; k text; who text; kua text;
+  seen text[] := '{}'::text[];
+  tarif jsonb; tanggal_tarif text; seen_tarif text[] := '{}'::text[];
+  nominal numeric; field_name text;
+begin
+  if new.id <> (new.tahun::text || '-' || lpad(new.bulan::text, 2, '0')) then
+    raise exception 'ID periode Jaspro tidak sesuai dengan tahun dan bulan.';
+  end if;
+  if new.laporan is not null then
+    if jsonb_typeof(new.laporan) is distinct from 'object'
+       or jsonb_typeof(new.laporan -> 'rows') is distinct from 'array' then
+      raise exception 'Laporan Nominatif tidak valid.';
+    end if;
+    if jsonb_array_length(new.laporan -> 'rows') > 5000 then
+      raise exception 'Laporan Nominatif maksimal 5000 baris.';
+    end if;
+    if coalesce(current_setting('app.jaspro_migration', true), '') <> 'on' then
+      for e in select value from jsonb_array_elements(new.laporan -> 'rows') loop
+        if jsonb_typeof(e) is distinct from 'object' then raise exception 'Baris laporan tidak valid.'; end if;
+        tg := coalesce(nullif(e ->> 'tanggal', ''), 'TANPA-TANGGAL');
+        if tg <> 'TANPA-TANGGAL' then
+          if tg !~ '^\d{4}-\d{2}-\d{2}$' then raise exception 'Tanggal jadwal harus berformat YYYY-MM-DD.'; end if;
+          begin d := tg::date;
+          exception when others then raise exception 'Tanggal jadwal % bukan tanggal yang sah.', tg; end;
+        end if;
+        who := nullif(regexp_replace(coalesce(e ->> 'nip', ''), '[^0-9]', '', 'g'), '');
+        if who is null or length(who) < 10 then
+          who := upper(regexp_replace(regexp_replace(regexp_replace(btrim(coalesce(e ->> 'nama', '')), ',.*$', ''), '[.]', ' ', 'g'), '\s+', ' ', 'g'));
+        end if;
+        kua := upper(regexp_replace(regexp_replace(regexp_replace(btrim(coalesce(e ->> 'kua', '')), ',.*$', ''), '[.]', ' ', 'g'), '\s+', ' ', 'g'));
+        k := coalesce(who, '') || chr(31) || coalesce(kua, '') || chr(31) || tg;
+        if k = any(seen) then
+          raise exception 'Jadwal duplikat ditemukan untuk % pada tanggal %. Periksa file sebelum menyimpan.', coalesce(e ->> 'nama', 'penghulu'), tg;
+        end if;
+        seen := seen || k;
+        -- Upload baru: H/I adalah total per baris; tarif satu peristiwa diperoleh dari H/G dan I/G.
+        -- J adalah pembanding bruto H+I sebelum PPh; potongan PPh dihitung terpisah oleh aplikasi.
+        foreach field_name in array array['jasproTotalSumber', 'transportTotalSumber', 'jumlahDiterimaSumber'] loop
+          if e ? field_name and jsonb_typeof(e -> field_name) is distinct from 'null' then
+            if jsonb_typeof(e -> field_name) is distinct from 'number' then
+              raise exception 'Nilai % pada laporan Jaspro harus berupa angka.', field_name;
+            end if;
+            nominal := (e ->> field_name)::numeric;
+            if nominal < 0 or (field_name <> 'jumlahDiterimaSumber' and nominal > 1000000000) then
+              raise exception 'Nilai % pada laporan Jaspro berada di luar rentang yang diperbolehkan.', field_name;
+            end if;
+          end if;
+        end loop;
+      end loop;
+    end if;
+  end if;
+
+  if jsonb_typeof(new.settings) is distinct from 'object' then raise exception 'Pengaturan Jaspro tidak valid.'; end if;
+  if new.settings ? 'tarifRiwayat' then
+    if jsonb_typeof(new.settings -> 'tarifRiwayat') is distinct from 'array' then raise exception 'Riwayat tarif harus berupa daftar.'; end if;
+    if jsonb_array_length(new.settings -> 'tarifRiwayat') > 100 then raise exception 'Riwayat tarif maksimal 100 perubahan.'; end if;
+    for tarif in select value from jsonb_array_elements(new.settings -> 'tarifRiwayat') loop
+      if jsonb_typeof(tarif) is distinct from 'object' then raise exception 'Perubahan tarif tidak valid.'; end if;
+      tanggal_tarif := tarif ->> 'mulai';
+      if tanggal_tarif is null or tanggal_tarif !~ '^\d{4}-\d{2}-\d{2}$' then raise exception 'Tanggal perubahan tarif harus berformat YYYY-MM-DD.'; end if;
+      begin d := tanggal_tarif::date;
+      exception when others then raise exception 'Tanggal perubahan tarif % tidak sah.', tanggal_tarif; end;
+      if tanggal_tarif = any(seen_tarif) then raise exception 'Tanggal mulai tarif % dipakai lebih dari sekali.', tanggal_tarif; end if;
+      seen_tarif := seen_tarif || tanggal_tarif;
+      foreach field_name in array array['jaspro', 'transport'] loop
+        if tarif ? field_name and jsonb_typeof(tarif -> field_name) is distinct from 'null' then
+          if jsonb_typeof(tarif -> field_name) is distinct from 'number' then raise exception 'Tarif % harus berupa angka.', field_name; end if;
+          nominal := (tarif ->> field_name)::numeric;
+          if nominal < 0 or nominal > 1000000000 then raise exception 'Tarif % harus berada pada 0 sampai 1.000.000.000.', field_name; end if;
+        end if;
+      end loop;
+      if (not (tarif ? 'jaspro') or jsonb_typeof(tarif -> 'jaspro') = 'null')
+         and (not (tarif ? 'transport') or jsonb_typeof(tarif -> 'transport') = 'null') then
+        raise exception 'Isi minimal satu nominal pada perubahan tarif.';
+      end if;
+    end loop;
+  end if;
+  if coalesce(new.settings ->> 'tanggalAcuan', '') <> ''
+     and (new.settings ->> 'tanggalAcuan') !~ '^\d{4}-\d{2}-\d{2}$' then
+    raise exception 'Tanggal acuan tarif harus berformat YYYY-MM-DD.';
+  end if;
+  new.updated_by := auth.uid();
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists jaspro_periode_guard on public.jaspro_periode;
+create trigger jaspro_periode_guard before insert or update on public.jaspro_periode
+for each row execute function public.jaspro_periode_guard();
+
+alter table public.jaspro_periode enable row level security;
+drop policy if exists jaspro_periode_menu on public.jaspro_periode;
+create policy jaspro_periode_menu on public.jaspro_periode for all to authenticated
+using ((select public.can_menu('jaspro')))
+with check ((select public.can_menu('jaspro')));
+revoke all on public.jaspro_periode from anon;
+grant select, insert, update, delete on public.jaspro_periode to authenticated;
+
+-- Migrasi non-destruktif dari jaspro_data id=1. Settings dan laporan lama tetap utuh.
+-- Periode memakai settings.bulan/tahun; bila tidak ada, fallback ke updated_at.
+-- Salin laporan/settings yang berisi data saja; arsip yang sudah ada tidak pernah ditimpa.
+do $jaspro_migrate$
+begin
+  perform set_config('app.jaspro_migration', 'on', true);
+  with legacy as (
+    select
+      case when coalesce(settings ->> 'tahun', '') ~ '^\d{4}$'
+                 and (settings ->> 'tahun')::int between 1900 and 2200
+           then (settings ->> 'tahun')::int
+           else extract(year from updated_at)::int end as y,
+      coalesce(
+        array_position(
+          array['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER']::text[],
+          upper(coalesce(settings ->> 'bulan', ''))
+        ), extract(month from updated_at)::int
+      ) as m,
+      laporan, coalesce(settings, '{}'::jsonb) as settings
+    from public.jaspro_data
+    where id = 1 and (laporan is not null or coalesce(settings, '{}'::jsonb) <> '{}'::jsonb)
+  )
+  insert into public.jaspro_periode (id, tahun, bulan, laporan, settings)
+  select y::text || '-' || lpad(m::text, 2, '0'), y, m, laporan, settings
+  from legacy
+  where y between 1900 and 2200 and m between 1 and 12
+  on conflict (id) do nothing;
+  perform set_config('app.jaspro_migration', 'off', true);
+end;
+$jaspro_migrate$;
+
 
 -- 13) PEGAWAI KUA, RIWAYAT MUTASI, ALAMAT KUA (dashboard Operator KUA) -------------------------------------------------------
 -- Dua menu baru (Hak Akses Menu): "dashboard" (halaman awal Operator KUA; khusus Operator KUA) dan "pegawai" (Pegawai KUA).
