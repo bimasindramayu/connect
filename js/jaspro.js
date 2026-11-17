@@ -2517,6 +2517,7 @@ function jpDl(kind) {
   ].filter(Boolean).join(' dan ');
   const download = () => kind === 'xlsx' ? jpExcel() : jpCsv(kind);
   if (message) {
+    jpModalClass();
     jpAsk(
       'Masih ada data yang perlu ditinjau',
       message + '. Periksa pratinjau. File tetap dapat dibuat, tetapi kolom rekening atau tarif yang belum pasti dapat memerlukan koreksi. Lanjutkan mengunduh?',
