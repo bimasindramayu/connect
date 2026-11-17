@@ -517,15 +517,16 @@ function jpUiAnnualPage() {
   });
   const total = function (key) { return values.reduce(function (sum, row) { return sum + (Number(row.calc[key]) || 0); }, 0); };
   const table = records.length ? (
-    '<div class="jp-table-scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>Bulan</th><th class="text-end">Baris</th><th class="text-end">Peristiwa</th><th class="text-end">Jaspro Bruto</th><th class="text-end">Transport Bruto</th><th class="text-end">Rincian</th></tr></thead><tbody>' +
+    '<div class="jp-table-scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>Bulan</th><th class="text-end">Baris</th><th class="text-end">Peristiwa</th><th class="text-end">Jaspro Bruto</th><th class="text-end">Transport Bruto</th><th class="text-end">Jumlah</th><th class="text-end">Rincian</th></tr></thead><tbody>' +
     values.map(function (item) {
       const calc = item.calc, period = item.period;
       return '<tr><td class="fw-semibold">' + esc(jpPeriodLabel(period.id).replace(' ' + period.tahun, '')) + '</td>' +
         '<td class="text-end">' + calc.rows.length + '</td><td class="text-end">' + rp(calc.peristiwa) + '</td>' +
         '<td class="text-end text-nowrap">' + jpUiMoney(calc.jasproBruto) + '</td><td class="text-end text-nowrap">' + jpUiMoney(calc.transport) + '</td>' +
+        '<td class="text-end text-nowrap fw-semibold">' + jpUiMoney((Number(calc.jasproBruto) || 0) + (Number(calc.transport) || 0)) + '</td>' +
         '<td class="text-end"><button class="btn btn-sm btn-outline-primary" type="button" data-act="detail" data-id="' + period.id + '">Detail</button></td></tr>';
     }).join('') + '</tbody><tfoot><tr class="fw-semibold"><td>TOTAL ' + J.historyYear + '</td><td></td><td class="text-end">' + rp(total('peristiwa')) + '</td>' +
-    '<td class="text-end text-nowrap">' + jpUiMoney(total('jasproBruto')) + '</td><td class="text-end text-nowrap">' + jpUiMoney(total('transport')) + '</td><td></td></tr></tfoot></table></div>'
+    '<td class="text-end text-nowrap">' + jpUiMoney(total('jasproBruto')) + '</td><td class="text-end text-nowrap">' + jpUiMoney(total('transport')) + '</td><td class="text-end text-nowrap">' + jpUiMoney(total('jasproBruto') + total('transport')) + '</td><td></td></tr></tfoot></table></div>'
   ) : '<div class="jp-empty"><div class="jp-empty-icon"><i class="bx bx-calendar-x"></i></div><div class="fw-semibold">Belum ada laporan pada tahun ' + J.historyYear + '</div><p class="small text-body-secondary mb-0">Pilih tahun lain atau unggah laporan untuk mulai membuat arsip tahunan.</p></div>';
   return '<section class="jp-annual">' +
     '<div class="jp-toolbar mb-3"><div><div class="jp-eyebrow">ARSIP JASPRO TRANSPORT</div><h5 class="mb-1">Riwayat Tahunan</h5><p class="text-body-secondary mb-0">Rekap laporan nominatif per bulan dan rincian pembayaran penghulu.</p></div>' +
