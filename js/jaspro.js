@@ -298,6 +298,9 @@ const JX = (() => {
                 nip: ['nip'],
                 golongan: ['golongan', 'gol', 'gol/ruang', 'golongan/ruang', 'gol ruang'],
                 jumlahPeristiwa: ['jumlah peristiwa', 'jml peristiwa', 'peristiwa', 'jumlah nikah rujuk', 'jumlah nr'],
+                tarifJaspro: ['jasa profesi', 'jaspro', 'nominal jasa profesi', 'tarif jasa profesi'],
+                tarifTransport: ['transport', 'transpo', 'nominal transport', 'tarif transport'],
+                jumlahDiterima: ['jumlah diterima', 'total diterima', 'diterima'],
                 noRekening: ['no rekening', 'nomor rekening', 'rekening'],
                 // opsional: tanggal peristiwa. Baris bertanggal memakai tarif yang berlaku pada tanggalnya (lihat tarifPada).
                 tanggal: ['tanggal', 'tgl', 'tanggal peristiwa', 'tgl peristiwa', 'tanggal nikah', 'tgl nikah', 'tanggal akad', 'tgl akad', 'tanggal nikah/rujuk', 'tanggal nr', 'tanggal pelaksanaan', 'tanggal pencatatan'],
@@ -658,10 +661,14 @@ const JX = (() => {
                 var colKua = findHeaderColumn(headerCells, LAPORAN_ALIASES.kua);
                 var colNip = findHeaderColumn(headerCells, LAPORAN_ALIASES.nip);
                 var colGol = findHeaderColumn(headerCells, LAPORAN_ALIASES.golongan);
-                var colJumlah = findHeaderColumn(headerCells, LAPORAN_ALIASES.jumlahPeristiwa);
+                var colJumlah = findHeaderColumn(headerCells, LAPORAN_ALIASES.jumlahPeristiwa) || 7;
+                var colTarifJaspro = findHeaderColumn(headerCells, LAPORAN_ALIASES.tarifJaspro) || 8;
+                var colTarifTransport = findHeaderColumn(headerCells, LAPORAN_ALIASES.tarifTransport) || 9;
+                var colJumlahDiterima = findHeaderColumn(headerCells, LAPORAN_ALIASES.jumlahDiterima) || 10;
                 var colRek = findHeaderColumn(headerCells, LAPORAN_ALIASES.noRekening);
                 var colTgl = findHeaderColumn(headerCells, LAPORAN_ALIASES.tanggal);
-                // optional: No Rekening, Tanggal
+                // Kolom G/Jumlah Peristiwa, H/Jasa Profesi, I/Transport, J/Jumlah Diterima.
+                // Header yang dikenal diutamakan; jika judul berbeda, gunakan posisi kolom G-J.
 
                 var missing = [];
                 if (!colNama)
@@ -705,12 +712,35 @@ const JX = (() => {
                       , tgl = parseTanggal(tglRaw);
                     if (colTgl && !tgl && cellText(tglRaw) !== '')
                         tglTakSah++;   // ada isinya tetapi bukan tanggal yang terbaca: baris memakai tanggal acuan
+
+                    var rawJaspro = row.getCell(colTarifJaspro).value;
+                    var rawTransport = row.getCell(colTarifTransport).value;
+                    var rawDiterima = row.getCell(colJumlahDiterima).value;
+                    var jasproText = cellText(rawJaspro);
+                    var transportText = cellText(rawTransport);
+                    var diterimaText = cellText(rawDiterima);
+                    var jasproRate = parseNumberID(rawJaspro);
+                    var transportRate = parseNumberID(rawTransport);
+                    var jumlahDiterimaSumber = diterimaText === '' ? null : parseNumberID(rawDiterima);
+
+                    if (!jasproText || !/\\d/.test(jasproText) || !isFinite(jasproRate) || jasproRate < 0 || jasproRate > TARIF_MAKS) {
+                        throw new Error('Nominal Jasa Profesi pada kolom H tidak valid di baris ' + rowNum + '.');
+                    }
+                    if (!transportText || !/\\d/.test(transportText) || !isFinite(transportRate) || transportRate < 0 || transportRate > TARIF_MAKS) {
+                        throw new Error('Nominal Transport pada kolom I tidak valid di baris ' + rowNum + '.');
+                    }
+                    if (diterimaText !== '' && !/\\d/.test(diterimaText)) {
+                        throw new Error('Jumlah Diterima pada kolom J tidak valid di baris ' + rowNum + '.');
+                    }
                     rows.push({
                         nama: namaText,
                         kua: cellText(row.getCell(colKua).value),
                         nip: cellText(row.getCell(colNip).value),
                         golongan: cellText(row.getCell(colGol).value),
                         jumlahPeristiwa: parseNumberID(row.getCell(colJumlah).value),
+                        tarifJasproSumber: jasproRate,
+                        tarifTransportSumber: transportRate,
+                        jumlahDiterimaSumber: jumlahDiterimaSumber,
                         noRekeningSumber: colRek ? cellText(row.getCell(colRek).value) : '',
                         tanggal: tgl,
                     });
