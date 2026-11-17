@@ -1288,7 +1288,7 @@ create table if not exists public.pegawai (
   jabatan_tambahan text,                                -- 'Kepala KUA' | 'Plt. Kepala KUA' | kosong (constraint pegawai_tambahan_cek)
   no_hp text,                                           -- 08xxxxxxxxxx; boleh kosong untuk data hasil impor
   usia_pensiun integer,
-  sumber_usia_pensiun text,                              -- AUTO | MANUAL
+  sumber_usia_pensiun text,
   tmt_kua date,
   tmt_kepala_kua date,
   operator_simkah boolean not null default false,
@@ -1512,7 +1512,8 @@ begin
   if tujuan.status <> 'aktif' then raise exception '% tidak aktif sehingga tidak dapat menerima pegawai.', tujuan.nama_kua; end if;
   if g.kua_id = p_kua then raise exception '% sudah berada di %.', g.nama, tujuan.nama_kua; end if;
   perform set_config('bop.pegawai_transfer', 'on', true);
-  update public.pegawai set kua_id = p_kua, jabatan_tambahan = null, tmt_kua = null, tmt_kepala_kua = null, operator_simkah = false, operator_bop = false where id = p_id;
+  update public.pegawai set kua_id = p_kua, jabatan_tambahan = null, tmt_kua = null, tmt_kepala_kua = null,
+    operator_simkah = false, operator_bop = false where id = p_id;
   perform set_config('bop.pegawai_transfer', 'off', true);
 end $$;
 revoke execute on function public.pegawai_transfer(bigint, int) from public, anon;
@@ -1576,10 +1577,13 @@ end $$;
  then
       raise exception 'Nomor HP/WA tidak valid. Isi nomor aktif 10 sampai 14 angka yang diawali 08 (contoh 081234567890) atau +62.'; end if;
   end if;
-  if new.usia_pensiun is not null and new.usia_pensiun not between 40 and 75 then raise exception 'Usia pensiun harus antara 40 sampai 75 tahun.'; end if;
+  if new.usia_pensiun is not null and new.usia_pensiun not between 40 and 75 then
+    raise exception 'Usia pensiun harus antara 40 sampai 75 tahun.'; end if;
   new.sumber_usia_pensiun := upper(nullif(btrim(coalesce(new.sumber_usia_pensiun, '')), ''));
-  if new.sumber_usia_pensiun is not null and new.sumber_usia_pensiun not in ('AUTO','MANUAL') then raise exception 'Sumber usia pensiun hanya AUTO atau MANUAL.'; end if;
-  if new.usia_pensiun is null then new.sumber_usia_pensiun := null; elsif new.sumber_usia_pensiun is null then new.sumber_usia_pensiun := 'MANUAL'; end if;
+  if new.sumber_usia_pensiun is not null and new.sumber_usia_pensiun not in ('AUTO','MANUAL') then
+    raise exception 'Sumber usia pensiun hanya AUTO atau MANUAL.'; end if;
+  if new.usia_pensiun is null then new.sumber_usia_pensiun := null;
+  elsif new.sumber_usia_pensiun is null then new.sumber_usia_pensiun := 'MANUAL'; end if;
 
   -- NIP: PNS dan PPPK wajib 18 angka (spasi diabaikan); PPPK Paruh Waktu boleh belum punya NIP, tetapi bila diisi harus 18 angka;
   -- NIP tidak boleh kembar; Honor tidak punya NIP
