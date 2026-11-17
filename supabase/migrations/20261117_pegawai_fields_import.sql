@@ -112,7 +112,7 @@ begin
   if tujuan.status <> 'aktif' then raise exception '% tidak aktif sehingga tidak dapat menerima pegawai.', tujuan.nama_kua; end if;
   if g.kua_id = p_kua then raise exception '% sudah berada di %.', g.nama, tujuan.nama_kua; end if;
   perform set_config('bop.pegawai_transfer', 'on', true);
-  update public.pegawai set kua_id = p_kua, jabatan_tambahan = null, tmt_kua = null,
+  update public.pegawai set kua_id = p_kua, jabatan_tambahan = null, tmt_kua = null, tmt_kepala_kua = null,
     operator_simkah = false, operator_bop = false where id = p_id;
   perform set_config('bop.pegawai_transfer', 'off', true);
 end $$;
