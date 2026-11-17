@@ -1,4 +1,4 @@
--- Pendataan Pegawai KUA: field tambahan, impor XLSX, dan dukungan data tanpa nomor HP.
+-- Pendataan Pegawai KUA: field tambahan dan normalisasi data.
 -- Aman dijalankan berulang kali; tidak menghapus atau mengganti data pegawai yang sudah ada.
 alter table public.pegawai
   add column if not exists usia_pensiun integer,
@@ -7,7 +7,7 @@ alter table public.pegawai
   add column if not exists tmt_kepala_kua date,
   add column if not exists operator_simkah boolean not null default false,
   add column if not exists operator_bop boolean not null default false;
-alter table public.pegawai alter column no_hp drop not null;
+alter table public.pegawai alter column no_hp set not null;
 
 do $$
 begin
@@ -45,12 +45,11 @@ begin
     if new.jabatan_tambahan is null then raise exception 'Jabatan tambahan hanya boleh Kepala KUA atau Plt. Kepala KUA.'; end if;
     if new.jenis_asn not in ('PNS','PPPK') then raise exception 'Jabatan tambahan % hanya untuk pegawai PNS atau PPPK.', new.jabatan_tambahan; end if;
   end if;
-  new.no_hp := nullif(regexp_replace(coalesce(new.no_hp, ''), '[\s().-]', '', 'g'), '');
-  if new.no_hp is not null then
-    new.no_hp := regexp_replace(new.no_hp, '^\+?62', '0');
-    if new.no_hp ~ '^8' then new.no_hp := '0' || new.no_hp; end if;
-    if new.no_hp !~ '^08[0-9]{8,12}$' then raise exception 'Nomor HP/WA tidak valid. Isi nomor aktif 10 sampai 14 angka yang diawali 08 (contoh 081234567890) atau +62.'; end if;
-  end if;
+  new.no_hp := regexp_replace(coalesce(new.no_hp, ''), '[\s().-]', '', 'g');
+  new.no_hp := regexp_replace(new.no_hp, '^\+?62', '0');
+  if new.no_hp ~ '^8' then new.no_hp := '0' || new.no_hp; end if;
+  if new.no_hp !~ '^08[0-9]{8,12}$' then
+    raise exception 'Nomor HP/WA wajib diisi dan harus valid (08xxxxxxxxxx).'; end if;
   if new.usia_pensiun is not null and new.usia_pensiun not between 40 and 75 then raise exception 'Usia pensiun harus antara 40 sampai 75 tahun.'; end if;
   new.sumber_usia_pensiun := upper(nullif(btrim(coalesce(new.sumber_usia_pensiun, '')), ''));
   if new.sumber_usia_pensiun is not null and new.sumber_usia_pensiun not in ('AUTO','MANUAL') then raise exception 'Sumber usia pensiun hanya AUTO atau MANUAL.'; end if;
