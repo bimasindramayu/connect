@@ -1805,43 +1805,161 @@ async function jpMExp() {
   } catch (e) { jpToast(e.message, 'danger'); }
 }
 
-/* ---- Riwayat historis Jaspro Transport ---- */
+/* ---- Riwayat historis Jaspro Transport: halaman utama + tampilan detail ---- */
 function pRiwayat() {
-  const years=[...new Set([...J.periods.filter(p=>p.laporan).map(p=>Number(p.tahun)),Number(J.set.tahun)])].filter(Number.isFinite).sort((a,b)=>b-a);
-  if(!years.includes(Number(J.historyYear)))J.historyYear=years[0]||new Date().getFullYear();
-  const records=J.periods.filter(p=>p.laporan&&Number(p.tahun)===Number(J.historyYear)).sort((a,b)=>a.bulan-b.bulan);
-  const sums=records.map(p=>({period:p,...jpHitung(p.laporan,jpMuatSet(p.settings))}));
-  const total=k=>sums.reduce((n,x)=>n+x[k],0);
-  const selected=J.periods.find(p=>p.id===J.historySelected);
-  return `<div class="card mb-4"><div class="card-body">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-      <div><h5 class="mb-1">Riwayat Tahunan Jaspro Transport</h5><p class="text-body-secondary mb-0">Rekap nominal dari seluruh laporan bulanan yang tersimpan.</p></div>
-      <div><label class="form-label mb-1">Tahun</label><select class="form-select" data-history-year>${years.map(y=>`<option value="${y}"${Number(y)===Number(J.historyYear)?' selected':''}>${y}</option>`).join('')}</select></div>
+  const year = Number(J.historyYear) || new Date().getFullYear();
+  const records = J.periods
+    .filter(p => p.laporan && Number(p.tahun) === year)
+    .sort((a, b) => a.bulan - b.bulan);
+  const sums = records.map(period => ({ period, ...jpHitung(period.laporan, jpMuatSet(period.settings)) }));
+  const total = key => sums.reduce((n, x) => n + (Number(x[key]) || 0), 0);
+  const money = value => 'Rp ' + rp(Math.round(value || 0));
+  return \`<section class="card jp-history-card">
+    <div class="card-body">
+      <div class="jp-history-head">
+        <div>
+          <h5 class="mb-1">Riwayat Tahunan Jaspro Transport</h5>
+          <p class="text-body-secondary mb-0">Pilih tahun untuk melihat laporan bulanan dan rincian pembayaran.</p>
+        </div>
+        <div class="jp-year-control">
+          <label class="form-label mb-1" for="jp-history-year">Tahun laporan</label>
+          <input id="jp-history-year" class="form-control" type="number" min="1900" max="2200" step="1"
+            data-history-year value="\${esc(year)}" aria-label="Tahun laporan">
+        </div>
+      </div>
+      \${records.length ? \`
+        <div class="row g-3 mb-4">
+          \${jpCard('bx-wallet', 'primary', money(total('jaspro')), 'Total Jaspro bersih')}
+          \${jpCard('bx-bus', 'info', money(total('transport')), 'Total Transport')}
+          \${jpCard('bx-calculator', 'success', money(total('total')), 'Total diterima')}
+          \${jpCard('bx-calendar-check', 'warning', total('peristiwa'), 'Total peristiwa')}
+        </div>
+        <div class="jp-table-wrap">
+          <table class="table table-hover align-middle mb-0 jp-history-table">
+            <thead><tr>
+              <th>Bulan</th><th class="text-end">Baris</th><th class="text-end">Peristiwa</th>
+              <th class="text-end">Jaspro bruto</th><th class="text-end">PPh</th>
+              <th class="text-end">Jaspro bersih</th><th class="text-end">Transport</th>
+              <th class="text-end">Total diterima</th><th class="text-end">Aksi</th>
+            </tr></thead>
+            <tbody>\${sums.map(x => \`<tr>
+              <td class="fw-semibold">\${esc(JX.BULAN_LIST[x.period.bulan - 1])}</td>
+              <td class="text-end">\${x.rows.length}</td><td class="text-end">\${x.peristiwa}</td>
+              <td class="text-end text-nowrap">\${money(x.jasproBruto)}</td>
+              <td class="text-end text-nowrap">\${money(x.pph)}</td>
+              <td class="text-end text-nowrap">\${money(x.jaspro)}</td>
+              <td class="text-end text-nowrap">\${money(x.transport)}</td>
+              <td class="text-end text-nowrap fw-semibold">\${money(x.total)}</td>
+              <td class="text-end text-nowrap">
+                <button class="btn btn-sm btn-primary" data-act="hdetail" data-id="\${esc(x.period.id)}">Detail</button>
+                <button class="btn btn-sm btn-outline-secondary" data-act="hedit" data-id="\${esc(x.period.id)}" title="Unggah ulang periode ini" aria-label="Unggah ulang \${esc(jpPeriodLabel(x.period.id))}"><i class="bx bx-upload"></i></button>
+                <button class="btn btn-sm btn-outline-danger" data-act="hdel" data-id="\${esc(x.period.id)}" title="Hapus arsip periode" aria-label="Hapus \${esc(jpPeriodLabel(x.period.id))}"><i class="bx bx-trash"></i></button>
+              </td>
+            </tr>\`).join('')}</tbody>
+            <tfoot><tr class="fw-bold">
+              <td colspan="2">TOTAL \${year}</td><td class="text-end">\${total('peristiwa')}</td>
+              <td class="text-end text-nowrap">\${money(total('jasproBruto'))}</td>
+              <td class="text-end text-nowrap">\${money(total('pph'))}</td>
+              <td class="text-end text-nowrap">\${money(total('jaspro'))}</td>
+              <td class="text-end text-nowrap">\${money(total('transport'))}</td>
+              <td class="text-end text-nowrap">\${money(total('total'))}</td><td></td>
+            </tr></tfoot>
+          </table>
+        </div>\` : \`
+        <div class="jp-empty">
+          <div class="jp-empty-icon"><i class="bx bx-folder-open"></i></div>
+          <h6 class="mb-1">Belum ada laporan pada tahun \${year}</h6>
+          <p class="text-body-secondary mb-3">Arsip untuk tahun ini masih kosong. Unggah laporan XLS untuk mulai mencatat periode bulanan.</p>
+          <button class="btn btn-primary" data-act="upload-open"><i class="bx bx-upload"></i> Upload laporan XLS</button>
+        </div>\`}
     </div>
-    ${records.length?`<div class="row g-3 mb-4">
-      ${jpCard('bx-wallet','primary','Rp '+rp(Math.round(total('jaspro'))),'Total Jaspro bersih')}
-      ${jpCard('bx-bus','info','Rp '+rp(Math.round(total('transport'))),'Total Transport')}
-      ${jpCard('bx-calculator','success','Rp '+rp(Math.round(total('total'))),'Total nominal diterima')}
-      ${jpCard('bx-calendar-check','warning',total('peristiwa'),'Total peristiwa')}
-    </div>
-    <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Bulan</th><th class="text-end">Baris</th><th class="text-end">Peristiwa</th><th class="text-end">Jaspro bruto</th><th class="text-end">Transport bruto</th><th class="text-end">Total bruto</th><th class="text-end">Aksi</th></tr></thead><tbody>
-      ${sums.map(x=>`<tr><td class="fw-semibold">${esc(JX.BULAN_LIST[x.period.bulan-1])}</td><td class="text-end">${x.rows.length}</td><td class="text-end">${x.peristiwa}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(x.jasproBruto))}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(x.transport))}</td><td class="text-end text-nowrap fw-semibold">Rp ${rp(Math.round(x.jasproBruto+x.transport))}</td><td class="text-end text-nowrap">
-        <button class="btn btn-sm btn-outline-primary" data-act="hdetail" data-id="${x.period.id}">${J.historySelected===x.period.id?'Tutup':'Detail'}</button>
-        <button class="btn btn-sm btn-outline-secondary" data-act="hedit" data-id="${x.period.id}" title="Buka periode untuk unggah ulang"><i class="bx bx-edit"></i></button>
-        <button class="btn btn-sm btn-outline-danger" data-act="hdel" data-id="${x.period.id}" title="Hapus arsip periode"><i class="bx bx-trash"></i></button>
-      </td></tr>`).join('')}
-    </tbody><tfoot><tr class="fw-bold"><td colspan="2">TOTAL TAHUN ${J.historyYear}</td><td class="text-end">${total('peristiwa')}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('jasproBruto')))}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('transport')))}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('jasproBruto')+total('transport')))}</td><td></td></tr></tfoot></table></div>`:'<div class="text-center py-5 text-body-secondary">Belum ada laporan tersimpan untuk tahun ini.</div>'}
-  </div></div>${selected&&Number(selected.tahun)===Number(J.historyYear)?jpDetailPeriode(selected):''}`;
+  </section>\`;
 }
+
+function jpBuildMatchedRows(laporan, settings) {
+  const index = JX.buildMasterIndex(J.master);
+  return (laporan?.rows || []).map(row => {
+    const match = JX.matchPenghulu(row.nama, J.master, index);
+    return {
+      ...row,
+      ...JX.classifyRow(row, settings || jpDef()),
+      rekening: match.entry?.noRekening || row.noRekeningSumber || '',
+      namaPemilik: match.entry?.namaPemilik || '',
+      matchStatus: match.entry ? match.status : 'TIDAK_DITEMUKAN',
+      candidates: match.candidates || []
+    };
+  });
+}
+
 function jpDetailPeriode(period) {
-  const s=jpMuatSet(period.settings),data=jpHitung(period.laporan,s),f=n=>'Rp '+rp(Math.round(n||0));
-  return `<div class="card"><div class="card-body">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3"><div><h5 class="mb-1">Rincian ${esc(jpPeriodLabel(period.id))}</h5><small class="text-body-secondary">Sumber: ${esc(period.laporan?.fileName||'Laporan Nominatif')}</small></div><span class="badge bg-label-primary">${data.rows.length} baris</span></div>
-    <div class="row g-3 mb-3">${jpCard('bx-wallet','primary',f(data.jasproBruto),'Jaspro bruto')}${jpCard('bx-receipt','warning',f(data.pph),'Potongan PPh')}${jpCard('bx-wallet','success',f(data.jaspro),'Jaspro bersih')}${jpCard('bx-bus','info',f(data.transport),'Transport')}${jpCard('bx-calculator','primary',f(data.total),'Total nominal diterima')}${jpCard('bx-check-double',data.mismatchCount?'warning':'success',data.mismatchCount,'Selisih dengan kolom J')}</div>
-    <div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Tanggal</th><th class="text-end">Peristiwa (G)</th><th class="text-end">Jaspro/peristiwa (H÷G)</th><th class="text-end">Transport/peristiwa (I÷G)</th><th class="text-end">Jaspro bruto</th><th class="text-end">Transport bruto</th><th class="text-end">Diterima file (J)</th><th class="text-end">Total bruto (H+I)</th><th>Pemeriksaan</th></tr></thead><tbody>
-      ${data.rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td><td>${esc(r.golongan)}</td><td class="text-nowrap">${JX.tglSah(r.tanggal)?JX.tglID(r.tanggal):'–'}</td><td class="text-end">${r.jumlahPeristiwa}</td><td class="text-end text-nowrap">${f(r.tarifJaspro)}</td><td class="text-end text-nowrap">${f(r.tarifTransport)}</td><td class="text-end text-nowrap">${f(r.jasproSubtotal)}</td><td class="text-end text-nowrap">${f(r.transpoSubtotal)}</td><td class="text-end text-nowrap">${r.jumlahDiterimaSumber==null?'–':f(r.jumlahDiterimaSumber)}</td><td class="text-end text-nowrap fw-semibold">${f(r.jumlahDiterimaHitung)}</td><td>${r.jumlahDiterimaSumber==null?'<span class="badge bg-label-secondary">Tidak ada di file</span>':r.jumlahDiterimaCocok?'<span class="badge bg-label-success">Sesuai</span>':'<span class="badge bg-label-warning">Selisih '+f(Math.abs(r.selisihJumlahDiterima))+'</span>'}</td></tr>`).join('')}
-    </tbody><tfoot><tr class="fw-bold"><td colspan="6">TOTAL</td><td class="text-end">${data.peristiwa}</td><td class="text-end">–</td><td class="text-end">–</td><td class="text-end text-nowrap">${f(data.jasproBruto)}</td><td class="text-end text-nowrap">${f(data.transport)}</td><td class="text-end text-nowrap">${f(data.sourceTotal)}</td><td class="text-end text-nowrap">${f(data.jasproBruto+data.transport)}</td><td>${data.mismatchCount ? data.mismatchCount + ' baris selisih' : '—'}</td></tr></tfoot></table></div>
-  </div></div>`;
+  const settings = jpMuatSet(period.settings);
+  const data = jpHitung(period.laporan, settings);
+  const rows = jpBuildMatchedRows(period.laporan, settings);
+  const f = value => 'Rp ' + rp(Math.round(value || 0));
+  const missing = rows.filter(r => !r.rekening || !['OTOMATIS', 'MANUAL'].includes(r.matchStatus)).length;
+  const adaTgl = rows.some(r => JX.tglSah(r.tanggal));
+  return \`<section class="card jp-detail-card">
+    <div class="card-body">
+      <div class="jp-detail-top">
+        <button class="btn btn-outline-secondary" data-act="hback"><i class="bx bx-arrow-back"></i> Kembali ke riwayat</button>
+        <span class="text-body-secondary small">Tahun \${period.tahun}</span>
+      </div>
+      <div class="jp-detail-title">
+        <div>
+          <h5 class="mb-1">Rincian \${esc(jpPeriodLabel(period.id))}</h5>
+          <p class="text-body-secondary mb-0">Sumber: \${esc(period.laporan?.fileName || 'Laporan Nominatif')}</p>
+        </div>
+        <span class="badge bg-label-primary">\${rows.length} baris</span>
+      </div>
+      <div class="row g-3 mb-4">
+        \${jpCard('bx-wallet', 'primary', f(data.jasproBruto), 'Jaspro bruto')}
+        \${jpCard('bx-receipt', 'warning', f(data.pph), 'Potongan PPh')}
+        \${jpCard('bx-wallet', 'success', f(data.jaspro), 'Jaspro bersih')}
+        \${jpCard('bx-bus', 'info', f(data.transport), 'Transport')}
+        \${jpCard('bx-calculator', 'primary', f(data.total), 'Total diterima')}
+        \${jpCard('bx-check-double', data.mismatchCount ? 'warning' : 'success', data.mismatchCount, 'Selisih kolom J')}
+      </div>
+      \${missing ? \`<div class="alert alert-warning py-2" role="status">\${missing} baris belum memiliki kecocokan rekening yang dapat dipastikan. Periksa nama penghulu pada Master Rekening sebelum mengunduh nominatif.</div>\` : ''}
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <h6 class="mb-0">Rincian per penghulu</h6>
+        <button class="btn btn-primary" data-act="detail-process">\${J.showPreview ? '<i class="bx bx-refresh"></i> Perbarui pratinjau' : '<i class="bx bx-check-double"></i> Cocokkan &amp; Pratinjau Data'}</button>
+      </div>
+      <div class="jp-table-wrap">
+        <table class="table table-sm table-hover align-middle mb-0 jp-detail-table">
+          <thead><tr>
+            <th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th>
+            <th>Nomor rekening</th><th>Status rekening</th>\${adaTgl ? '<th>Tanggal</th>' : ''}
+            <th class="text-end">Peristiwa (G)</th><th class="text-end">Jaspro/peristiwa</th>
+            <th class="text-end">Transport/peristiwa</th><th class="text-end">Jaspro bruto</th>
+            <th class="text-end">Transport bruto</th><th class="text-end">Diterima file (J)</th>
+            <th class="text-end">Total bruto (H+I)</th><th>Pemeriksaan</th>
+          </tr></thead>
+          <tbody>\${rows.map((r, i) => {
+            const [tone, label] = JST[r.matchStatus] || JST.TIDAK_DITEMUKAN;
+            const rekening = r.rekening ? esc(r.rekening) : '<span class="text-warning">Belum tersedia</span>';
+            const status = r.matchStatus === 'TIDAK_DITEMUKAN' ? 'Tidak cocok' : r.matchStatus === 'AMBIGU' ? 'Perlu dipilih' : r.matchStatus === 'OTOMATIS_FUZZY' ? 'Nama mirip' : r.matchStatus === 'MANUAL' ? 'Manual' : 'Cocok otomatis';
+            return \`<tr class="\${!r.rekening || !['OTOMATIS', 'MANUAL'].includes(r.matchStatus) ? 'issue' : ''}">
+              <td>\${i + 1}</td><td>\${esc(r.nama)}</td><td>\${esc(r.kua)}</td><td>\${esc(r.nip)}</td><td>\${esc(r.golongan)}</td>
+              <td class="text-nowrap">\${rekening}</td><td><span class="badge bg-label-\${tone}" title="\${label}">\${status}</span></td>
+              \${adaTgl ? \`<td class="text-nowrap">\${JX.tglSah(r.tanggal) ? JX.tglID(r.tanggal) : '–'}</td>\` : ''}
+              <td class="text-end">\${r.jumlahPeristiwa}</td><td class="text-end text-nowrap">\${f(r.tarifJaspro)}</td>
+              <td class="text-end text-nowrap">\${f(r.tarifTransport)}</td><td class="text-end text-nowrap">\${f(r.jasproSubtotal)}</td>
+              <td class="text-end text-nowrap">\${f(r.transpoSubtotal)}</td><td class="text-end text-nowrap">\${r.jumlahDiterimaSumber == null ? '–' : f(r.jumlahDiterimaSumber)}</td>
+              <td class="text-end text-nowrap fw-semibold">\${f(r.jumlahDiterimaHitung)}</td>
+              <td>\${r.jumlahDiterimaSumber == null ? '<span class="badge bg-label-secondary">Tidak ada di file</span>' : r.jumlahDiterimaCocok ? '<span class="badge bg-label-success">Sesuai</span>' : '<span class="badge bg-label-warning">Selisih ' + f(Math.abs(r.selisihJumlahDiterima)) + '</span>'}</td>
+            </tr>\`;
+          }).join('')}</tbody>
+          <tfoot><tr class="fw-bold">
+            <td colspan="\${adaTgl ? 8 : 7}">TOTAL</td><td class="text-end">\${data.peristiwa}</td><td class="text-end">–</td><td class="text-end">–</td>
+            <td class="text-end text-nowrap">\${f(data.jasproBruto)}</td><td class="text-end text-nowrap">\${f(data.transport)}</td>
+            <td class="text-end text-nowrap">\${f(data.sourceTotal)}</td><td class="text-end text-nowrap">\${f(data.jasproBruto + data.transport)}</td>
+            <td>\${data.mismatchCount ? data.mismatchCount + ' baris selisih' : '—'}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+      \${J.showPreview ? \`<div id="jrev" class="jp-nominatif-preview">\${jpReviewHtml()}</div>\` : '<div id="jrev"></div>'}
+    </div>
+  </section>\`;
 }
 
 /* ---- Langkah 3: Proses & Unduh ---- */
