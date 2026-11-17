@@ -2493,78 +2493,140 @@ function jpCsv(kind) {
 }
 
 /* ---- Event (delegasi pada #jroot) ---- */
-function jpClick(e) {
-  const b = e.target.closest('[data-act]'); if (!b) return;
-  const a = b.dataset.act, id = b.dataset.id;
-  if (a === 'tab') { J.tab = b.dataset.tab; $('jmsg').innerHTML = ''; jpRender(); }
-  else if (a === 'hdetail') { J.historySelected=J.historySelected===id?'':id; jpRender(); }
-  else if (a === 'hedit') { const p=J.periods.find(x=>x.id===id); if(p){jpLoadPeriod(id);J.tab='input';$('jmsg').innerHTML=note('Periode '+esc(jpPeriodLabel(id))+' dibuka. Unggah file baru untuk mengganti arsip periode ini.','info');jpRender();} }
-  else if (a === 'hdel') { const p=J.periods.find(x=>x.id===id); if(p) jpAsk('Hapus arsip '+jpPeriodLabel(id)+'?','Laporan, pengaturan tarif, dan rincian periode ini akan dihapus permanen. Periode lain dan Master Rekening tidak terpengaruh.','Hapus Periode',async()=>{const {error}=await sb.from('jaspro_periode').delete().eq('id',id);if(error)return jpToast('Gagal menghapus periode: '+error.message,'danger');J.periods=J.periods.filter(x=>x.id!==id);if(J.periodId===id)jpLoadPeriod(jpPeriodId(jpDef()));if(J.historySelected===id)J.historySelected='';jpRender();jpToast('Arsip '+jpPeriodLabel(id)+' berhasil dihapus.');},true); }
-  else if (a === 'upl') $('jfl').click();
-  else if (a === 'clr') jpAsk('Hapus laporan tersimpan?', 'Laporan Nominatif yang tersimpan di server akan dihapus.', 'Hapus', async () => { J.laporan = null; J.rows = null; if (await jpSave({ laporan: null })) jpRender(); }, true);
-  else if (a === 'mimp') $('jfm').click();
-  else if (a === 'mexp') jpMExp();
-  else if (a === 'madd') jpMForm();
-  else if (a === 'medit') jpMForm(id);
-  else if (a === 'mdel') {
-    const m = J.master.find(x => x.id === id);
-    if (m) jpAsk('Hapus data penghulu?', `"${m.nama}" akan dihapus dari Master Rekening.`, 'Hapus', async () => { J.master = J.master.filter(x => x.id !== id); J.stale = true; await jpSave({ master: J.master }); jpRender(); }, true);
-  }
-  else if (a === 'tadd') {
-    J.set.tarifRiwayat.push({ mulai: '', jaspro: null, transport: null });
-    jpRender();
-    $('jpanel').querySelector(`[data-t="mulai"][data-k="${J.set.tarifRiwayat.length - 1}"]`)?.focus();
-  }
-  else if (a === 'tdel') { J.set.tarifRiwayat.splice(+b.dataset.k, 1); J.stale = true; jpSetSimpan(); jpRender(); }
-  else if (a === 'proc') jpProcess();
-  else if (a === 'use') { const r = J.rows[b.dataset.i], c = r.candidates[0]; Object.assign(r, { rekening: c.noRekening, namaPemilik: c.namaPemilik, matchStatus: 'MANUAL' }); jpReview(); }
-  else if (a === 'dxl') jpDl('xlsx');
-  else if (a === 'dcj') jpDl('jaspro');
-  else if (a === 'dct') jpDl('transpo');
+function jpDefaultPeriodForYear(year = J.historyYear) {
+  const y = Number(year) || new Date().getFullYear();
+  const periods = J.periods.filter(p => Number(p.tahun) === y).sort((x, z) => z.bulan - x.bulan);
+  if (periods.length) return periods[0].id;
+  const now = new Date();
+  const month = y === now.getFullYear() ? now.getMonth() + 1 : now.getMonth() + 1;
+  return String(y).padStart(4, '0') + '-' + String(month).padStart(2, '0');
 }
+
+function jpClick(e) {
+  const button = e.target.closest('[data-act]');
+  if (!button) return;
+  const action = button.dataset.act;
+  const id = button.dataset.id;
+
+  if (action === 'upload-open') jpUploadDialog(jpDefaultPeriodForYear());
+  else if (action === 'master-open') jpMasterDialog();
+  else if (action === 'settings-open') jpSettingsDialog(jpDefaultPeriodForYear());
+  else if (action === 'hdetail') {
+    const period = J.periods.find(p => p.id === id && p.laporan);
+    if (!period) return jpToast('Laporan periode ini tidak ditemukan.', 'warning');
+    J.historyYear = Number(period.tahun);
+    J.historySelected = id;
+    J.showPreview = false;
+    jpLoadPeriod(id);
+    jpRender();
+  } else if (action === 'hback') {
+    J.historySelected = '';
+    J.showPreview = false;
+    J.rows = null;
+    jpRender();
+  } else if (action === 'hedit') {
+    if (J.periods.some(p => p.id === id)) jpUploadDialog(id);
+  } else if (action === 'hdel') {
+    const period = J.periods.find(p => p.id === id);
+    if (!period) return;
+    jpAsk(
+      'Hapus arsip ' + jpPeriodLabel(id) + '?',
+      'Laporan, pengaturan tarif, dan rincian periode ini akan dihapus permanen. Periode lain dan Master Rekening tidak terpengaruh.',
+      'Hapus Periode',
+      async () => {
+        jpStat('Menghapus…', 'secondary');
+        const { error } = await sb.from('jaspro_periode').delete().eq('id', id);
+        if (error) {
+          jpStat('Gagal menghapus', 'danger');
+          return jpToast('Gagal menghapus periode: ' + error.message, 'danger');
+        }
+        J.periods = J.periods.filter(p => p.id !== id);
+        if (J.periodId === id) jpLoadPeriod(jpDefaultPeriodForYear());
+        if (J.historySelected === id) J.historySelected = '';
+        J.showPreview = false;
+        jpRender();
+        jpToast('Arsip ' + jpPeriodLabel(id) + ' berhasil dihapus.');
+      },
+      true
+    );
+  } else if (action === 'detail-process') jpProcess();
+  else if (action === 'use') {
+    const row = J.rows?.[Number(button.dataset.i)];
+    const candidate = row?.candidates?.[0];
+    if (!row || !candidate?.noRekening) return jpToast('Kandidat tidak memiliki nomor rekening.', 'warning');
+    Object.assign(row, {
+      rekening: candidate.noRekening,
+      namaPemilik: candidate.namaPemilik || candidate.nama,
+      matchStatus: 'MANUAL'
+    });
+    jpReview();
+  } else if (action === 'dxl') jpDl('xlsx');
+  else if (action === 'dcj') jpDl('jaspro');
+  else if (action === 'dct') jpDl('transpo');
+}
+
 async function jpChange(e) {
-  const t = e.target, d = t.dataset;
-  if (t.id === 'jfl') { jpLaporan(t.files[0]); t.value = ''; }
-  else if (t.id === 'jfm') { jpImport(t.files[0]); t.value = ''; }
-  else if (d.period) {
-    const next={...J.set,[d.period]:d.period==='bulan'?t.value:Number(t.value)},id=jpPeriodId(next);
-    if(!id){t.value=d.period==='bulan'?J.set.bulan:J.set.tahun;return jpToast('Tahun harus berupa angka 1900 sampai 2200.','warning');}
-    if(id!==J.periodId){
-      const saved = await jpSetFlush();
-      if(!saved){t.value=d.period==='bulan'?J.set.bulan:J.set.tahun;return;}
-      jpLoadPeriod(id);jpRender();
-      $('jmsg').innerHTML=J.laporan?note('Memuat arsip '+esc(jpPeriodLabel(id))+'.','info'):note('Periode '+esc(jpPeriodLabel(id))+' belum memiliki laporan.','info');
+  const target = e.target;
+  const data = target.dataset;
+
+  if (data.historyYear != null) {
+    const year = Number(target.value);
+    if (!Number.isInteger(year) || year < 1900 || year > 2200) {
+      target.value = String(J.historyYear);
+      return jpToast('Tahun harus berupa angka 1900 sampai 2200.', 'warning');
+    }
+    J.historyYear = year;
+    J.historySelected = '';
+    J.showPreview = false;
+    J.rows = null;
+    jpRender();
+    return;
+  }
+
+  if (data.i != null && J.rows) {
+    const row = J.rows[Number(data.i)];
+    if (!row) return;
+    if (data.f === 'gol') {
+      row.golongan = target.value;
+      Object.assign(row, JX.classifyRow(row, J.set));
+      jpReview();
+    } else if (data.f === 'rek') {
+      row.rekening = target.value.trim();
+      row.matchStatus = 'MANUAL';
+      const master = J.master.find(item => item.noRekening === row.rekening);
+      if (master) row.namaPemilik = master.namaPemilik || master.nama;
+      jpReview();
+    } else if (data.f === 'own') {
+      row.namaPemilik = target.value.trim();
     }
   }
-  else if(d.historyYear!=null){J.historyYear=Number(t.value);J.historySelected='';jpRender();}
-  else if (d.i != null && J.rows) {
-    const r = J.rows[d.i];
-    if (d.f === 'gol') { r.golongan = t.value; Object.assign(r, JX.classifyRow(r, J.set)); jpReview(); }
-    else if (d.f === 'rek') { r.rekening = t.value.trim(); r.matchStatus = 'MANUAL'; const m = J.master.find(x => x.noRekening === r.rekening); if (m) r.namaPemilik = m.namaPemilik; jpReview(); }
-    else if (d.f === 'own') r.namaPemilik = t.value.trim();
-  }
 }
+
 function jpInput(e) {
-  const t = e.target;
-  if (t.id === 'jq') { J.q = t.value; const r = jpMRows(); $('jmt').innerHTML = r.html; $('jmc').textContent = jpMCount(r.n); }
-  else if (t.dataset.t) {   // perubahan tarif menurut tanggal: kolom mulai | jaspro | transport pada baris ke-k
-    const e = J.set.tarifRiwayat[+t.dataset.k]; if (!e) return;
-    if (t.dataset.t === 'mulai') e.mulai = t.value;
-    else { const v = parseFloat(t.value); e[t.dataset.t] = t.value.trim() === '' || !Number.isFinite(v) ? null : v; }
-    J.stale = true; jpSetSimpan(); jpProcBtn(); jpTarifRefresh();
-  }
-  else if (t.dataset.s) {   // pengaturan: ketikan beruntun digabung jadi satu simpan
-    J.set[t.dataset.s] = 'n' in t.dataset ? (parseFloat(t.value) || 0) : t.value; J.stale = true;
-    jpSetSimpan(); jpProcBtn(); jpTarifRefresh();
+  const target = e.target;
+  if (target.id === 'jq') {
+    J.q = target.value;
+    const result = jpMRows();
+    if ($('jmt')) $('jmt').innerHTML = result.html;
+    if ($('jmc')) $('jmc').textContent = jpMCount(result.n);
+  } else if (target.dataset.t) {
+    const entry = J.set.tarifRiwayat[Number(target.dataset.k)];
+    if (!entry) return;
+    if (target.dataset.t === 'mulai') entry.mulai = target.value;
+    else {
+      const value = parseFloat(target.value);
+      entry[target.dataset.t] = target.value.trim() === '' || !Number.isFinite(value) ? null : value;
+    }
+    J.stale = true;
+    jpSetSimpan();
+    jpTarifRefresh();
+  } else if (target.dataset.s) {
+    J.set[target.dataset.s] = 'n' in target.dataset ? (parseFloat(target.value) || 0) : target.value;
+    J.stale = true;
+    jpSetSimpan();
+    jpTarifRefresh();
   }
 }
-
-
-// ---- Daftarkan halaman ke router (core.js) ----
-Object.assign(pages, { jaspro: pageJaspro });
-
-
-
 
 // ---- Daftarkan halaman ke router (core.js) ----
 Object.assign(pages, { jaspro: pageJaspro });
