@@ -560,7 +560,7 @@ async function pagePegawai() {
       });
       if (!staged.length) throw new Error(`Tidak ada data yang dapat diimpor. ` + masalah.length + ` baris perlu diperbaiki.`);
       const preview = staged.slice(0, 5).map(p => `<tr><td>` + p._row + `</td><td>` + esc(p.nama) + `</td><td>` + esc(kn[p.kua_id] || '') + `</td><td>` + esc(p.jenis_asn) + `</td><td>` + esc(p.jabatan) + `</td><td>` + (p.usia_pensiun ? p.usia_pensiun + ' th' : '-') + `</td></tr>`).join('');
-      const issueTable = masalah.slice(0, 12).map(x => `<tr><td>` + x.no + `</td><td>` + esc(x.nama) + `</td><td>` + esc(x.tempat) + `</td><td>` + esc(x.alasan) + `</td></tr>`).join('');
+      const issueTable = masalah.map(x => `<tr><td>` + x.no + `</td><td>` + esc(x.nama) + `</td><td>` + esc(x.tempat) + `</td><td>` + esc(x.alasan) + `</td></tr>`).join('');
       jpDlg(`<h5>Pratinjau impor pegawai</h5>
         <p class="small mb-3">File: <b>` + esc(file.name) + `</b>. ID pada file sumber tidak digunakan; data akan dibuat sebagai data pegawai baru.</p>
         <div class="row g-2 mb-3">
@@ -571,7 +571,7 @@ async function pagePegawai() {
         ` + (staged.some(x => x._incomplete) ? '<div class="alert alert-warning py-2 small">Ada ' + staged.filter(x => x._incomplete).length + ' pegawai yang jabatan pokoknya kosong atau berisi “Kepala KUA”. Data tetap dapat diimpor dengan jabatan sementara <b>Perlu dilengkapi</b>. Lengkapi setelah impor.</div>' : '') + `
         <div class="small fw-semibold mb-1">Contoh data yang akan diimpor</div>
         <div class="table-responsive mb-3"><table class="table table-sm"><thead><tr><th>Baris</th><th>Nama</th><th>KUA</th><th>Jenis</th><th>Jabatan</th><th>Usia pensiun</th></tr></thead><tbody>` + preview + `</tbody></table></div>
-        ` + (masalah.length ? '<details class="mb-3"><summary class="small fw-semibold">Baris yang dilewati (' + masalah.length + ')</summary><div class="table-responsive mt-2" style="max-height:220px;overflow:auto"><table class="table table-sm"><thead><tr><th>Baris</th><th>Nama</th><th>KUA</th><th>Alasan</th></tr></thead><tbody>' + issueTable + '</tbody></table></div>' + (masalah.length > 12 ? '<div class="small text-muted">Menampilkan 12 dari ' + masalah.length + ' baris bermasalah.</div>' : '') + '</details>' : '') + `
+        ` + (masalah.length ? '<details class="mb-3"><summary class="small fw-semibold">Baris yang dilewati (' + masalah.length + ')</summary><div class="table-responsive mt-2" style="max-height:220px;overflow:auto"><table class="table table-sm"><thead><tr><th>Baris</th><th>Nama</th><th>KUA</th><th>Alasan</th></tr></thead><tbody>' + issueTable + '</tbody></table></div>' + '</details>' : '') + `
         <div id="pimpprogress" class="small mb-2"></div>
         <div class="d-flex justify-content-end gap-2"><button type="button" class="btn btn-outline-secondary" data-x>Batal</button><button type="button" class="btn btn-primary" id="pimpgo">Impor ` + staged.length + ` pegawai</button></div>`, d => {
         d.className = 'dlg-lg';
