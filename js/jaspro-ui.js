@@ -25,6 +25,9 @@ function jpUiBusy(button, busy, label) {
 }
 function jpUiSetDialogWide(dialog) {
   dialog.classList.add('jp-dialog-wide');
+  dialog.addEventListener('close', function () {
+    if (!dialog.open) dialog.classList.remove('jp-dialog-wide');
+  }, { once: true });
 }
 function jpUiBuildRows(report, settings) {
   const rows = report && Array.isArray(report.rows) ? report.rows : [];
@@ -258,7 +261,7 @@ function jpUiMasterModal() {
         this.value = '';
         if (file) jpImport(file);
       };
-      dialog.addEventListener('click', function (event) {
+      dialog.onclick = function (event) {
         const button = event.target.closest('[data-master-act]');
         if (!button) return;
         const action = button.dataset.masterAct;
@@ -277,7 +280,7 @@ function jpUiMasterModal() {
             else jpUiMasterModal();
           }, true);
         }
-      });
+      };
       render();
     }
   );
@@ -686,6 +689,6 @@ jpProcess = function () {
   J.stale = false;
   jpUiReview();
 };
-jpUiDeletePeriod = jpUiDeletePeriod;
+pages.jaspro = pageJaspro;
 jpMForm = jpUiMasterForm;
 jpImport = jpUiImportMaster;
