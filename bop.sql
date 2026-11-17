@@ -1147,7 +1147,8 @@ begin
           raise exception 'Jadwal duplikat ditemukan untuk % pada tanggal %. Periksa file sebelum menyimpan.', coalesce(e ->> 'nama', 'penghulu'), tg;
         end if;
         seen := seen || k;
-        -- Nominal per peristiwa dari file nominatif: H = Jasa Profesi, I = Transport.
+        -- Upload baru: H/I adalah total per baris; tarif satu peristiwa diperoleh dari H/G dan I/G.
+        -- J adalah pembanding bruto H+I sebelum PPh; potongan PPh dihitung terpisah oleh aplikasi.
         foreach field_name in array array['jasproTotalSumber', 'transportTotalSumber', 'jumlahDiterimaSumber'] loop
           if e ? field_name and jsonb_typeof(e -> field_name) is distinct from 'null' then
             if jsonb_typeof(e -> field_name) is distinct from 'number' then
