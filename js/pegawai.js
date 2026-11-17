@@ -34,7 +34,7 @@ const PEG_JABATAN = ['Penghulu Ahli Pertama', 'Penghulu Ahli Muda', 'Penghulu Ah
   'Penata Layanan Operasional', 'Pengelola Layanan Operasional', 'Pengadministrasi Perkantoran', 'Pengelola Keuangan', 'Bendahara Pengeluaran Pembantu',
   'Operator SIMKAH', 'Pranata Komputer', 'Arsiparis', 'Pelaksana',
   'Pramubakti', 'Petugas Kebersihan', 'Petugas Keamanan', 'Pengemudi'];
-const PEG_KOLOM = { nama: 'Nama', nip: 'NIP', jenis_asn: 'Jenis ASN', pangkat_golongan: 'Pangkat/golongan', jabatan: 'Jabatan', jabatan_tambahan: 'Kepala KUA', no_hp: 'No. HP', usia_pensiun: 'Usia pensiun', sumber_usia_pensiun: 'Sumber usia pensiun', tmt_kua: 'TMT di KUA saat ini', tmt_kepala_kua: 'TMT pertama menjabat Kepala KUA', operator_simkah: 'Operator SIMKAH', operator_bop: 'Operator BOP' };
+const PEG_KOLOM = { nama: 'Nama', nip: 'NIP', jenis_asn: 'Jenis ASN', pangkat_golongan: 'Pangkat/golongan', jabatan: 'Jabatan', jabatan_tambahan: 'Kepala KUA Definitif / Plt.', no_hp: 'No. HP', usia_pensiun: 'Usia pensiun', sumber_usia_pensiun: 'Sumber usia pensiun', tmt_kua: 'TMT di KUA saat ini', tmt_kepala_kua: 'TMT pertama menjabat Kepala KUA', operator_simkah: 'Operator SIMKAH', operator_bop: 'Operator BOP' };
 const PEG_AKSI = { tambah: ['bg-success', 'Tambah'], ubah: ['bg-info', 'Ubah'], transfer: ['bg-warning', 'Transfer'], hapus: ['bg-danger', 'Hapus'] };
 
 // 18 angka -> "19800101 200501 1 001" (tanggal lahir, tanggal pengangkatan, jenis kelamin, nomor urut)
@@ -76,7 +76,8 @@ const pegPensiun = (jabatan, nip) => {
   const n = String(nip ?? '').replace(/\D/g, ''); if (n.length !== 18) return null;
   const y = +n.slice(0, 4), m = +n.slice(4, 6), d = +n.slice(6, 8), t = new Date(Date.UTC(y, m - 1, d));
   if (t.getUTCFullYear() !== y || t.getUTCMonth() !== m - 1 || t.getUTCDate() !== d) return null;
-  const j = String(jabatan ?? '').toLowerCase();
+  const j = String(jabatan ?? '').trim().toLowerCase();
+  if (!j || /perlu dilengkapi|kepala\\s+(kua|kantor urusan agama)/i.test(j)) return null;
   if (/\butama\b/.test(j)) return 65;
   if (/\bmadya\b/.test(j)) return 60;
   return 58;
@@ -94,7 +95,7 @@ const pegAkhir = n => String(n ?? '').replace(/\.+$/, '');
 const pegSw = j => `<i class="peg-sw" style="background:${PEG_WARNA[j]}"></i>`;
 // Penanda di sel Jabatan: jabatan tambahan (bila ada) dan tanda "Perlu dilengkapi" untuk data lama yang jabatannya masih tertulis Kepala KUA
 const pegBadge = p => {
-  const tugas = [p.jabatan_tambahan, p.operator_simkah ? 'Operator SIMKAH' : '', p.operator_bop ? 'Operator BOP' : ''].filter(Boolean);
+  const tugas = [p.jabatan_tambahan === 'Kepala KUA' ? 'Kepala KUA Definitif' : p.jabatan_tambahan, p.operator_simkah ? 'Operator SIMKAH' : '', p.operator_bop ? 'Operator BOP' : ''].filter(Boolean);
   return (tugas.length ? `<div class="mt-1 d-flex flex-wrap gap-1">${tugas.map(x => `<span class="badge peg-tb">${esc(x)}</span>`).join('')}</div>` : '')
     + (pegPerluDilengkapi(p) ? '<div class="mt-1"><span class="badge peg-lengkapi" title="Jabatan pokok belum dilengkapi. Ubah data pegawai untuk mengisi jabatan fungsional sebenarnya.">Perlu dilengkapi</span></div>' : '');
 };
@@ -112,7 +113,7 @@ async function pagePegawai() {
       <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
         ${pu ? `<div class="btn-group" role="group" aria-label="Tampilan" id="ptabs"><button type="button" class="btn btn-sm btn-primary" data-tab="daftar" aria-pressed="true">Daftar pegawai</button><button type="button" class="btn btn-sm btn-outline-primary" data-tab="rekap" aria-pressed="false">Rekap per KUA</button></div>` : ''}
         <div class="ms-auto d-flex flex-wrap gap-2">
-          ${kelola ? '<button type="button" class="btn btn-primary btn-sm" id="padd" disabled><i class="bx bx-plus"></i> Tambah Pegawai</button><button type="button" class="btn btn-outline-primary btn-sm" id="pimp" disabled><i class="bx bx-import"></i> Impor Excel</button><input type="file" id="pfile" class="d-none" accept=".xlsx,.xls">' : ''}
+          ${kelola ? '<button type="button" class="btn btn-primary btn-sm" id="padd" disabled><i class="bx bx-plus"></i> Tambah Pegawai</button><button type="button" class="btn btn-outline-primary btn-sm" id="pimp" disabled><i class="bx bx-import"></i> Impor Excel</button><input type="file" id="pfile" class="d-none" accept=".xlsx">' : ''}
           <button type="button" class="btn btn-outline-secondary btn-sm" id="phis"><i class="bx bx-history"></i> Riwayat</button>
           <button type="button" class="btn btn-outline-secondary btn-sm" id="pxls" disabled><i class="bx bx-spreadsheet"></i> Unduh Excel</button></div></div>
       <div id="pgmsg"></div>
