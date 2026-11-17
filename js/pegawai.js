@@ -209,7 +209,7 @@ async function pagePegawai() {
     // Data lama: "Kepala KUA" masih tertulis di kolom jabatan (sebelum ada jabatan tambahan). Isiannya dibantu: jabatan dikosongkan agar diisi
     // jabatan fungsionalnya, dan jabatan tambahan terpilih sesuai teks lama (Plt. atau Kepala).
     const lama = !baru && pegPerluDilengkapi(p), jab0 = lama ? '' : p?.jabatan;
-    const tb0 = p?.jabatan_tambahan || (lama && PEG_TAMBAHAN_JENIS.includes(p.jenis_asn) ? (pegPltLama(p.jabatan) ? 'Plt. Kepala KUA' : 'Kepala KUA') : '');
+    const tb0 = p?.jabatan_tambahan || (!baru && pegJabatanLama(p.jabatan) && PEG_TAMBAHAN_JENIS.includes(p.jenis_asn) ? (pegPltLama(p.jabatan) ? 'Plt. Kepala KUA' : 'Kepala KUA') : '');
     jpDlg(`<h5>${baru ? 'Tambah Pegawai' : 'Ubah Pegawai'}</h5>
       <form id="pfm" novalidate autocomplete="off">
         ${lama ? `<div class="alert alert-warning py-2 small" id="pflama">Jabatan pokok pegawai ini belum dilengkapi pada data sumber. Isi kolom <b>Jabatan</b> dengan jabatan sebenarnya (mis. Penghulu atau Penyuluh), lalu simpan. Status Kepala KUA tetap diatur secara terpisah.</div>` : ''}
