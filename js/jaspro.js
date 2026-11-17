@@ -1775,7 +1775,7 @@ function pRiwayat() {
         <button class="btn btn-sm btn-outline-secondary" data-act="hedit" data-id="${x.period.id}" title="Buka periode untuk unggah ulang"><i class="bx bx-edit"></i></button>
         <button class="btn btn-sm btn-outline-danger" data-act="hdel" data-id="${x.period.id}" title="Hapus arsip periode"><i class="bx bx-trash"></i></button>
       </td></tr>`).join('')}
-    </tbody><tfoot><tr class="fw-bold"><td colspan="3">TOTAL TAHUN ${J.historyYear}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('jasproBruto')))}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('transport')))}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('jasproBruto')+total('transport')))}</td><td></td></tr></tfoot></table></div>`:'<div class="text-center py-5 text-body-secondary">Belum ada laporan tersimpan untuk tahun ini.</div>'}
+    </tbody><tfoot><tr class="fw-bold"><td colspan="2">TOTAL TAHUN ${J.historyYear}</td><td class="text-end">${total('peristiwa')}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('jasproBruto')))}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('transport')))}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('jasproBruto')+total('transport')))}</td><td></td></tr></tfoot></table></div>`:'<div class="text-center py-5 text-body-secondary">Belum ada laporan tersimpan untuk tahun ini.</div>'}
   </div></div>${selected&&Number(selected.tahun)===Number(J.historyYear)?jpDetailPeriode(selected):''}`;
 }
 function jpDetailPeriode(period) {
