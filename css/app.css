@@ -401,6 +401,7 @@ dialog.dlg-lg{width:min(1000px,calc(100% - 1rem))}
   margin-bottom:1.25rem;
 }
 .jp-page-title{min-width:15rem}
+.jp .text-body-secondary,.jp .form-text{color:#697a8d!important}
 .jp-page-title h4{font-size:1.25rem;color:#566a7f;font-weight:600}
 .jp-page-title p{max-width:42rem;color:#697a8d;font-size:.9rem;line-height:1.5}
 .jp-page-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.5rem}
@@ -459,6 +460,7 @@ dialog.dlg-lg{width:min(1000px,calc(100% - 1rem))}
 .jp-csv-menu{position:relative}
 .jp-csv-menu>summary{list-style:none;cursor:pointer}
 .jp-csv-menu>summary::-webkit-details-marker{display:none}
+.jp-csv-menu>summary:focus-visible{outline:2px solid #696cff;outline-offset:2px}
 .jp-csv-options{
   position:absolute;
   z-index:210;
