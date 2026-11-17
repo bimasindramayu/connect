@@ -1976,8 +1976,17 @@ function jpMasterDialog(preserve = false) {
         confirm.querySelector('[data-x]').onclick = () => jpMasterDialog(true);
         confirm.querySelector('[data-merge]').onclick = () => merge();
         confirm.querySelector('[data-replace]')?.addEventListener('click', () => {
-          jpModalClass();
-        jpAsk('Ganti seluruh Master Rekening?', 'Data yang sekarang ada di daftar akan diganti dengan isi file.', 'Ganti data', replace, true);
+          jpModalClass('jp-dialog-settings');
+        jpDlg(`<h5 class="mb-1">Ganti seluruh Master Rekening?</h5>
+          <p class="text-body-secondary">Seluruh daftar yang sedang diedit akan diganti dengan ${parsed.entries.length} data dari file. Perubahan ini belum dikirim ke server sampai Anda menekan Simpan.</p>
+          <div class="d-flex justify-content-end gap-2">
+            <button class="btn btn-outline-secondary" data-cancel-replace>Kembali</button>
+            <button class="btn btn-danger" data-confirm-replace>Ganti data</button>
+          </div>`,
+        confirm => {
+          confirm.querySelector('[data-cancel-replace]').onclick = () => jpMasterDialog(true);
+          confirm.querySelector('[data-confirm-replace]').onclick = replace;
+        });
         });
       });
     };
