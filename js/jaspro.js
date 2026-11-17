@@ -1689,7 +1689,7 @@ const jpMRows = () => {
   J.master.forEach(m => { const k = JX.normalizeCoreName(m.nama); cnt[k] = (cnt[k] || 0) + 1; });
   const L = J.master.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).filter(m => !q || JX.normalizeCoreName(m.nama).includes(q));
   return { n: L.length, html: L.map(m => `<tr><td>${esc(m.nama)}${cnt[JX.normalizeCoreName(m.nama)] > 1 ? ' <span class="badge bg-label-warning" title="Ada lebih dari satu entri dengan nama mirip">duplikat?</span>' : ''}</td><td>${esc(m.namaPemilik || m.nama)}</td><td>${esc(m.noRekening)}</td>
-    <td class="text-end text-nowrap"><button class="btn btn-sm btn-outline-secondary px-2" data-act="medit" data-id="${esc(m.id)}" aria-label="Ubah"><i class="bx bx-edit"></i></button> <button class="btn btn-sm btn-outline-danger px-2" data-act="mdel" data-id="${esc(m.id)}" aria-label="Hapus"><i class="bx bx-trash"></i></button></td></tr>`).join('') };
+    <td class="text-end text-nowrap"><div class="jp-row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" data-act="medit" data-id="${esc(m.id)}">Ubah</button> <button type="button" class="btn btn-sm btn-outline-danger" data-act="mdel" data-id="${esc(m.id)}">Hapus</button></div></td></tr>`).join('') };
 };
 const jpMCount = n => `Total: ${J.master.length} penghulu${J.q ? ' · ' + n + ' cocok pencarian' : ''}`;
 const pMa = () => {
@@ -1781,41 +1781,79 @@ function pRiwayat() {
   if(!years.includes(Number(J.historyYear)))J.historyYear=years[0]||new Date().getFullYear();
   const records=J.periods.filter(p=>p.laporan&&Number(p.tahun)===Number(J.historyYear)).sort((a,b)=>a.bulan-b.bulan);
   const sums=records.map(p=>({period:p,...jpHitung(p.laporan,jpMuatSet(p.settings))}));
-  const total=k=>sums.reduce((n,x)=>n+x[k],0);
+  const total=k=>sums.reduce((n,x)=>n+(Number(x[k])||0),0);
   const selected=J.periods.find(p=>p.id===J.historySelected);
-  return `<div class="card jp-panel mb-4"><div class="card-body">
-    <div class="jp-section-head">
-      <div><span class="jp-kicker">TAHAP 4 · ARSIP LAPORAN</span><h5>Riwayat Tahunan Jaspro Transport</h5>
-        <p>Pilih tahun untuk melihat ringkasan dan rincian setiap laporan bulanan.</p></div>
-      <div class="jp-year-select"><label class="form-label" for="jp-history-year">Tahun laporan</label><select id="jp-history-year" class="form-select" data-history-year>${years.map(y=>`<option value="${y}"${Number(y)===Number(J.historyYear)?' selected':''}>${y}</option>`).join('')}</select></div>
-    </div>
-    ${records.length?`<div class="jp-history-note"><i class="bx bx-info-circle me-1"></i>Tabel menampilkan nominal bruto. Ringkasan Jaspro bersih dan total dibayarkan sudah memperhitungkan potongan PPh Jaspro.</div>
-      <div class="row g-3 mb-4">
-        ${jpCard('bx-wallet','primary','Rp '+rp(Math.round(total('jaspro'))),'Jaspro bersih setelah PPh')}
-        ${jpCard('bx-bus','info','Rp '+rp(Math.round(total('transport'))),'Transport bruto')}
-        ${jpCard('bx-calculator','success','Rp '+rp(Math.round(total('total'))),'Total dibayarkan')}
-        ${jpCard('bx-calendar-check','warning',total('peristiwa').toLocaleString('id-ID'),'Total peristiwa')}
+  const f=n=>'Rp '+rp(Math.round(Number(n)||0));
+  return `<section class="jp-section">
+    <div class="jp-history-top">
+      <div class="jp-section-title"><h5>Riwayat pembayaran</h5><p>Arsip laporan per bulan. Pilih tahun untuk melihat rekap dan rincian.</p></div>
+      <div class="jp-year-select"><label class="form-label" for="jp-history-year">Tahun laporan</label>
+        <select id="jp-history-year" class="form-select" data-history-year>${years.map(y=>`<option value="${y}"${Number(y)===Number(J.historyYear)?' selected':''}>${y}</option>`).join('')}</select>
       </div>
-      <div class="jp-table-caption"><div><h6>Rekap per bulan</h6><p>${records.length} periode tersimpan pada tahun ${J.historyYear}.</p></div></div>
-      <div class="jp-table-wrap"><div class="scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>Bulan</th><th class="text-end">Baris</th><th class="text-end">Peristiwa</th><th class="text-end">Jaspro bruto</th><th class="text-end">Transport bruto</th><th class="text-end">Total bruto</th><th class="text-end">Aksi</th></tr></thead><tbody>
-        ${sums.map(x=>`<tr><td class="fw-semibold">${esc(JX.BULAN_LIST[x.period.bulan-1])}</td><td class="text-end">${x.rows.length}</td><td class="text-end">${x.peristiwa.toLocaleString('id-ID')}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(x.jasproBruto))}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(x.transport))}</td><td class="text-end text-nowrap fw-semibold">Rp ${rp(Math.round(x.jasproBruto+x.transport))}</td><td class="text-end text-nowrap"><div class="jp-row-actions">
-          <button class="btn btn-sm btn-outline-primary" data-act="hdetail" data-id="${x.period.id}" aria-label="${J.historySelected===x.period.id?'Tutup rincian':'Lihat rincian'} ${jpPeriodLabel(x.period.id)}">${J.historySelected===x.period.id?'<i class="bx bx-chevron-up me-1"></i>Tutup':'<i class="bx bx-list-ul me-1"></i>Rincian'}</button>
-          <button class="btn btn-sm btn-outline-secondary" data-act="hedit" data-id="${x.period.id}" title="Buka periode untuk unggah ulang" aria-label="Ubah laporan ${jpPeriodLabel(x.period.id)}"><i class="bx bx-edit"></i></button>
-          <button class="btn btn-sm btn-outline-danger" data-act="hdel" data-id="${x.period.id}" title="Hapus arsip periode" aria-label="Hapus arsip ${jpPeriodLabel(x.period.id)}"><i class="bx bx-trash"></i></button>
-        </div></td></tr>`).join('')}
-      </tbody><tfoot><tr class="fw-bold"><td colspan="2">TOTAL TAHUN ${J.historyYear}</td><td class="text-end">${total('peristiwa').toLocaleString('id-ID')}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('jasproBruto')))}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('transport')))}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(total('jasproBruto')+total('transport')))}</td><td></td></tr></tfoot></table></div></div>`:`<div class="jp-empty-state"><span class="jp-empty-icon"><i class="bx bx-calendar-x"></i></span><h6>Belum ada laporan untuk tahun ${J.historyYear}</h6><p>Unggah laporan nominatif pada tahap pertama. Arsip yang sudah disimpan akan muncul di sini.</p><button class="btn btn-primary" data-act="tab" data-tab="input"><i class="bx bx-upload me-1"></i>Ke Input Laporan</button></div>`}
-  </div></div>${selected&&Number(selected.tahun)===Number(J.historyYear)?jpDetailPeriode(selected):''}`;
+    </div>
+    ${records.length?`
+      <div class="jp-summary-grid">
+        <div><span>Total peristiwa</span><strong>${total('peristiwa').toLocaleString('id-ID')}</strong></div>
+        <div><span>Jaspro bruto</span><strong>${f(total('jasproBruto'))}</strong></div>
+        <div><span>PPh Jaspro</span><strong>${f(total('pph'))}</strong></div>
+        <div><span>Jaspro bersih</span><strong>${f(total('jaspro'))}</strong></div>
+        <div><span>Transport bruto</span><strong>${f(total('transport'))}</strong></div>
+        <div><span>Total dibayarkan</span><strong>${f(total('total'))}</strong></div>
+      </div>
+      <div class="jp-table-heading"><h6>Rekap per bulan</h6><p>${records.length.toLocaleString('id-ID')} periode tersimpan pada tahun ${J.historyYear}.</p></div>
+      <div class="jp-table-wrap"><div class="scroll"><table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Bulan</th><th class="text-end">Baris</th><th class="text-end">Peristiwa</th><th class="text-end">Jaspro bruto</th><th class="text-end">Transport bruto</th><th class="text-end">Total bruto</th><th class="text-end">Aksi</th></tr></thead>
+        <tbody>${sums.map(x=>`<tr>
+          <td class="fw-semibold">${esc(JX.BULAN_LIST[x.period.bulan-1])}</td><td class="text-end">${x.rows.length.toLocaleString('id-ID')}</td>
+          <td class="text-end">${x.peristiwa.toLocaleString('id-ID')}</td>
+          <td class="text-end text-nowrap">${f(x.jasproBruto)}</td><td class="text-end text-nowrap">${f(x.transport)}</td>
+          <td class="text-end text-nowrap">${f(x.jasproBruto+x.transport)}</td>
+          <td class="text-end text-nowrap"><div class="jp-row-actions">
+            <button type="button" class="btn btn-sm btn-outline-primary" data-act="hdetail" data-id="${x.period.id}">${J.historySelected===x.period.id?'Tutup rincian':'Lihat rincian'}</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-act="hedit" data-id="${x.period.id}" aria-label="Ubah laporan ${jpPeriodLabel(x.period.id)}">Ubah</button>
+            <button type="button" class="btn btn-sm btn-outline-danger" data-act="hdel" data-id="${x.period.id}" aria-label="Hapus arsip ${jpPeriodLabel(x.period.id)}">Hapus</button>
+          </div></td>
+        </tr>`).join('')}</tbody>
+        <tfoot><tr class="fw-semibold"><td colspan="2">TOTAL TAHUN ${J.historyYear}</td><td class="text-end">${total('peristiwa').toLocaleString('id-ID')}</td>
+          <td class="text-end text-nowrap">${f(total('jasproBruto'))}</td><td class="text-end text-nowrap">${f(total('transport'))}</td>
+          <td class="text-end text-nowrap">${f(total('jasproBruto')+total('transport'))}</td><td></td></tr></tfoot>
+      </table></div></div>`:`
+      <div class="jp-empty-state"><h6>Belum ada laporan untuk tahun ${J.historyYear}</h6>
+        <p>Unggah laporan nominatif pada menu Laporan & Proses. Arsip yang sudah disimpan akan muncul di sini.</p>
+        <button type="button" class="btn btn-primary" data-act="tab" data-tab="input">Buka Laporan & Proses</button>
+      </div>`}
+  </section>${selected&&Number(selected.tahun)===Number(J.historyYear)?jpDetailPeriode(selected):''}`;
 }
 
 function jpDetailPeriode(period) {
-  const s=jpMuatSet(period.settings),data=jpHitung(period.laporan,s),f=n=>'Rp '+rp(Math.round(n||0));
-  return `<div class="card"><div class="card-body">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3"><div><h5 class="mb-1">Rincian ${esc(jpPeriodLabel(period.id))}</h5><small class="text-body-secondary">Sumber: ${esc(period.laporan?.fileName||'Laporan Nominatif')}</small></div><span class="badge bg-label-primary">${data.rows.length} baris</span></div>
-    <div class="row g-3 mb-3">${jpCard('bx-wallet','primary',f(data.jasproBruto),'Jaspro bruto')}${jpCard('bx-receipt','warning',f(data.pph),'Potongan PPh')}${jpCard('bx-wallet','success',f(data.jaspro),'Jaspro bersih')}${jpCard('bx-bus','info',f(data.transport),'Transport')}${jpCard('bx-calculator','primary',f(data.total),'Total nominal diterima')}${jpCard('bx-check-double',data.mismatchCount?'warning':'success',data.mismatchCount,'Selisih dengan kolom J')}</div>
-    <div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Tanggal</th><th class="text-end">Peristiwa (G)</th><th class="text-end">Jaspro/peristiwa (H÷G)</th><th class="text-end">Transport/peristiwa (I÷G)</th><th class="text-end">Jaspro bruto</th><th class="text-end">Transport bruto</th><th class="text-end">Diterima file (J)</th><th class="text-end">Total bruto (H+I)</th><th>Pemeriksaan</th></tr></thead><tbody>
-      ${data.rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td><td>${esc(r.golongan)}</td><td class="text-nowrap">${JX.tglSah(r.tanggal)?JX.tglID(r.tanggal):'–'}</td><td class="text-end">${r.jumlahPeristiwa}</td><td class="text-end text-nowrap">${f(r.tarifJaspro)}</td><td class="text-end text-nowrap">${f(r.tarifTransport)}</td><td class="text-end text-nowrap">${f(r.jasproSubtotal)}</td><td class="text-end text-nowrap">${f(r.transpoSubtotal)}</td><td class="text-end text-nowrap">${r.jumlahDiterimaSumber==null?'–':f(r.jumlahDiterimaSumber)}</td><td class="text-end text-nowrap fw-semibold">${f(r.jumlahDiterimaHitung)}</td><td>${r.jumlahDiterimaSumber==null?'<span class="badge bg-label-secondary">Tidak ada di file</span>':r.jumlahDiterimaCocok?'<span class="badge bg-label-success">Sesuai</span>':'<span class="badge bg-label-warning">Selisih '+f(Math.abs(r.selisihJumlahDiterima))+'</span>'}</td></tr>`).join('')}
-    </tbody><tfoot><tr class="fw-bold"><td colspan="6">TOTAL</td><td class="text-end">${data.peristiwa}</td><td class="text-end">–</td><td class="text-end">–</td><td class="text-end text-nowrap">${f(data.jasproBruto)}</td><td class="text-end text-nowrap">${f(data.transport)}</td><td class="text-end text-nowrap">${f(data.sourceTotal)}</td><td class="text-end text-nowrap">${f(data.jasproBruto+data.transport)}</td><td>${data.mismatchCount ? data.mismatchCount + ' baris selisih' : '—'}</td></tr></tfoot></table></div>
-  </div></div>`;
+  const s=jpMuatSet(period.settings),data=jpHitung(period.laporan,s),f=n=>'Rp '+rp(Math.round(Number(n)||0));
+  return `<section class="jp-section jp-detail-section">
+    <div class="jp-detail-heading"><div class="jp-section-title"><h5>Rincian ${esc(jpPeriodLabel(period.id))}</h5><p>Sumber: ${esc(period.laporan?.fileName||'Laporan Nominatif')} · ${data.rows.length.toLocaleString('id-ID')} baris</p></div></div>
+    <div class="jp-summary-grid">
+      <div><span>Total peristiwa</span><strong>${data.peristiwa.toLocaleString('id-ID')}</strong></div>
+      <div><span>Jaspro bruto</span><strong>${f(data.jasproBruto)}</strong></div>
+      <div><span>Potongan PPh</span><strong>${f(data.pph)}</strong></div>
+      <div><span>Jaspro bersih</span><strong>${f(data.jaspro)}</strong></div>
+      <div><span>Transport bruto</span><strong>${f(data.transport)}</strong></div>
+      <div><span>Total dibayarkan</span><strong>${f(data.total)}</strong></div>
+    </div>
+    <div class="jp-table-heading"><h6>Rincian per penghulu</h6><p>Nominal pada tabel merupakan bruto, sebelum potongan PPh.</p></div>
+    <div class="jp-table-wrap"><div class="scroll"><table class="table table-hover align-middle mb-0">
+      <thead><tr><th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Tanggal</th><th class="text-end">Peristiwa</th><th class="text-end">Jaspro / peristiwa</th><th class="text-end">Transport / peristiwa</th><th class="text-end">Jaspro bruto</th><th class="text-end">Transport bruto</th><th class="text-end">Diterima file (J)</th><th class="text-end">Total bruto (H+I)</th><th>Pemeriksaan</th></tr></thead>
+      <tbody>${data.rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td><td>${esc(r.golongan)}</td>
+        <td class="text-nowrap">${JX.tglSah(r.tanggal)?JX.tglID(r.tanggal):'–'}</td><td class="text-end">${Number(r.jumlahPeristiwa||0).toLocaleString('id-ID')}</td>
+        <td class="text-end text-nowrap">${f(r.tarifJaspro)}</td><td class="text-end text-nowrap">${f(r.tarifTransport)}</td>
+        <td class="text-end text-nowrap">${f(r.jasproSubtotal)}</td><td class="text-end text-nowrap">${f(r.transpoSubtotal)}</td>
+        <td class="text-end text-nowrap">${r.jumlahDiterimaSumber==null?'–':f(r.jumlahDiterimaSumber)}</td>
+        <td class="text-end text-nowrap">${f(r.jumlahDiterimaHitung)}</td>
+        <td>${r.jumlahDiterimaSumber==null?'<span class="badge bg-label-secondary">Tidak ada di file</span>':r.jumlahDiterimaCocok?'<span class="badge bg-label-success">Sesuai</span>':'<span class="badge bg-label-warning">Selisih '+f(Math.abs(r.selisihJumlahDiterima))+'</span>'}</td></tr>`).join('')}</tbody>
+      <tfoot><tr class="fw-semibold"><td colspan="6">TOTAL</td><td class="text-end">${data.peristiwa.toLocaleString('id-ID')}</td><td class="text-end">–</td><td class="text-end">–</td>
+        <td class="text-end text-nowrap">${f(data.jasproBruto)}</td><td class="text-end text-nowrap">${f(data.transport)}</td>
+        <td class="text-end text-nowrap">${f(data.sourceTotal)}</td><td class="text-end text-nowrap">${f(data.jasproBruto+data.transport)}</td>
+        <td>${data.mismatchCount?data.mismatchCount+' baris selisih':'Sesuai'}</td></tr></tfoot>
+    </table></div></div>
+    <p class="jp-table-note">Geser tabel ke samping untuk melihat semua kolom.</p>
+  </section>`;
 }
 
 /* ---- Langkah 3: Proses & Unduh ---- */
@@ -1986,12 +2024,13 @@ function jpCsv(kind) {
 function jpClick(e) {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const a = b.dataset.act, id = b.dataset.id;
-  if (a === 'tab') { J.tab = b.dataset.tab; $('jmsg').innerHTML = ''; jpRender(); }
+  if (a === 'tab') { J.tab = b.dataset.tab; $('jmsg').innerHTML = ''; jpRender(); $('jnav')?.querySelector('[data-tab="' + J.tab + '"]')?.focus(); }
   else if (a === 'hdetail') { J.historySelected=J.historySelected===id?'':id; jpRender(); }
   else if (a === 'hedit') { const p=J.periods.find(x=>x.id===id); if(p){jpLoadPeriod(id);J.tab='input';$('jmsg').innerHTML=note('Periode '+esc(jpPeriodLabel(id))+' dibuka. Unggah file baru untuk mengganti arsip periode ini.','info');jpRender();} }
   else if (a === 'hdel') { const p=J.periods.find(x=>x.id===id); if(p) jpAsk('Hapus arsip '+jpPeriodLabel(id)+'?','Laporan, pengaturan tarif, dan rincian periode ini akan dihapus permanen. Periode lain dan Master Rekening tidak terpengaruh.','Hapus Periode',async()=>{const {error}=await sb.from('jaspro_periode').delete().eq('id',id);if(error)return jpToast('Gagal menghapus periode: '+error.message,'danger');J.periods=J.periods.filter(x=>x.id!==id);if(J.periodId===id)jpLoadPeriod(jpPeriodId(jpDef()));if(J.historySelected===id)J.historySelected='';jpRender();jpToast('Arsip '+jpPeriodLabel(id)+' berhasil dihapus.');},true); }
   else if (a === 'upl') $('jfl').click();
   else if (a === 'clr') jpAsk('Hapus laporan tersimpan?', 'Laporan Nominatif yang tersimpan di server akan dihapus.', 'Hapus', async () => { J.laporan = null; J.rows = null; if (await jpSave({ laporan: null })) jpRender(); }, true);
+  else if (a === 'mclear') { J.q=''; const input=$('jq'),r=jpMRows(); if(input){input.value='';input.focus();} if($('jmt'))$('jmt').innerHTML=r.html; if($('jmc'))$('jmc').textContent=jpMCount(r.n); if($('jmclear'))$('jmclear').disabled=true; }
   else if (a === 'mimp') $('jfm').click();
   else if (a === 'mexp') jpMExp();
   else if (a === 'madd') jpMForm();
@@ -2036,7 +2075,7 @@ async function jpChange(e) {
 }
 function jpInput(e) {
   const t = e.target;
-  if (t.id === 'jq') { J.q = t.value; const r = jpMRows(), body = $('jmt'), count = $('jmc'); if (body) body.innerHTML = r.html; if (count) count.textContent = jpMCount(r.n); }
+  if (t.id === 'jq') { J.q = t.value; const r = jpMRows(), body = $('jmt'), count = $('jmc'), clear = $('jmclear'); if (body) body.innerHTML = r.html; if (count) count.textContent = jpMCount(r.n); if (clear) clear.disabled = !J.q; }
   else if (t.dataset.t) {   // perubahan tarif menurut tanggal: kolom mulai | jaspro | transport pada baris ke-k
     const e = J.set.tarifRiwayat[+t.dataset.k]; if (!e) return;
     if (t.dataset.t === 'mulai') e.mulai = t.value;
