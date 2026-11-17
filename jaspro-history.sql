@@ -12,7 +12,7 @@ create table if not exists public.jaspro_periode (
   updated_by uuid references auth.users(id),
   updated_at timestamptz not null default now(),
   constraint jaspro_periode_id_consistent
-    check (id = tahun::text || '-' || lpad(bulan::text, 2, '0')),
+    check (id = (tahun::text || '-' || lpad(bulan::text, 2, '0'))),
   constraint jaspro_periode_tahun_bulan_unique unique (tahun, bulan)
 );
 
