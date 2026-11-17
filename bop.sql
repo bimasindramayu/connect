@@ -1148,7 +1148,7 @@ begin
         end if;
         seen := seen || k;
         -- Nominal per peristiwa dari file nominatif: H = Jasa Profesi, I = Transport.
-        foreach field_name in array array['tarifJasproSumber', 'tarifTransportSumber', 'jumlahDiterimaSumber'] loop
+        foreach field_name in array array['jasproTotalSumber', 'transportTotalSumber', 'jumlahDiterimaSumber'] loop
           if e ? field_name and jsonb_typeof(e -> field_name) is distinct from 'null' then
             if jsonb_typeof(e -> field_name) is distinct from 'number' then
               raise exception 'Nilai % pada laporan Jaspro harus berupa angka.', field_name;
