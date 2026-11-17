@@ -1475,7 +1475,7 @@ function jpPeriodLabel(id) {
 function jpDuplikatJadwal(rows) {
   const seen=new Map(),duplicate=[];
   (rows||[]).forEach((r,i)=>{
-    const nip=String(r.nip||'').replace(/\\D/g,'');
+    const nip=String(r.nip||'').replace(/\D/g,'');
     const identitas=nip.length>=10 ? nip : JX.normalizeCoreName(r.nama);
     const key=[identitas,JX.normalizeCoreName(r.kua),JX.tglSah(r.tanggal)?r.tanggal:'TANPA-TANGGAL'].join('|');
     if(seen.has(key))duplicate.push({baris:i+2,pertama:seen.get(key)+2,nama:r.nama,tanggal:r.tanggal});
@@ -1581,7 +1581,7 @@ const pIn = () => {
 };
 async function jpLaporan(f) {
   if(!f)return;
-  if(!/\\.xlsx$/i.test(f.name))return jpToast('Format file harus .xlsx','danger');
+  if(!/\.xlsx$/i.test(f.name))return jpToast('Format file harus .xlsx','danger');
   const id=jpPeriodId(J.set);if(!id)return jpToast('Pilih bulan dan tahun laporan yang sah.','danger');
   jpStat('Membaca file…','secondary');
   let r;try{await jpX();r=await JX.parseLaporanFile(f);}catch(e){r={ok:false,error:e.message};}
