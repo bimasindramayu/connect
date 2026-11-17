@@ -1,6 +1,9 @@
 -- Normalisasi nama pegawai dan penghapusan permanen fitur Riwayat Pegawai.
 -- Aman dijalankan setelah 20261117_pegawai_fields_import.sql.
 
+-- Nomor HP tetap wajib seperti pada form input manual.
+alter table public.pegawai alter column no_hp set not null;
+
 -- Putuskan seluruh dependensi fitur riwayat sebelum menghapus tabelnya.
 drop trigger if exists pegawai_log on public.pegawai;
 drop function if exists public.pegawai_log();
@@ -46,13 +49,11 @@ begin
   end if;
 
   -- nomor HP/WA: boleh ditulis dengan spasi, strip, atau awalan +62/62; disimpan sebagai 08xxxxxxxxxx (10 sampai 14 angka)
-  new.no_hp := nullif(regexp_replace(coalesce(new.no_hp, ''), '[\s().-]', '', 'g'), '');
-  if new.no_hp is not null then
-    new.no_hp := regexp_replace(new.no_hp, '^\+?62', '0');
-    if new.no_hp ~ '^8' then new.no_hp := '0' || new.no_hp; end if;
-    if new.no_hp !~ '^08[0-9]{8,12}$' then
-      raise exception 'Nomor HP/WA tidak valid. Isi nomor aktif 10 sampai 14 angka yang diawali 08 (contoh 081234567890).'; end if;
-  end if;
+  new.no_hp := regexp_replace(coalesce(new.no_hp, ''), '[\s().-]', '', 'g');
+  new.no_hp := regexp_replace(new.no_hp, '^\+?62', '0');
+  if new.no_hp ~ '^8' then new.no_hp := '0' || new.no_hp; end if;
+  if new.no_hp !~ '^08[0-9]{8,12}$' then
+    raise exception 'Nomor HP/WA wajib diisi dan harus valid (08xxxxxxxxxx).'; end if;
   if new.usia_pensiun is not null and new.usia_pensiun not between 40 and 75 then
     raise exception 'Usia pensiun harus antara 40 sampai 75 tahun.'; end if;
   new.sumber_usia_pensiun := upper(nullif(btrim(coalesce(new.sumber_usia_pensiun, '')), ''));
@@ -104,5 +105,5 @@ end $$;
 
 -- Ubah seluruh nama lama menjadi huruf kapital dan rapikan spasi.
 update public.pegawai
-   set nama = upper(btrim(regexp_replace(coalesce(nama, ''), '\\s+', ' ', 'g')))
+   set nama = upper(btrim(regexp_replace(coalesce(nama, ''), '\s+', ' ', 'g')))
  where nama is distinct from upper(btrim(regexp_replace(coalesce(nama, ''), '\\s+', ' ', 'g')));
