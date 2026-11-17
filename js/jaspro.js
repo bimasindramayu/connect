@@ -2080,11 +2080,11 @@ function jpInput(e) {
     const e = J.set.tarifRiwayat[+t.dataset.k]; if (!e) return;
     if (t.dataset.t === 'mulai') e.mulai = t.value;
     else { const v = parseFloat(t.value); e[t.dataset.t] = t.value.trim() === '' || !Number.isFinite(v) ? null : v; }
-    J.stale = true; jpSetSimpan(); jpProcBtn(); jpTarifRefresh();
+    J.stale = true; jpSetSimpan(); jpProcBtn(); jpTarifRefresh(); jpReview();
   }
   else if (t.dataset.s) {   // pengaturan: ketikan beruntun digabung jadi satu simpan
     J.set[t.dataset.s] = 'n' in t.dataset ? (parseFloat(t.value) || 0) : t.value; J.stale = true;
-    jpSetSimpan(); jpProcBtn(); jpTarifRefresh();
+    jpSetSimpan(); jpProcBtn(); jpTarifRefresh(); jpReview();
   }
 }
 
