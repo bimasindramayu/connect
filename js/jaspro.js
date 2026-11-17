@@ -2394,6 +2394,7 @@ function jpProcBtn() {
 }
 function jpProcess() {
   if (!J.laporan?.rows?.length) return jpToast('Laporan periode ini belum tersedia.', 'warning');
+  if (!J.master.length) return jpToast('Master Rekening masih kosong. Isi Master Rekening terlebih dahulu untuk mencocokkan penerima.', 'warning');
   J.rows = jpBuildMatchedRows(J.laporan, J.set);
   J.stale = false;
   J.showPreview = true;
