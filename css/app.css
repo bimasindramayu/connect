@@ -371,6 +371,32 @@ body.side-mini #side details[open]>.nav-link.sub:hover:not(.active)>i:first-chil
   .jp-detail-section .jp-table-heading{margin-top:.8rem}
 }
 
+/* Kontras kontrol dan status pada Jaspro; tidak mengubah warna modul lain. */
+.jp .btn-primary{
+  --bs-btn-color:#fff;
+  --bs-btn-bg:#5558c7;
+  --bs-btn-border-color:#5558c7;
+  --bs-btn-hover-color:#fff;
+  --bs-btn-hover-bg:#4d50b4;
+  --bs-btn-hover-border-color:#4d50b4;
+  --bs-btn-active-color:#fff;
+  --bs-btn-active-bg:#4548a8;
+  --bs-btn-active-border-color:#4548a8;
+  --bs-btn-disabled-color:#fff;
+  --bs-btn-disabled-bg:#5558c7;
+  --bs-btn-disabled-border-color:#5558c7;
+  box-shadow:none;
+}
+.jp .badge{font-size:.875rem;font-weight:600}
+.jp .bg-label-primary{color:#4548a8!important;background:#eeefff!important}
+.jp .bg-label-success{color:#246b39!important;background:#e9f6ec!important}
+.jp .bg-label-warning{color:#8a5700!important;background:#fff4d6!important}
+.jp .bg-label-danger{color:#a82e1c!important;background:#fdece9!important}
+.jp .bg-label-info{color:#176b87!important;background:#e7f4f8!important}
+.jp .bg-label-secondary{color:#475467!important;background:#eef0f2!important}
+@media(prefers-reduced-motion:reduce){
+  .jp *, .jp *:before, .jp *:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+}
 /* Pop-up (toast) selalu paling depan: wadahnya popover manual (top layer browser, di atas <dialog> modal). z-index hanya cadangan untuk
    browser tanpa Popover API. UA stylesheet popover (inset/margin/border/background) ditimpa supaya wadah tidak berbingkai. */
 #jtoast{position:fixed;inset:auto 1rem 1rem auto;margin:0;padding:0;border:0;background:transparent;overflow:visible;z-index:2147483000;display:grid;gap:.5rem;width:min(380px,calc(100vw - 2rem));max-width:none;pointer-events:none;color:inherit}
