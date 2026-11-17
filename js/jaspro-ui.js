@@ -25,7 +25,6 @@ function jpUiBusy(button, busy, label) {
 }
 function jpUiSetDialogWide(dialog) {
   dialog.classList.add('jp-dialog-wide');
-  dialog.addEventListener('close', function () { dialog.classList.remove('jp-dialog-wide'); }, { once: true });
 }
 function jpUiBuildRows(report, settings) {
   const rows = report && Array.isArray(report.rows) ? report.rows : [];
@@ -294,6 +293,7 @@ function jpUiMasterForm(id) {
     '<div class="mt-3"><label class="form-label" for="jp-master-account">Nomor Rekening</label><input id="jp-master-account" class="form-control" inputmode="numeric" value="' + esc(current ? current.noRekening : '') + '" placeholder="Nomor rekening" required></div>' +
     '<div class="d-flex justify-content-end gap-2 mt-4"><button type="button" class="btn btn-outline-secondary" data-x>Batal</button><button type="button" class="btn btn-primary" id="jp-master-save">' + (current ? 'Simpan Perubahan' : 'Simpan Penghulu') + '</button></div>',
     function (dialog) {
+      dialog.classList.remove('jp-dialog-wide');
       dialog.querySelectorAll('[data-x]').forEach(function (button) { button.onclick = function () { jpUiMasterModal(); }; });
       dialog.querySelector('#jp-master-save').onclick = async function () {
         const button = this;
@@ -352,7 +352,12 @@ async function jpUiImportMaster(file) {
       button.onclick = async function () {
         const mode = this.dataset.import;
         const error = dialog.querySelector('#jp-import-error');
-        if (mode === 'replace' && !window.confirm) return;
+        if (mode === 'replace' && button.dataset.confirmReplace !== 'yes') {
+          button.dataset.confirmReplace = 'yes';
+          button.textContent = 'Konfirmasi Ganti Semua';
+          error.innerHTML = note('Semua ' + J.master.length + ' data rekening yang ada akan diganti dengan ' + entries.length + ' data dari file. Klik sekali lagi untuk melanjutkan.', 'warning');
+          return;
+        }
         let next;
         if (mode === 'replace') {
           next = entries.map(function (entry) { return { id: entry.id, nama: entry.nama, namaPemilik: entry.namaPemilik, noRekening: entry.noRekening }; });
