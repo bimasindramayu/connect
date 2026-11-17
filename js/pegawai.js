@@ -207,11 +207,11 @@ async function pagePegawai() {
     const baru = !p, kid0 = p ? p.kua_id : op ? me.kua_id : (F.kua || 0);
     // Data lama: "Kepala KUA" masih tertulis di kolom jabatan (sebelum ada jabatan tambahan). Isiannya dibantu: jabatan dikosongkan agar diisi
     // jabatan fungsionalnya, dan jabatan tambahan terpilih sesuai teks lama (Plt. atau Kepala).
-    const lama = !baru && pegJabatanLama(p.jabatan), jab0 = lama && pegJabatanLamaSaja(p.jabatan) ? '' : p?.jabatan;
+    const lama = !baru && pegPerluDilengkapi(p), jab0 = lama ? '' : p?.jabatan;
     const tb0 = p?.jabatan_tambahan || (lama && PEG_TAMBAHAN_JENIS.includes(p.jenis_asn) ? (pegPltLama(p.jabatan) ? 'Plt. Kepala KUA' : 'Kepala KUA') : '');
     jpDlg(`<h5>${baru ? 'Tambah Pegawai' : 'Ubah Pegawai'}</h5>
       <form id="pfm" novalidate autocomplete="off">
-        ${lama ? `<div class="alert alert-warning py-2 small" id="pflama">Jabatan pegawai ini masih tertulis <b>${esc(p.jabatan)}</b>. Kepala KUA kini diisi di <b>Jabatan Tambahan</b>. Isi kolom <b>Jabatan</b> dengan jabatan fungsional pegawai (mis. Penghulu atau Penyuluh), lalu simpan.</div>` : ''}
+        ${lama ? `<div class="alert alert-warning py-2 small" id="pflama">Jabatan pokok pegawai ini belum dilengkapi pada data sumber. Isi kolom <b>Jabatan</b> dengan jabatan sebenarnya (mis. Penghulu atau Penyuluh), lalu simpan. Status Kepala KUA tetap diatur secara terpisah.</div>` : ''}
         <div id="pfmsg"></div>
         <div class="row g-3">
           <div class="col-12">${baru && adm
@@ -227,9 +227,17 @@ async function pagePegawai() {
             <input id="pfb" class="form-control" list="pfbl" maxlength="100" placeholder="Pilih dari daftar atau ketik sendiri" value="${esc(jab0)}">
             <datalist id="pfbl">${PEG_JABATAN.map(j => `<option value="${esc(j)}"></option>`).join('')}</datalist>
             <div class="form-text">Jabatan pokok pegawai, mis. Penghulu atau Penyuluh Agama. Klik kolom ini untuk melihat jabatan yang biasa ada di KUA; jabatan lain boleh diketik sendiri. Kepala KUA tidak diisi di sini, melainkan di Jabatan Tambahan.</div></div>
-          <div class="col-12"><label class="form-label" for="pft">Jabatan tambahan</label>
-            <select id="pft" class="form-select"><option value="">Tidak ada</option>${PEG_TAMBAHAN.map(t => `<option value="${esc(t)}"${t === tb0 ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
-            <div class="form-text" id="pfth"></div></div>
+          <div class="col-12"><label class="form-label" for="pft">Jabatan tambahan Kepala KUA</label>
+            <select id="pft" class="form-select"><option value="">Tidak ada</option>${PEG_TAMBAHAN.map(t => `<option value="${esc(t)}"${t === tb0 ? ' selected' : ''}>${esc(t === 'Kepala KUA' ? 'Kepala KUA Definitif' : t)}</option>`).join('')}</select>
+            <div class="form-text" id="pfth">Status definitif atau Plt. Kepala KUA ditetapkan di sini.</div></div>
+          <div class="col-12"><div class="form-label">Penugasan tambahan operator</div><div class="row g-2">
+            <div class="col-sm-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="pfos"${p?.operator_simkah ? ' checked' : ''}><label class="form-check-label" for="pfos">Operator SIMKAH</label></div></div>
+            <div class="col-sm-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="pfob"${p?.operator_bop ? ' checked' : ''}><label class="form-check-label" for="pfob">Operator BOP</label></div></div>
+          </div><div class="form-text">Operator SIMKAH dan Operator BOP dapat dirangkap oleh Kepala KUA Definitif maupun Plt., termasuk dirangkap sekaligus.</div></div>
+          <div class="col-md-6"><label class="form-label" for="pfup">Usia pensiun (tahun)</label><input id="pfup" type="number" min="40" max="75" step="1" class="form-control" value="${esc(p?.usia_pensiun ?? '')}"><div class="form-text">Perkiraan awal berdasarkan jenjang jabatan dan tanggal lahir pada NIP.</div></div>
+          <div class="col-md-6"><label class="form-label" for="pfus">Sumber usia pensiun</label><div class="input-group"><select id="pfus" class="form-select"><option value="AUTO"${(p?.sumber_usia_pensiun || (!p?.usia_pensiun ? 'AUTO' : 'MANUAL')) === 'AUTO' ? ' selected' : ''}>Otomatis</option><option value="MANUAL"${p?.sumber_usia_pensiun === 'MANUAL' || (!p?.sumber_usia_pensiun && p?.usia_pensiun) ? ' selected' : ''}>Manual</option></select><button type="button" class="btn btn-outline-secondary" id="pfua" title="Hitung ulang dari jabatan dan NIP">Hitung</button></div></div>
+          <div class="col-md-6" id="pftmt-wrap"><label class="form-label" for="pftmt">TMT di KUA saat ini</label><input id="pftmt" type="date" class="form-control" value="${esc(p?.tmt_kua || '')}"></div>
+          <div class="col-md-6 d-none" id="pftmtk-wrap"><label class="form-label" for="pftmtk">TMT pertama kali menjabat Kepala KUA</label><input id="pftmtk" type="date" class="form-control" value="${esc(p?.tmt_kepala_kua || '')}"></div>
           <div class="col-12"><label class="form-label" for="pfh">Nomor HP / WA aktif <span class="text-danger">*</span></label>
             <input id="pfh" class="form-control" type="tel" inputmode="tel" maxlength="20" placeholder="mis. 081234567890" value="${esc(p?.no_hp)}">
             <div class="form-text">Nomor aktif yang dapat dihubungi lewat WhatsApp. Boleh diawali 08 atau +62.</div></div>
@@ -248,6 +256,22 @@ async function pagePegawai() {
         el('pfih').textContent = j === 'Honor' ? 'Pegawai Honor tidak memiliki NIP dan pangkat/golongan.'
           : j === 'PPPK Paruh Waktu' ? `Boleh dikosongkan bila belum memiliki NIP. Bila diisi harus 18 angka. Terisi ${n} angka.`
           : j ? `18 angka (spasi boleh). Terisi ${n} angka.` : 'Pilih jenis ASN terlebih dahulu.';
+      };
+      const syncTmt = () => {
+        const j = jenis(), tb = el('pft').value;
+        const adaTmt = ['PNS','PPPK','PPPK Paruh Waktu'].includes(j);
+        el('pftmt-wrap').classList.toggle('d-none', !adaTmt); el('pftmt').disabled = !adaTmt;
+        const kepala = !!tb && PEG_TAMBAHAN_JENIS.includes(j);
+        el('pftmtk-wrap').classList.toggle('d-none', !kepala); el('pftmtk').disabled = !kepala;
+        if (!adaTmt) el('pftmt').value = '';
+        if (!kepala) el('pftmtk').value = '';
+      };
+      const syncPensiun = force => {
+        if (force || el('pfus').value === 'AUTO') {
+          const usia = pegPensiun(el('pfb').value, el('pfi').value);
+          el('pfup').value = usia ?? '';
+          el('pfus').value = 'AUTO';
+        }
       };
       const tambahanInfo = () => {   // jabatan tambahan hanya untuk PNS dan PPPK; tampilkan siapa yang kini memegang di KUA ini
         const j = jenis(), s = el('pft'), kua = kuaForm(), boleh = PEG_TAMBAHAN_JENIS.includes(j), h = el('pfth');
@@ -269,18 +293,31 @@ async function pagePegawai() {
           : '<option value="">-</option>';
         g.disabled = i.disabled = !(j === 'PNS' || j === 'PPPK' || pw);
         if (j === 'Honor') i.value = '';
-        nipInfo(); tambahanInfo();
+        nipInfo(); tambahanInfo(); syncTmt(); syncPensiun(false);
       };
-      f.addEventListener('change', e => { if (e.target.name === 'pfj') syncJenis(); else if (e.target.id === 'pfk' || e.target.id === 'pft') tambahanInfo(); });
-      f.addEventListener('input', e => { e.target.classList.remove('is-invalid'); if (e.target.id === 'pfi') { pegNipIn(e.target); nipInfo(); } });
+      f.addEventListener('change', e => {
+        if (e.target.name === 'pfj') syncJenis();
+        else if (e.target.id === 'pfk' || e.target.id === 'pft') { tambahanInfo(); syncTmt(); }
+        else if (e.target.id === 'pfus' && e.target.value === 'AUTO') syncPensiun(true);
+      });
+      f.addEventListener('input', e => {
+        e.target.classList.remove('is-invalid');
+        if (e.target.id === 'pfi') { pegNipIn(e.target); nipInfo(); syncPensiun(false); }
+        else if (e.target.id === 'pfb') syncPensiun(false);
+        else if (e.target.id === 'pfup') el('pfus').value = 'MANUAL';
+      });
+      el('pfua').onclick = () => syncPensiun(true);
       el('pfh').onblur = () => { el('pfh').value = pegHp(el('pfh').value); };
-      syncJenis(true);
+      syncJenis(true); syncTmt(); if (!el('pfup').value) syncPensiun(true);
       d.querySelector('[data-x]').onclick = () => d.close();
 
       const salah = (c, m) => { c.classList.add('is-invalid'); c.focus(); el('pfmsg').innerHTML = note(m); return null; };
       const cek = () => {   // sama dengan pegawai_guard (bop.sql); database tetap memeriksa ulang
         const nama = el('pfn').value.replace(/\s+/g, ' ').trim(), jab = el('pfb').value.replace(/\s+/g, ' ').trim(), j = jenis(), hp = pegHp(el('pfh').value);
         const nip = el('pfi').value.replace(/\D/g, ''), gol = el('pfg').value, kua = kuaForm(), tb = PEG_TAMBAHAN_JENIS.includes(j) ? el('pft').value : '';
+        const usia = el('pfup').value ? Number(el('pfup').value) : null;
+        const tmtKua = ['PNS','PPPK','PPPK Paruh Waktu'].includes(j) ? (el('pftmt').value || null) : null;
+        const tmtKepala = tb ? (el('pftmtk').value || null) : null;
         el('pfmsg').innerHTML = '';
         if (!kua) return salah(el('pfk'), 'Pilih KUA pegawai.');
         if (!nama) return salah(el('pfn'), 'Nama lengkap wajib diisi.');
@@ -296,8 +333,11 @@ async function pagePegawai() {
         if (pegJabatanLama(jab)) return salah(el('pfb'), 'Kepala KUA dan Plt. Kepala KUA adalah jabatan tambahan. Isi kolom Jabatan dengan jabatan fungsional pegawai (mis. Penghulu atau Penyuluh), lalu pilih Kepala KUA di Jabatan Tambahan.');
         const b = tb && pegang(tb, kua);
         if (b) return salah(el('pft'), `${tb} di KUA ini sudah dijabat oleh ${pegAkhir(b.nama)}. Lepaskan jabatan tambahan itu dari ${b.nama} terlebih dahulu (ubah data pegawainya), lalu tetapkan di sini.`);
+        if (usia !== null && (!Number.isInteger(usia) || usia < 40 || usia > 75)) return salah(el('pfup'), 'Usia pensiun harus berupa angka 40 sampai 75 tahun.');
         if (!/^08\d{8,12}$/.test(hp)) return salah(el('pfh'), 'Nomor HP/WA tidak valid. Isi nomor aktif 10 sampai 14 angka yang diawali 08 (contoh 081234567890) atau +62.');
-        return { kua, data: { nama, jenis_asn: j, nip: j === 'Honor' ? null : (nip || null), pangkat_golongan: j === 'Honor' ? null : (gol || null), jabatan: jab, jabatan_tambahan: tb || null, no_hp: hp } };
+        return { kua, data: { nama, jenis_asn: j, nip: j === 'Honor' ? null : (nip || null), pangkat_golongan: j === 'Honor' ? null : (gol || null), jabatan: jab, jabatan_tambahan: tb || null, no_hp: hp,
+          usia_pensiun: usia, sumber_usia_pensiun: usia === null ? null : el('pfus').value, tmt_kua: tmtKua, tmt_kepala_kua: tmtKepala,
+          operator_simkah: el('pfos').checked, operator_bop: el('pfob').checked } };
       };
       const kirim = async lagi => {
         const v = cek();
@@ -317,7 +357,7 @@ async function pagePegawai() {
         if (!lagi) return d.close();
         const kua = el('pfk')?.value;   // tambah lagi: kosongkan isian, KUA pilihan Admin tetap
         f.reset(); if (kua != null && el('pfk')) el('pfk').value = kua;
-        syncJenis(); el('pfmsg').innerHTML = note(`${v.data.nama} tersimpan. Isi pegawai berikutnya.`, 'success'); el('pfn').focus();
+        syncJenis(); syncTmt(); syncPensiun(true); el('pfmsg').innerHTML = note(`${v.data.nama} tersimpan. Isi pegawai berikutnya.`, 'success'); el('pfn').focus();
       };
       f.onsubmit = e => { e.preventDefault(); kirim(false); };
       if (el('pfmx')) el('pfmx').onclick = () => kirim(true);
