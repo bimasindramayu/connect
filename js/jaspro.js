@@ -1591,10 +1591,13 @@ async function jpSave(patch) {
 
 async function pageJaspro() {
   $('view').innerHTML = `<div class="jp" id="jroot">
-    <div id="jhead"></div>
+    <div class="jp-heading">
+      <div><h4>Jaspro Transport</h4><p>Kelola laporan nominatif, periksa pembayaran, dan lihat arsip bulanan.</p></div>
+      <span id="jstat" class="badge bg-label-secondary">Memuat…</span>
+    </div>
+    <nav class="jp-nav" id="jnav" aria-label="Menu Jaspro Transport"></nav>
     <div id="jmsg" aria-live="polite"></div>
-    <div id="jsteps"></div>
-    <div id="jpanel"><div class="jp-loading"><span class="spinner-border spinner-border-sm me-2"></span>Memuat data Jaspro Transport…</div></div>
+    <div id="jpanel"><div class="jp-loading">Memuat data Jaspro Transport…</div></div>
   </div>`;
   if(!J.on||REFRESH_PAGE_DATA){
     const [{data:masterData,error:masterError},{data:periods,error:periodError}]=await Promise.all([
@@ -1613,88 +1616,46 @@ async function pageJaspro() {
   r.ondrop=e=>{if(e.target.closest('.jp-drop')){e.preventDefault();jpLaporan(e.dataTransfer.files[0]);}};
   jpRender();
 }
-
 function jpRender() {
-  const done = {
-    input: !!J.laporan?.rows?.length,
-    master: J.master.length > 0,
-    proses: !!J.rows,
-    riwayat: J.periods.some(p => p.laporan)
-  };
-  const S = [
-    ['input', 'Unggah Laporan', 'Pilih periode dan file Excel'],
-    ['master', 'Master Rekening', 'Siapkan data rekening penghulu'],
-    ['proses', 'Proses & Unduh', 'Validasi lalu buat laporan'],
-    ['riwayat', 'Riwayat Tahunan', 'Lihat arsip per bulan']
-  ];
-  $('jhead').innerHTML = `<div class="jp-page-head">
-    <div><span class="jp-kicker">PENGELOLAAN JASA PROFESI PENGHULU</span><h4>Jaspro Transport</h4>
-      <p>Unggah laporan, cocokkan rekening, periksa nominal, lalu unduh hasilnya.</p></div>
-    <span id="jstat" class="jp-save-state"><i class="bx bx-check-circle"></i> Tersimpan</span>
-  </div>`;
-  $('jsteps').innerHTML = `<div class="card jp-step-card mb-4"><div class="card-body">
-    <div class="jp-step-heading"><span class="jp-kicker">ALUR KERJA</span><small>Pilih tahapan yang ingin dikerjakan</small></div>
-    <nav class="jp-steps" aria-label="Tahapan Jaspro Transport">${S.map(([k,t,sub],i)=>
-      `<button type="button" class="jp-step${J.tab===k?' on':''}${done[k]?' done':''}" data-act="tab" data-tab="${k}" aria-current="${J.tab===k?'step':'false'}">
-        <span class="n">${done[k]?'<i class="bx bx-check"></i>':i+1}</span>
-        <span class="jp-step-copy"><strong>${t}</strong><small>${sub}</small></span>
-        <span class="jp-step-status">${J.tab===k?'Dibuka':done[k]?'Selesai':'Belum'}</span>
-      </button>`).join('')}</nav>
-  </div></div>`;
-  if (J.tab === 'proses') jpUrutRiwayat();
-  $('jpanel').innerHTML = { input: pIn, master: pMa, proses: pPr, riwayat: pRiwayat }[J.tab]();
-  if (J.tab === 'proses') { jpProcBtn(); jpReview(); }
+  const tabs=[['input','Laporan & Proses'],['master','Master Rekening'],['riwayat','Riwayat']];
+  $('jnav').innerHTML=tabs.map(([key,label])=>`<button type="button" data-act="tab" data-tab="${key}" aria-pressed="${J.tab===key?'true':'false'}">${label}</button>`).join('');
+  if(J.tab==='input')jpUrutRiwayat();
+  $('jpanel').innerHTML={input:pWork,master:pMa,riwayat:pRiwayat}[J.tab]();
+  if(J.tab==='input'){jpProcBtn();jpReview();}
 }
 
 /* ---- Langkah 1: Input Laporan Nominatif ---- */
 const pIn = () => {
-  const R = J.laporan?.rows || [],
-    u = new Set(R.map(r => JX.normalizeCoreName(r.nama) || r.nama)).size,
-    tp = R.reduce((s, r) => s + (r.jumlahPeristiwa || 0), 0),
-    bt = R.filter(r => JX.tglSah(r.tanggal)).length;
-  const tersimpan = !!J.laporan;
-  return `<div class="card jp-panel"><div class="card-body">
-    <div class="jp-section-head">
-      <div><span class="jp-kicker">TAHAP 1 · INPUT DATA</span><h5>Unggah Laporan Nominatif</h5>
-        <p>Pilih bulan dan tahun laporan, kemudian unggah file Excel dari rekap nominatif.</p></div>
-      <span class="badge ${tersimpan?'bg-label-success':'bg-label-secondary'}">${tersimpan?'<i class="bx bx-check-circle me-1"></i>Arsip tersedia':'Menunggu unggahan'}</span>
+  const R=J.laporan?.rows||[];
+  const peristiwa=R.reduce((n,r)=>n+(Number(r.jumlahPeristiwa)||0),0);
+  const penghulu=new Set(R.map(r=>JX.normalizeCoreName(r.nama)||r.nama)).size;
+  const tersimpan=!!J.laporan,tanggalBuruk=Number(J.laporan?.tanggalTakSah)||0;
+  return `<section class="jp-section">
+    <div class="jp-section-title"><h5>Laporan nominatif</h5><p>Pilih periode dan unggah file Excel (.xlsx).</p></div>
+    <div class="jp-period-row">
+      <div><label class="form-label" for="jp-bulan">Bulan laporan</label><select id="jp-bulan" class="form-select" data-period="bulan">${JX.BULAN_LIST.map(b=>`<option value="${b}"${b===J.set.bulan?' selected':''}>${b[0]+b.slice(1).toLowerCase()}</option>`).join('')}</select></div>
+      <div><label class="form-label" for="jp-tahun">Tahun laporan</label><input id="jp-tahun" class="form-control" type="number" min="1900" max="2200" step="1" data-period="tahun" value="${esc(J.set.tahun)}"></div>
+      <div class="jp-period-current"><span>Periode aktif</span><strong>${esc(jpPeriodLabel(J.periodId))}</strong></div>
     </div>
-    <div class="jp-period-box">
-      <div class="jp-period-fields">
-        <div><label class="form-label" for="jp-bulan">Bulan laporan</label><select id="jp-bulan" class="form-select" data-period="bulan">${JX.BULAN_LIST.map(b => `<option value="${b}"${b === J.set.bulan ? ' selected' : ''}>${b[0] + b.slice(1).toLowerCase()}</option>`).join('')}</select></div>
-        <div><label class="form-label" for="jp-tahun">Tahun laporan</label><input id="jp-tahun" class="form-control" type="number" min="1900" max="2200" step="1" data-period="tahun" value="${esc(J.set.tahun)}"></div>
-      </div>
-      <div class="jp-period-status"><i class="bx bx-calendar-check"></i><div><small>PERIODE AKTIF</small><strong>${esc(jpPeriodLabel(J.periodId))}</strong><span>${tersimpan?'Sudah memiliki laporan tersimpan.':'Belum ada laporan untuk periode ini.'}</span></div></div>
-    </div>
-    ${tersimpan?'<div class="alert alert-info jp-help-alert"><i class="bx bx-info-circle me-1"></i>Unggah file baru pada periode yang sama untuk memperbarui laporan. Arsip periode lain tidak akan berubah.</div>':''}
-    <div class="jp-upload-layout">
-      <div class="jp-upload-main">
-        <button type="button" class="jp-drop" data-act="upl">
-          <span class="jp-upload-icon"><i class="bx bx-cloud-upload"></i></span>
-          <strong>${tersimpan?'Pilih file untuk mengganti laporan':'Pilih file Excel laporan'}</strong>
-          <span>Seret file .xlsx ke area ini atau klik untuk memilih dari perangkat</span>
-          <span class="jp-upload-cta"><i class="bx bx-folder-open me-1"></i>Pilih File Excel</span>
-        </button>
-        <input type="file" id="jfl" accept=".xlsx" hidden>
-        <p class="jp-file-note"><i class="bx bx-lock-alt me-1"></i>File diproses di aplikasi dan disimpan sebagai arsip untuk periode yang dipilih.</p>
-      </div>
-      <div class="jp-format-guide">
-        <div class="jp-format-title">Panduan kolom file</div>
-        <div class="jp-format-grid">
-          <div><b>G · Peristiwa</b><span>Jumlah peristiwa nikah/rujuk.</span></div>
-          <div><b>H · Jasa Profesi</b><span>Total Jaspro untuk seluruh peristiwa pada baris.</span></div>
-          <div><b>I · Transport</b><span>Total Transport untuk seluruh peristiwa pada baris.</span></div>
-          <div><b>J · Diterima</b><span>Nilai bruto pembanding (H + I), sebelum PPh.</span></div>
+    <div class="jp-upload-row">
+      <div class="jp-file-status"><i class="bx ${tersimpan?'bx-file-check':'bx-file-plus'}" aria-hidden="true"></i>
+        <div><strong>${tersimpan?'Laporan tersimpan':'Belum ada laporan'}</strong>
+          <span>${tersimpan?`${esc(J.laporan.fileName||'File Excel')} · ${R.length.toLocaleString('id-ID')} baris`:'Pilih file nominatif berformat .xlsx untuk periode ini.'}</span>
         </div>
-        <p class="small text-body-secondary mb-0 mt-2">Kolom wajib lain: Nama Penghulu, KUA, NIP, dan Golongan. Nomor rekening serta tanggal bersifat opsional.</p>
       </div>
+      <input type="file" id="jfl" accept=".xlsx" hidden>
+      <button type="button" class="btn btn-primary" data-act="upl"><i class="bx bx-upload me-1"></i>${tersimpan?'Ganti File':'Pilih File Excel'}</button>
     </div>
-    ${R.length ? `<div class="jp-loaded-head"><div><h6>Pratinjau file tersimpan</h6><p>${esc(J.laporan.fileName)} · ${R.length.toLocaleString('id-ID')} baris</p></div><button class="btn btn-sm btn-outline-danger" data-act="clr"><i class="bx bx-trash me-1"></i>Hapus Laporan</button></div>
-      <div class="row g-3 mb-3">${jpCard('bx-list-ul','primary',R.length,'Baris laporan')}${jpCard('bx-user','info',u,'Penghulu')}${jpCard('bx-calendar-check','success',tp,'Total peristiwa')}${bt?jpCard('bx-calendar','warning',bt,'Baris bertanggal'):''}</div>
-      ${J.laporan.tanggalTakSah ? `<div class="alert alert-warning py-2">${J.laporan.tanggalTakSah} baris memiliki tanggal yang tidak terbaca dan akan menggunakan tanggal acuan. Contoh format: 15/10/2026 atau 2026-10-15.</div>` : ''}
-      <div class="jp-table-wrap"><div class="scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th>${bt ? '<th>Tanggal</th>' : ''}<th class="text-end">Peristiwa (G)</th><th class="text-end">Jaspro total (H)</th><th class="text-end">Jaspro/peristiwa</th><th class="text-end">Transport total (I)</th><th class="text-end">Transport/peristiwa</th><th class="text-end">Diterima file (J)</th></tr></thead>
-      <tbody>${R.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td><td>${esc(r.golongan)}</td>${bt ? `<td class="text-nowrap">${JX.tglSah(r.tanggal) ? JX.tglID(r.tanggal) : '<span class="text-body-secondary">–</span>'}</td>` : ''}<td class="text-end">${esc(r.jumlahPeristiwa)}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(r.jasproTotalSumber || 0))}</td><td class="text-end text-nowrap">Rp ${rp(r.jumlahPeristiwa>0?Math.round(r.jasproTotalSumber/r.jumlahPeristiwa):0)}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(r.transportTotalSumber || 0))}</td><td class="text-end text-nowrap">Rp ${rp(r.jumlahPeristiwa>0?Math.round(r.transportTotalSumber/r.jumlahPeristiwa):0)}</td><td class="text-end text-nowrap">${r.jumlahDiterimaSumber == null ? "–" : "Rp " + rp(Math.round(r.jumlahDiterimaSumber))}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
-  </div></div>`;
+    ${tersimpan?`<div class="jp-report-summary"><span>${penghulu.toLocaleString('id-ID')} penghulu</span><span>${peristiwa.toLocaleString('id-ID')} peristiwa</span>
+      <button type="button" class="btn btn-sm btn-outline-danger" data-act="clr">Hapus laporan periode ini</button></div>`:''}
+    <p class="jp-source-note">Kolom file: <b>G</b> jumlah peristiwa · <b>H</b> total Jaspro bruto · <b>I</b> total Transport bruto · <b>J</b> pembanding bruto (H + I). PPh dipotong setelah nilai bruto dihitung.</p>
+    ${tanggalBuruk?`<div class="alert alert-warning">${tanggalBuruk.toLocaleString('id-ID')} baris memiliki tanggal yang tidak terbaca dan akan menggunakan tanggal acuan.</div>`:''}
+    ${R.length?`<details class="jp-source-details"><summary>Lihat isi file (${R.length.toLocaleString('id-ID')} baris)</summary>
+      <div class="jp-table-wrap"><div class="scroll"><table class="table table-hover align-middle mb-0">
+        <thead><tr><th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Tanggal</th><th class="text-end">Peristiwa (G)</th><th class="text-end">Jaspro total (H)</th><th class="text-end">Jaspro / peristiwa</th><th class="text-end">Transport total (I)</th><th class="text-end">Transport / peristiwa</th><th class="text-end">Diterima file (J)</th></tr></thead>
+        <tbody>${R.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td><td>${esc(r.golongan)}</td><td class="text-nowrap">${JX.tglSah(r.tanggal)?JX.tglID(r.tanggal):'–'}</td><td class="text-end">${r.jumlahPeristiwa}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(r.jasproTotalSumber||0))}</td><td class="text-end text-nowrap">Rp ${rp(r.jumlahPeristiwa>0?Math.round(r.jasproTotalSumber/r.jumlahPeristiwa):0)}</td><td class="text-end text-nowrap">Rp ${rp(Math.round(r.transportTotalSumber||0))}</td><td class="text-end text-nowrap">Rp ${rp(r.jumlahPeristiwa>0?Math.round(r.transportTotalSumber/r.jumlahPeristiwa):0)}</td><td class="text-end text-nowrap">${r.jumlahDiterimaSumber==null?'–':'Rp '+rp(Math.round(r.jumlahDiterimaSumber))}</td></tr>`).join('')}</tbody>
+      </table></div></div></details>`:''}
+  </section>`;
 };
 
 async function jpLaporan(f) {
@@ -1732,25 +1693,28 @@ const jpMRows = () => {
 };
 const jpMCount = n => `Total: ${J.master.length} penghulu${J.q ? ' · ' + n + ' cocok pencarian' : ''}`;
 const pMa = () => {
-  const r = jpMRows();
-  return `<div class="card jp-panel"><div class="card-body">
-    <div class="jp-section-head">
-      <div><span class="jp-kicker">TAHAP 2 · DATA REKENING</span><h5>Master Rekening Penghulu</h5>
-        <p>Data nama dan nomor rekening digunakan untuk melengkapi laporan pembayaran.</p></div>
-      <span class="badge bg-label-primary">${J.master.length.toLocaleString('id-ID')} data</span>
-    </div>
+  const r=jpMRows();
+  return `<section class="jp-section">
+    <div class="jp-section-title"><h5>Master Rekening Penghulu</h5><p>Data ini dipakai untuk mencocokkan nama dan nomor rekening pada laporan nominatif.</p></div>
     <div class="jp-master-toolbar">
-      <div class="input-group jp-search"><span class="input-group-text"><i class="bx bx-search"></i></span><input id="jq" type="search" class="form-control" aria-label="Cari nama penghulu" placeholder="Cari nama penghulu…" value="${esc(J.q)}"></div>
-      <div class="jp-toolbar-actions"><input type="file" id="jfm" accept=".xlsx" hidden>
-        <button class="btn btn-outline-secondary" data-act="mimp"><i class="bx bx-upload me-1"></i>Impor Excel</button>
-        <button class="btn btn-outline-secondary" data-act="mexp"><i class="bx bx-download me-1"></i>Ekspor Excel</button>
-        <button class="btn btn-primary" data-act="madd"><i class="bx bx-plus me-1"></i>Tambah Penghulu</button>
+      <div class="jp-search"><label class="form-label" for="jq">Cari penghulu</label>
+        <div class="input-group"><input id="jq" type="search" class="form-control" placeholder="Ketik nama penghulu…" value="${esc(J.q)}" aria-label="Cari penghulu">
+          <button type="button" id="jmclear" class="btn btn-outline-secondary" data-act="mclear" aria-label="Hapus pencarian" ${J.q?'':'disabled'}>Hapus</button></div>
+      </div>
+      <div class="jp-master-actions"><input type="file" id="jfm" accept=".xlsx" hidden>
+        <button type="button" class="btn btn-outline-secondary" data-act="mimp">Impor Excel</button>
+        <button type="button" class="btn btn-outline-secondary" data-act="mexp">Ekspor Excel</button>
+        <button type="button" class="btn btn-primary" data-act="madd">Tambah Penghulu</button>
       </div>
     </div>
-    <div class="jp-master-note"><i class="bx bx-info-circle me-1"></i>Nama pada laporan akan dicocokkan dengan daftar ini secara otomatis. Periksa nomor rekening dan nama pemilik sebelum memproses pembayaran.</div>
-    ${J.master.length ? `<div class="jp-table-wrap"><div class="scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>Nama Penghulu</th><th>Nama Pemilik Rekening</th><th>Nomor Rekening</th><th class="text-end">Aksi</th></tr></thead><tbody id="jmt">${r.html}</tbody></table></div></div><div class="jp-table-foot" id="jmc">${jpMCount(r.n)}</div>`
-      : `<div class="jp-empty-state"><span class="jp-empty-icon"><i class="bx bx-id-card"></i></span><h6>Master rekening masih kosong</h6><p>Tambahkan data satu per satu atau impor file Excel dengan kolom Nama, NamaPemilik, dan NomorRekening.</p><button class="btn btn-outline-secondary" data-act="madd"><i class="bx bx-plus me-1"></i>Tambah Manual</button></div>`}
-  </div></div>`;
+    <div class="jp-master-count" id="jmc">${jpMCount(r.n)}</div>
+    ${J.master.length?`<div class="jp-table-wrap"><div class="scroll"><table class="table table-hover align-middle mb-0">
+      <thead><tr><th>Nama Penghulu</th><th>Nama Pemilik Rekening</th><th>Nomor Rekening</th><th class="text-end">Aksi</th></tr></thead><tbody id="jmt">${r.html}</tbody>
+    </table></div></div>`:`<div class="jp-empty-state"><p>Master Rekening belum memiliki data. Impor file Excel atau tambahkan penghulu secara manual.</p>
+      <button type="button" class="btn btn-outline-secondary" data-act="mimp">Impor Excel</button>
+      <button type="button" class="btn btn-primary" data-act="madd">Tambah Penghulu</button>
+    </div>`}
+  </section>`;
 };
 
 function jpMForm(id) {
@@ -1896,43 +1860,38 @@ function jpUrutRiwayat() {   // perubahan yang tanggalnya sah diurutkan naik; ba
   J.set.tarifRiwayat = L.map(([e]) => e);
 }
 const pPr = () => {
-  const f = (k, l, n, c = 'col-sm-6 col-lg-3') => `<div class="${c}"><label class="form-label" for="jp-set-${k}">${l}</label><input id="jp-set-${k}" class="form-control" ${n ? 'type="number" min="0" data-n' : 'type="text"'} data-s="${k}" value="${esc(J.set[k])}"></div>`;
-  const siapLaporan = !!J.laporan?.rows?.length, siapMaster = J.master.length > 0;
-  return `<div class="card jp-panel mb-4"><div class="card-body">
-    <div class="jp-section-head">
-      <div><span class="jp-kicker">TAHAP 3 · VALIDASI DAN UNDUH</span><h5>Proses Laporan</h5>
-        <p>Periksa kecocokan data dan nilai bruto sebelum membuat file pembayaran.</p></div>
-      <span class="badge bg-label-info">${esc(jpPeriodLabel(J.periodId))}</span>
-    </div>
-    <div class="jp-readiness">
-      <div class="${siapLaporan?'is-ready':''}"><i class="bx ${siapLaporan?'bx-check-circle':'bx-time-five'}"></i><span><b>Laporan nominatif</b><small>${siapLaporan?J.laporan.rows.length.toLocaleString('id-ID')+' baris sudah dimuat':'Belum diunggah'}</small></span></div>
-      <div class="${siapMaster?'is-ready':''}"><i class="bx ${siapMaster?'bx-check-circle':'bx-time-five'}"></i><span><b>Master rekening</b><small>${siapMaster?J.master.length.toLocaleString('id-ID')+' data tersedia':'Belum ada data rekening'}</small></span></div>
-    </div>
-    <details class="jp-settings">
-      <summary><span><i class="bx bx-slider-alt me-2"></i>Pengaturan PPh dan tanda tangan</span><small>Atur sebelum mengunduh laporan</small></summary>
+  const f=(k,l)=>`<div class="col-sm-6 col-lg-3"><label class="form-label" for="jp-set-${k}">${l}</label><input id="jp-set-${k}" class="form-control" type="number" min="0" step="any" data-s="${k}" data-n value="${esc(J.set[k])}"></div>`;
+  return `<section class="jp-section jp-process-section">
+    <div class="jp-section-title"><h5>Pemeriksaan dan unduh</h5><p>Cocokkan nama serta rekening, lalu periksa nominal sebelum mengunduh laporan.</p></div>
+    <div class="jp-master-status"><span>Master Rekening</span><strong>${J.master.length.toLocaleString('id-ID')} data</strong>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-act="tab" data-tab="master">Kelola rekening</button></div>
+    <details class="jp-settings"><summary>Pengaturan PPh dan tanda tangan</summary>
       <div class="jp-settings-body">
-        <h6>Tarif PPh Jasa Profesi (%)</h6>
-        <p class="small text-body-secondary">PPh dipotong dari Jasa Profesi sesuai golongan. Transport tidak dikenakan PPh. Pengaturan tersimpan khusus untuk periode ini.</p>
-        <div class="row g-3 mb-4">${f('pphII', 'PNS Golongan II', 1)}${f('pphIII', 'PNS Golongan III', 1)}${f('pphIV', 'PNS Golongan IV', 1)}${f('pphPPPK', 'PPPK Golongan IX', 1)}</div>
-        <h6>Tempat dan tanggal laporan</h6>
-        <div class="row g-3 mb-4">${f('tempatTanggal', 'Tempat & tanggal', 0, 'col-sm-6 col-lg-4')}</div>
-        <h6>Identitas penandatangan</h6>
-        <div class="row g-3">${[['kpa', 'Kuasa Pengguna Anggaran'], ['ppk', 'Pejabat Pembuat Komitmen'], ['bendahara', 'Bendahara']].map(([p, t]) => `<div class="col-lg-4"><div class="jp-sign-box"><div class="fw-semibold mb-2">${t}</div>${[['Jabatan', 'Jabatan'], ['Nama', 'Nama'], ['Nip', 'NIP']].map(([k, l]) => `<label class="form-label mt-2 mb-1" for="jp-set-${p+k}">${l}</label><input id="jp-set-${p+k}" class="form-control form-control-sm" data-s="${p+k}" value="${esc(J.set[p+k])}">`).join('')}</div></div>`).join('')}</div>
+        <p>PPh dipotong dari Jaspro sesuai golongan. Transport tidak dikenakan PPh. Pengaturan tersimpan untuk periode ${esc(jpPeriodLabel(J.periodId))}.</p>
+        <h6>Tarif PPh Jasa Profesi (%)</h6><div class="row g-3 mb-4">${f('pphII','PNS Golongan II')}${f('pphIII','PNS Golongan III')}${f('pphIV','PNS Golongan IV')}${f('pphPPPK','PPPK Golongan IX')}</div>
+        <h6>Tempat dan tanggal laporan</h6><div class="row g-3 mb-4"><div class="col-sm-6 col-lg-4"><label class="form-label" for="jp-set-tempatTanggal">Tempat &amp; tanggal</label><input id="jp-set-tempatTanggal" class="form-control" data-s="tempatTanggal" value="${esc(J.set.tempatTanggal)}"></div></div>
+        <h6>Penandatangan</h6><div class="row g-3">${[['kpa','Kuasa Pengguna Anggaran'],['ppk','Pejabat Pembuat Komitmen'],['bendahara','Bendahara']].map(([p,t])=>`<div class="col-lg-4"><div class="jp-sign-box"><strong>${t}</strong>${[['Jabatan','Jabatan'],['Nama','Nama'],['Nip','NIP']].map(([k,l])=>`<label class="form-label mt-3" for="jp-set-${p+k}">${l}</label><input id="jp-set-${p+k}" class="form-control" data-s="${p+k}" value="${esc(J.set[p+k])}">`).join('')}</div></div>`).join('')}</div>
       </div>
     </details>
-    <div class="jp-action-bar">
-      <div><strong>Siap memeriksa laporan?</strong><p id="jph" class="mb-0 small text-body-secondary">Data akan dicocokkan dengan Master Rekening.</p></div>
-      <button class="btn btn-primary btn-lg" id="jpb" data-act="proc"><i class="bx bx-check-double me-1"></i>Cocokkan dan Tampilkan Hasil</button>
-    </div>
-  </div></div><div id="jrev"></div>`;
+    <div class="jp-process-action"><div><strong>Periksa laporan</strong><p id="jph" class="mb-0">Hasil belum dihitung.</p></div>
+      <button type="button" class="btn btn-primary" id="jpb" data-act="proc"><i class="bx bx-check me-1"></i><span id="jpb-label">Cocokkan dan tampilkan hasil</span></button></div>
+  </section><div id="jrev"></div>`;
 };
+function pWork(){return pIn()+pPr();}
 
 function jpProcBtn() {
-  const b = $('jpb'); if (!b) return;
-  const l = J.laporan?.rows?.length, m = J.master.length;
-  b.disabled = !(l && m);
-  $('jph').textContent = !l && !m ? 'Lengkapi Input Laporan dan Master Rekening terlebih dahulu.' : !l ? 'Unggah Laporan Nominatif terlebih dahulu.' : !m ? 'Tambahkan data Master Rekening terlebih dahulu.' : J.stale && J.rows ? 'Data sumber berubah — klik untuk memperbarui pratinjau.' : '';
+  const b=$('jpb'),hint=$('jph'),label=$('jpb-label');
+  if(!b||!hint||!label)return;
+  const adaLaporan=!!J.laporan?.rows?.length,adaMaster=J.master.length>0;
+  b.disabled=!(adaLaporan&&adaMaster);
+  if(!adaLaporan)hint.textContent='Unggah laporan nominatif terlebih dahulu.';
+  else if(!adaMaster)hint.textContent='Tambahkan atau impor Master Rekening terlebih dahulu.';
+  else if(J.stale&&J.rows)hint.textContent='Ada perubahan yang belum dihitung ulang.';
+  else if(J.rows)hint.textContent='Data siap diperiksa ulang atau diunduh.';
+  else hint.textContent='Laporan dan Master Rekening siap dicocokkan.';
+  label.textContent=J.rows?'Perbarui hasil pemeriksaan':'Cocokkan dan tampilkan hasil';
 }
+
 function jpProcess() {
   const ix = JX.buildMasterIndex(J.master);
   J.rows = J.laporan.rows.map(r => {
@@ -1942,32 +1901,51 @@ function jpProcess() {
   J.stale = false; jpRender(); $('jrev').scrollIntoView({ behavior: 'smooth' });
 }
 function jpReview() {
-  const R = J.rows, h = $('jrev'); if (!h) return;
-  if (!R) return h.innerHTML = '';
-  const sum = k => R.reduce((s, r) => s + r[k], 0),
-    ok = R.filter(r => r.matchStatus === 'OTOMATIS').length,
-    bad = R.filter(r => !['OTOMATIS', 'MANUAL'].includes(r.matchStatus)).length;
-  const adaTgl = R.some(r => JX.tglSah(r.tanggal)), cekJ = R.filter(r => r.jumlahDiterimaSumber != null), bedaJ = cekJ.filter(r => !r.jumlahDiterimaCocok).length;
-  h.innerHTML = `<div class="jp-review-head"><div><span class="jp-kicker">HASIL PEMERIKSAAN</span><h5>Pratinjau Hasil Pencocokan</h5><p>Pastikan status rekening, golongan, jumlah peristiwa, dan kesesuaian nilai sudah benar.</p></div><span class="badge bg-label-${bad?'warning':'success'}">${bad?bad+' perlu ditinjau':'Pencocokan otomatis selesai'}</span></div>
-    <div class="row g-3 mb-4">${jpCard('bx-list-ul', 'primary', R.length, 'Total baris')}${jpCard('bx-check-circle', 'success', ok, 'Cocok otomatis')}${jpCard('bx-error', bad ? 'warning' : 'success', bad, 'Perlu ditinjau')}${jpCard('bx-wallet', 'info', 'Rp ' + rp(Math.round(sum('jasproDiterima'))), 'Jaspro bersih setelah PPh')}${jpCard('bx-bus', 'info', 'Rp ' + rp(Math.round(sum('transpoSubtotal'))), 'Transport bruto')}${jpCard('bx-check-double', bedaJ ? 'warning' : 'success', cekJ.length ? (cekJ.length - bedaJ) + '/' + cekJ.length : '–', 'Nilai J sesuai')}</div>
-    <div class="card jp-panel mb-3"><div class="card-body">
-      <div class="jp-table-caption"><div><h6>Rincian per penghulu</h6><p>Kolom J pada file dibandingkan dengan jumlah bruto Jaspro + Transport sebelum PPh. Nilai dibayarkan bersih ditampilkan pada kolom terakhir.</p></div></div>
-      <div class="jp-table-wrap"><div class="scroll"><table class="table align-middle mb-0"><thead><tr><th>No</th><th>Nama</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Status cocok</th><th>No. Rekening</th><th>Nama Pemilik</th>${adaTgl ? '<th>Tanggal</th>' : ''}<th class="text-end">Peristiwa</th><th class="text-end">Jaspro bersih</th><th class="text-end">Transport bruto</th><th class="text-end">Diterima file (J)</th><th class="text-end">Hitung bruto</th><th>Pemeriksaan</th><th class="text-end">Dibayarkan bersih</th></tr></thead>
-      <tbody>${R.map((r, i) => {
-        const [c, l] = JST[r.matchStatus] || JST.TIDAK_DITEMUKAN, isBad = !['OTOMATIS', 'MANUAL'].includes(r.matchStatus), cd = r.candidates?.[0], unk = r.golClass === 'UNKNOWN';
-        return `<tr class="${isBad ? 'issue' : ''}"><td>${i + 1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td>
-          <td><input class="form-control form-control-sm jp-inline-edit" data-i="${i}" data-f="gol" value="${esc(r.golongan)}" aria-label="Golongan ${esc(r.nama)}"><span class="badge bg-label-${unk ? 'danger' : 'secondary'} mt-1">${unk ? '? tidak dikenali' : esc(JX.golonganLabel(r.golClass))}</span></td>
-          <td><span class="badge bg-label-${c}">${l}</span>${isBad && cd ? `<button class="btn btn-link btn-sm p-0 d-block text-start" data-act="use" data-i="${i}">Pakai: ${esc(cd.nama.slice(0, 22))}${cd.nama.length > 22 ? '…' : ''}</button>` : ''}</td>
+  const R=J.rows,h=$('jrev');if(!h)return;
+  if(!R){h.innerHTML='';return;}
+  const sum=k=>R.reduce((n,r)=>n+(Number(r[k])||0),0);
+  const cocok=R.filter(r=>['OTOMATIS','MANUAL'].includes(r.matchStatus)).length;
+  const perlu=R.length-cocok;
+  const cekJ=R.filter(r=>r.jumlahDiterimaSumber!=null);
+  const sesuaiJ=cekJ.filter(r=>r.jumlahDiterimaCocok).length;
+  const adaTgl=R.some(r=>JX.tglSah(r.tanggal));
+  const f=n=>'Rp '+rp(Math.round(Number(n)||0));
+  h.innerHTML=`<section class="jp-results">
+    <div class="jp-section-title"><h5>Hasil pemeriksaan</h5><p>${R.length.toLocaleString('id-ID')} baris laporan · ${cocok.toLocaleString('id-ID')} cocok · ${perlu.toLocaleString('id-ID')} perlu ditinjau</p></div>
+    ${J.stale?'<div class="jp-inline-warning">Data sumber atau pengaturan berubah. Klik “Perbarui hasil pemeriksaan” untuk menghitung ulang sebelum mengunduh.</div>':''}
+    <div class="jp-summary-grid">
+      <div><span>Jaspro bruto</span><strong>${f(sum('jasproSubtotal'))}</strong></div><div><span>PPh Jaspro</span><strong>${f(sum('jasproPph'))}</strong></div>
+      <div><span>Jaspro bersih</span><strong>${f(sum('jasproDiterima'))}</strong></div><div><span>Transport bruto</span><strong>${f(sum('transpoSubtotal'))}</strong></div>
+      <div><span>Total dibayarkan</span><strong>${f(sum('jumlahDiterimaBersih'))}</strong></div><div><span>Kolom J sesuai</span><strong>${cekJ.length?sesuaiJ.toLocaleString('id-ID')+'/'+cekJ.length.toLocaleString('id-ID'):'Tidak tersedia'}</strong></div>
+    </div>
+    <div class="jp-table-heading"><h6>Rincian per penghulu</h6><p>Nilai bruto dibandingkan dengan kolom J sebelum PPh. Pembayaran bersih sudah memperhitungkan potongan PPh.</p></div>
+    <div class="jp-table-wrap"><div class="scroll"><table class="table table-hover align-middle mb-0">
+      <thead><tr><th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Status cocok</th><th>Nomor Rekening</th><th>Nama Pemilik</th>${adaTgl?'<th>Tanggal</th>':''}<th class="text-end">Peristiwa</th><th class="text-end">Jaspro bruto</th><th class="text-end">PPh</th><th class="text-end">Jaspro bersih</th><th class="text-end">Transport bruto</th><th class="text-end">Diterima file (J)</th><th class="text-end">Hitung bruto</th><th>Pemeriksaan</th><th class="text-end">Dibayarkan bersih</th></tr></thead>
+      <tbody>${R.map((r,i)=>{
+        const [c,l]=JST[r.matchStatus]||JST.TIDAK_DITEMUKAN;
+        const isBad=!['OTOMATIS','MANUAL'].includes(r.matchStatus),cd=r.candidates?.[0],unk=r.golClass==='UNKNOWN';
+        return `<tr class="${isBad?'issue':''}">
+          <td>${i+1}</td><td>${esc(r.nama)}</td><td>${esc(r.kua)}</td><td>${esc(r.nip)}</td>
+          <td><input class="form-control form-control-sm jp-inline-edit" data-i="${i}" data-f="gol" value="${esc(r.golongan)}" aria-label="Golongan ${esc(r.nama)}"><span class="badge bg-label-${unk?'danger':'secondary'} mt-1">${unk?'Tidak dikenali':esc(JX.golonganLabel(r.golClass))}</span></td>
+          <td><span class="badge bg-label-${c}">${l}</span>${isBad&&cd?`<button type="button" class="btn btn-link btn-sm d-block p-0 mt-1" data-act="use" data-i="${i}">Gunakan ${esc(cd.nama.slice(0,24))}${cd.nama.length>24?'…':''}</button>`:''}</td>
           <td><input class="form-control form-control-sm jp-inline-edit jp-account-edit" list="jdl-list" data-i="${i}" data-f="rek" value="${esc(r.rekening)}" aria-label="Nomor rekening ${esc(r.nama)}"></td>
-          <td><input class="form-control form-control-sm jp-inline-edit jp-owner-edit" data-i="${i}" data-f="own" value="${esc(r.namaPemilik || '')}" placeholder="Sama dengan nama" aria-label="Nama pemilik rekening ${esc(r.nama)}"></td>
-          ${adaTgl ? `<td class="text-nowrap">${JX.tglSah(r.tanggal) ? JX.tglID(r.tanggal) : '<span class="text-body-secondary">–</span>'}</td>` : ''}
-          <td class="text-end">${esc(r.jumlahPeristiwa)}</td><td class="text-end text-nowrap">${rp(Math.round(r.jasproDiterima))}</td><td class="text-end text-nowrap">${rp(Math.round(r.transpoSubtotal))}</td><td class="text-end text-nowrap">${r.jumlahDiterimaSumber == null ? '–' : rp(Math.round(r.jumlahDiterimaSumber))}</td><td class="text-end text-nowrap fw-semibold">${rp(Math.round(r.jumlahDiterimaHitung))}</td><td>${r.jumlahDiterimaSumber == null ? '<span class="badge bg-label-secondary">Tidak ada di file</span>' : r.jumlahDiterimaCocok ? '<span class="badge bg-label-success">Sesuai</span>' : '<span class="badge bg-label-warning">Selisih Rp ' + rp(Math.abs(Math.round(r.selisihJumlahDiterima))) + '</span>'}</td><td class="text-end text-nowrap fw-semibold">${rp(Math.round(r.jumlahDiterimaBersih))}</td></tr>`;
-      }).join('')}</tbody></table></div></div>
-      <datalist id="jdl-list">${J.master.map(m => `<option value="${esc(m.noRekening)}">${esc(m.nama)}</option>`).join('')}</datalist>
-    </div></div>
-    <div class="jp-download-bar"><div><strong>Hasil sudah diperiksa?</strong><small>Unduh laporan lengkap atau file pembayaran terpisah.</small></div>
-      <div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-secondary" data-act="dct"><i class="bx bx-download me-1"></i>CSV Transport</button><button class="btn btn-outline-secondary" data-act="dcj"><i class="bx bx-download me-1"></i>CSV Jaspro</button><button class="btn btn-primary" data-act="dxl"><i class="bx bx-file me-1"></i>Unduh Laporan Excel</button></div>
-    </div>`;
+          <td><input class="form-control form-control-sm jp-inline-edit jp-owner-edit" data-i="${i}" data-f="own" value="${esc(r.namaPemilik||'')}" placeholder="Sama dengan nama" aria-label="Nama pemilik rekening ${esc(r.nama)}"></td>
+          ${adaTgl?`<td class="text-nowrap">${JX.tglSah(r.tanggal)?JX.tglID(r.tanggal):'–'}</td>`:''}
+          <td class="text-end">${Number(r.jumlahPeristiwa||0).toLocaleString('id-ID')}</td>
+          <td class="text-end text-nowrap">${f(r.jasproSubtotal)}</td><td class="text-end text-nowrap">${f(r.jasproPph)}</td><td class="text-end text-nowrap">${f(r.jasproDiterima)}</td>
+          <td class="text-end text-nowrap">${f(r.transpoSubtotal)}</td><td class="text-end text-nowrap">${r.jumlahDiterimaSumber==null?'–':f(r.jumlahDiterimaSumber)}</td>
+          <td class="text-end text-nowrap">${f(r.jumlahDiterimaHitung)}</td>
+          <td>${r.jumlahDiterimaSumber==null?'<span class="badge bg-label-secondary">Tidak ada di file</span>':r.jumlahDiterimaCocok?'<span class="badge bg-label-success">Sesuai</span>':'<span class="badge bg-label-warning">Selisih '+f(Math.abs(r.selisihJumlahDiterima))+'</span>'}</td>
+          <td class="text-end text-nowrap fw-semibold">${f(r.jumlahDiterimaBersih)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div></div>
+    <p class="jp-table-note">Geser tabel ke samping untuk melihat semua kolom. Perubahan Golongan, Nomor Rekening, dan Nama Pemilik hanya berlaku pada pratinjau ini; Master Rekening dapat dikelola pada menu tersendiri.</p>
+    <datalist id="jdl-list">${J.master.map(m=>`<option value="${esc(m.noRekening)}">${esc(m.nama)}</option>`).join('')}</datalist>
+    <div class="jp-download-bar"><div><strong>Unduh hasil</strong><p>Excel untuk laporan lengkap atau CSV terpisah untuk pembayaran.</p></div>
+      <div class="jp-download-actions"><button type="button" class="btn btn-outline-secondary" data-act="dcj">CSV Jaspro</button><button type="button" class="btn btn-outline-secondary" data-act="dct">CSV Transport</button><button type="button" class="btn btn-primary" data-act="dxl">Unduh Laporan Excel</button></div>
+    </div>
+  </section>`;
 }
 
 // Tarif (kind: xlsx = keduanya | jaspro | transpo) berubah di tengah bulan laporan?
