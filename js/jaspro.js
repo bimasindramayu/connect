@@ -1529,8 +1529,10 @@ function jpHitung(laporan,settings) {
   const rows=(laporan?.rows||[]).map(r=>({...r,...JX.classifyRow(r,settings||jpDef())}));
   const sum=k=>rows.reduce((n,r)=>n+(Number(r[k])||0),0);
   const jasproBruto=sum('jasproSubtotal'),pph=sum('jasproPph'),jaspro=sum('jasproDiterima'),transport=sum('transpoDiterima');
+  const mismatchRows=rows.filter(r=>r.jumlahDiterimaSumber!=null&&!r.jumlahDiterimaCocok);
   return {rows,penghulu:new Set(rows.map(r=>JX.normalizeCoreName(r.nama)+'|'+JX.normalizeCoreName(r.kua))).size,
-    peristiwa:sum('jumlahPeristiwa'),jasproBruto,pph,jaspro,transport,total:jaspro+transport};
+    peristiwa:sum('jumlahPeristiwa'),jasproBruto,pph,jaspro,transport,total:jaspro+transport,
+    mismatchCount:mismatchRows.length,sourceTotal:rows.reduce((n,r)=>n+(r.jumlahDiterimaSumber==null?0:r.jumlahDiterimaSumber),0)};
 }
 function jpLoadPeriod(id) {
   const record=J.periods.find(p=>p.id===id),[year,month]=String(id).split('-').map(Number),defaults=jpDef();
@@ -1817,10 +1819,8 @@ function jpUrutRiwayat() {   // perubahan yang tanggalnya sah diurutkan naik; ba
 const pPr = () => {
   const f = (k, l, n, c = 'col-sm-6 col-lg-3') => `<div class="${c}"><label class="form-label">${l}</label><input class="form-control" ${n ? 'type="number" min="0" data-n' : 'type="text"'} data-s="${k}" value="${esc(J.set[k])}"></div>`;
   return `<div class="card mb-4"><div class="card-body">
-    <h5 class="mb-1">Proses &amp; Unduh Laporan</h5><p class="mb-4">Atur tarif dan tanda tangan, cocokkan data, lalu unduh Excel (sheet JASPRO &amp; TRANSPO) atau CSV pencairan. Pengaturan tersimpan otomatis.</p>
-    <p class="small text-body-secondary mb-4">Periode aktif: <b>${esc(jpPeriodLabel(J.periodId))}</b>. Pengaturan tarif dan tanda tangan disimpan bersama arsip periode ini.</p>
-    <h6 class="text-uppercase small">Tarif per peristiwa <span class="fw-normal text-lowercase">· dapat berubah pada tanggal tertentu</span></h6>
-    ${pTarif()}
+    <h5 class="mb-1">Proses &amp; Unduh Laporan</h5><p class="mb-4">Tarif per peristiwa diambil dari file nominatif (kolom H untuk Jasa Profesi dan I untuk Transport). Aplikasi menghitung ulang jumlah peristiwa, PPh, dan nominal yang diterima sebelum membuat Excel atau CSV.</p>
+    <p class="small text-body-secondary mb-4">Periode aktif: <b>${esc(jpPeriodLabel(J.periodId))}</b>. Pengaturan PPh dan tanda tangan disimpan bersama arsip periode ini.</p>
     <h6 class="text-uppercase small">Tarif PPh Jasa Profesi (%) <span class="fw-normal text-lowercase">· transport tidak dikenakan PPh</span></h6>
     <div class="row g-3 mb-4">${f('pphII', 'PNS Golongan II', 1)}${f('pphIII', 'PNS Golongan III', 1)}${f('pphIV', 'PNS Golongan IV', 1)}${f('pphPPPK', 'PPPK Golongan IX', 1)}</div>
     <h6 class="text-uppercase small">Blok tanda tangan</h6>
@@ -1866,13 +1866,15 @@ function jpReview() {
 }
 // Tarif (kind: xlsx = keduanya | jaspro | transpo) berubah di tengah bulan laporan?
 function jpTarifBerubah(kind = 'xlsx') {
+  const legacyRows = (J.rows || []).filter(r => r.tarifJasproSumber == null || r.tarifTransportSumber == null);
+  if (!legacyRows.length) return false;
   const s = J.set;
   return JX.tarifSegmen(s, JX.awalBulan(s.bulan, s.tahun), JX.akhirBulan(s.bulan, s.tahun), kind === 'xlsx' ? undefined : kind === 'jaspro' ? 'jaspro' : 'transport').length > 1;
 }
-// Jumlah baris tanpa tanggal yang terpaksa memakai tanggal acuan padahal tarif berubah di tengah bulan; null bila tidak ada.
+// Hanya arsip lama tanpa tarif pada file yang masih menggunakan tarif historis dari pengaturan.
 function jpTarifTengah(kind) {
   if (!J.rows || !jpTarifBerubah(kind)) return null;
-  const n = J.rows.filter(r => !JX.tglSah(r.tanggal)).length;
+  const n = J.rows.filter(r => (r.tarifJasproSumber == null || r.tarifTransportSumber == null) && !JX.tglSah(r.tanggal)).length;
   return n ? { n, acuan: JX.tglID(JX.tanggalAcuan(J.set)) } : null;
 }
 function jpDl(kind) {   // kind: xlsx | jaspro | transpo
