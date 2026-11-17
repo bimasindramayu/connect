@@ -89,9 +89,11 @@ begin
 
   -- Validasi riwayat tarif, sama seperti pengaturan tarif pada tabel Jaspro lama.
   if new.settings ? 'tarifRiwayat' then
-    if jsonb_typeof(new.settings -> 'tarifRiwayat') is distinct from 'array'
-       or jsonb_array_length(new.settings -> 'tarifRiwayat') > 100 then
-      raise exception 'Riwayat tarif harus berupa daftar maksimal 100 perubahan.';
+    if jsonb_typeof(new.settings -> 'tarifRiwayat') is distinct from 'array' then
+      raise exception 'Riwayat tarif harus berupa daftar.';
+    end if;
+    if jsonb_array_length(new.settings -> 'tarifRiwayat') > 100 then
+      raise exception 'Riwayat tarif maksimal 100 perubahan.';
     end if;
     for tarif in select value from jsonb_array_elements(new.settings -> 'tarifRiwayat') loop
       if jsonb_typeof(tarif) is distinct from 'object' then
