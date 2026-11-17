@@ -2504,11 +2504,28 @@ function jpTarifTengah(kind) {
   const n = J.rows.filter(r => (r.jasproTotalSumber == null || r.transportTotalSumber == null) && !JX.tglSah(r.tanggal)).length;
   return n ? { n, acuan: JX.tglID(JX.tanggalAcuan(J.set)) } : null;
 }
-function jpDl(kind) {   // kind: xlsx | jaspro | transpo
-  const rek = J.rows.filter(r => !r.rekening).length, gol = J.rows.filter(r => r.golClass === 'UNKNOWN').length, tengah = jpTarifTengah(kind);
-  const go = () => kind === 'xlsx' ? jpExcel() : jpCsv(kind);
-  const msg = [rek && `${rek} baris tanpa nomor rekening`, kind === 'xlsx' && gol && `${gol} baris golongan tidak dikenali (PPh dihitung 0%)`, tengah && `${tengah.n} baris tanpa tanggal memakai tarif per ${tengah.acuan} padahal tarif berubah di tengah bulan`].filter(Boolean).join(' dan ');
-  if (msg) jpAsk('Masih ada data yang perlu ditinjau', msg + (rek || (kind === 'xlsx' && gol) ? '. File tetap bisa dibuat dengan kolom terkait kosong/0' : '') + '. Lanjutkan mengunduh?', 'Lanjutkan Unduh', go); else go();
+function jpDl(kind) {
+  const unresolved = J.rows.filter(row =>
+    !row.rekening || !['OTOMATIS', 'MANUAL'].includes(row.matchStatus)
+  ).length;
+  const unknownGrade = J.rows.filter(row => row.golClass === 'UNKNOWN').length;
+  const middle = jpTarifTengah(kind);
+  const message = [
+    unresolved && `${unresolved} baris belum memiliki kecocokan nama/nomor rekening yang dapat dipastikan`,
+    kind === 'xlsx' && unknownGrade && `${unknownGrade} baris golongan tidak dikenali (PPh dihitung 0%)`,
+    middle && `${middle.n} baris tanpa tanggal memakai tarif per ${middle.acuan} padahal tarif berubah di tengah bulan`
+  ].filter(Boolean).join(' dan ');
+  const download = () => kind === 'xlsx' ? jpExcel() : jpCsv(kind);
+  if (message) {
+    jpAsk(
+      'Masih ada data yang perlu ditinjau',
+      message + '. Periksa pratinjau. File tetap dapat dibuat, tetapi kolom rekening atau tarif yang belum pasti dapat memerlukan koreksi. Lanjutkan mengunduh?',
+      'Lanjutkan Unduh',
+      download
+    );
+  } else {
+    download();
+  }
 }
 async function jpExcel() {
   const s = J.set, f = { tempatTanggal: s.tempatTanggal || '' };
