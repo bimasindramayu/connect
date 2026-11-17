@@ -1587,7 +1587,7 @@ async function pageJaspro() {
       sb.from('jaspro_periode').select('id,tahun,bulan,laporan,settings,updated_at').order('id',{ascending:false})
     ]);
     if(masterError)return $('jpanel').innerHTML=note('Gagal memuat Master Rekening: '+masterError.message);
-    if(periodError)return $('jpanel').innerHTML=note('Gagal memuat arsip Jaspro. Jalankan SQL pembaruan jaspro-history.sql di Supabase terlebih dahulu. Pesan: '+periodError.message);
+    if(periodError)return $('jpanel').innerHTML=note('Gagal memuat arsip Jaspro. Jalankan bop.sql versi terbaru di Supabase terlebih dahulu. Pesan: '+periodError.message);
     const defaults=jpDef(),currentId=jpPeriodId(defaults);
     Object.assign(J,{master:masterData?.master||[],periods:periods||[],on:true,historySelected:''});
     jpLoadPeriod(currentId);
