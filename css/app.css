@@ -245,159 +245,138 @@ body.side-mini #side details[open]>.nav-link.sub:hover:not(.active)>i:first-chil
 .bg-label-danger{background:rgba(255,62,29,.16)!important;color:#ff3e1d!important}
 .bg-label-info{background:rgba(3,195,236,.16)!important;color:#03c3ec!important}
 .bg-label-secondary{background:rgba(133,146,163,.16)!important;color:#8592a3!important}
-/* Jaspro Transport — gaya kerja sederhana dan mudah dibaca */
-.jp{color:#344054;font-size:1rem;line-height:1.5}
-.jp h4,.jp h5,.jp h6{color:#344054;font-weight:600;letter-spacing:normal;text-transform:none}
-.jp p,.jp small,.jp .small,.jp .form-text{color:#475467}
-.jp small,.jp .small,.jp .form-text{font-size:.875rem!important;line-height:1.45}
-.jp p{font-size:.9375rem;line-height:1.5}
-.jp .btn{font-size:.875rem;min-height:38px}
-.jp .form-label{font-size:.875rem;font-weight:600;color:#344054}
-.jp .form-control,.jp .form-select{min-height:40px;font-size:1rem;color:#344054}
-.jp .form-control::placeholder{color:#667085;opacity:1}
-.jp .form-control:focus,.jp .form-select:focus{border-color:#696cff;box-shadow:0 0 0 .18rem rgba(105,108,255,.16)}
-.jp button:focus-visible,.jp summary:focus-visible{outline:3px solid rgba(105,108,255,.35);outline-offset:2px}
-.jp-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin:0 0 1rem}
-.jp-heading h4{font-size:1.25rem;line-height:1.35;margin:0 0 .25rem}
-.jp-heading p{margin:0;max-width:760px}
-.jp-nav{display:flex;flex-wrap:wrap;gap:.25rem;border-bottom:1px solid #d0d5dd;margin-bottom:1rem}
-.jp-nav button{appearance:none;border:0;border-bottom:2px solid transparent;background:transparent;color:#344054;padding:.65rem .9rem;margin-bottom:-1px;font-size:.9375rem;font-weight:500;cursor:pointer}
-.jp-nav button:hover{background:#f2f4f7}
-.jp-nav button[aria-pressed="true"]{border-bottom-color:#696cff;color:#344054;font-weight:600}
-.jp-section{padding:1.1rem 1.15rem;background:#fff;border:1px solid #dfe3ea;border-radius:.5rem}
-.jp-section+.jp-section{margin-top:1rem}
-.jp-section-title{margin:0 0 1rem}
-.jp-section-title h5{font-size:1.0625rem;line-height:1.4;margin:0 0 .2rem}
-.jp-section-title p{margin:0;font-size:.9rem}
-.jp-period-row{display:grid;grid-template-columns:minmax(160px,220px) minmax(130px,160px) minmax(150px,1fr);gap:.8rem;align-items:end;margin-bottom:1rem}
-.jp-period-current{display:flex;flex-direction:column;gap:.15rem;min-height:40px;justify-content:center;padding-left:.9rem;border-left:1px solid #dfe3ea}
-.jp-period-current span{font-size:.875rem;color:#475467}
-.jp-period-current strong{font-size:.9375rem;font-weight:600;color:#344054}
-.jp-upload-row{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.9rem 1rem;border:1px solid #dfe3ea;border-radius:.45rem;background:#f9fafb}
-.jp-file-status{display:flex;align-items:center;gap:.75rem;min-width:0}
-.jp-file-status>i{font-size:1.5rem;color:#475467;flex:none}
-.jp-file-status strong,.jp-file-status span{display:block}
-.jp-file-status strong{font-size:.9375rem;font-weight:600;color:#344054}
-.jp-file-status span{font-size:.875rem;color:#475467;overflow-wrap:anywhere}
-.jp-report-summary{display:flex;align-items:center;flex-wrap:wrap;gap:.65rem 1rem;padding:.75rem 0;border-bottom:1px solid #eaecf0;margin-bottom:.75rem}
-.jp-report-summary>span{font-size:.9rem;color:#344054}
-.jp-report-summary>span+span{padding-left:1rem;border-left:1px solid #d0d5dd}
-.jp-report-summary .btn{margin-left:auto}
-.jp-source-note{margin:.8rem 0 0;font-size:.875rem;color:#475467}
-.jp-source-details{margin-top:.85rem}
-.jp-source-details>summary{display:inline-flex;align-items:center;min-height:38px;cursor:pointer;color:#344054;font-size:.9rem;font-weight:600}
-.jp-source-details[open]>summary{margin-bottom:.65rem}
-.jp-master-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:.75rem}
-.jp-search{width:min(100%,340px)}
-.jp-master-actions,.jp-download-actions,.jp-row-actions{display:flex;align-items:center;flex-wrap:wrap;gap:.45rem}
-.jp-master-count{font-size:.875rem;color:#475467;margin-bottom:.55rem}
-.jp-master-status{display:flex;align-items:center;flex-wrap:wrap;gap:.65rem;padding:.75rem 0;margin-bottom:.85rem;border-bottom:1px solid #eaecf0}
-.jp-master-status span{font-size:.9rem;color:#475467}
-.jp-master-status strong{font-size:.9375rem;font-weight:600;color:#344054}
-.jp-master-status .btn{margin-left:auto}
-.jp-settings{border:1px solid #dfe3ea;border-radius:.45rem}
-.jp-settings>summary{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:.65rem .85rem;cursor:pointer;color:#344054;font-size:.9rem;font-weight:600;list-style:none}
-.jp-settings>summary::-webkit-details-marker{display:none}
-.jp-settings>summary:after{content:"+";margin-left:.75rem;font-size:1.1rem;font-weight:400;color:#475467}
-.jp-settings[open]>summary:after{content:"−"}
-.jp-settings-body{padding:.85rem;border-top:1px solid #eaecf0}
-.jp-settings-body p{font-size:.875rem;margin:0 0 .9rem}
-.jp-settings-body h6{font-size:.9375rem;margin:.75rem 0 .55rem}
-.jp-sign-box{height:100%;padding:.85rem;border:1px solid #dfe3ea;border-radius:.45rem}
-.jp-sign-box strong{font-size:.9rem;color:#344054}
-.jp-process-action{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:1rem;padding:.8rem 0 0;border-top:1px solid #eaecf0}
-.jp-process-action strong{font-size:.9375rem;color:#344054}
-.jp-process-action p{font-size:.875rem;margin:.15rem 0 0}
-.jp-process-action .btn{flex:none}
-.jp-results{margin-top:1rem}
-.jp-results .jp-section-title{margin-bottom:.75rem}
-.jp-results .jp-section-title h5{font-size:1.0625rem}
-.jp-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem;margin:.85rem 0 1.1rem}
-.jp-summary-grid>div{display:flex;flex-direction:column;gap:.2rem;min-width:0;padding:.7rem .8rem;border:1px solid #dfe3ea;border-radius:.4rem;background:#fff}
-.jp-summary-grid span{font-size:.875rem;color:#475467}
-.jp-summary-grid strong{font-size:.9375rem;line-height:1.4;font-weight:600;color:#344054;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
-.jp-table-heading{margin:1rem 0 .6rem}
-.jp-table-heading h6{font-size:.9375rem;margin:0 0 .2rem}
-.jp-table-heading p{font-size:.875rem;margin:0}
-.jp-table-wrap{max-width:100%;border:1px solid #dfe3ea;border-radius:.4rem;overflow:hidden;background:#fff}
-.jp-table-wrap .scroll,.jp .scroll{max-height:520px;overflow:auto;overscroll-behavior:contain}
-.jp .table{margin-bottom:0;color:#344054;font-size:.875rem}
-.jp .table th,.jp .table td{padding:.6rem .7rem;vertical-align:middle}
-.jp .table thead th{position:sticky;top:0;z-index:1;background:#f2f4f7;color:#344054;font-size:.875rem;font-weight:600;text-transform:none;letter-spacing:normal;white-space:nowrap;border-bottom:1px solid #d0d5dd}
-.jp .table tbody td{color:#344054}
-.jp .table tfoot td{background:#f9fafb;color:#344054;border-top:1px solid #d0d5dd}
-.jp tr.issue td{background:#fff8e6}
-.jp-inline-edit{min-width:100px;max-width:150px;font-size:.875rem!important}
-.jp-account-edit{min-width:140px}
-.jp-owner-edit{min-width:155px}
-.jp-table-note{margin:.6rem 0 0;font-size:.875rem;color:#475467}
-.jp-inline-warning{padding:.7rem .8rem;margin:.75rem 0;border:1px solid #e5c07b;border-radius:.4rem;background:#fffaeb;color:#533f1a;font-size:.875rem}
-.jp-download-bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:1rem;padding:.85rem 0 0;border-top:1px solid #eaecf0}
-.jp-download-bar strong{font-size:.9375rem;color:#344054}
-.jp-download-bar p{font-size:.875rem;margin:.15rem 0 0}
-.jp-empty-state{padding:1.4rem 1rem;text-align:left;border:1px solid #dfe3ea;border-radius:.45rem;background:#f9fafb}
-.jp-empty-state h6{font-size:.9375rem;margin:0 0 .35rem;color:#344054}
-.jp-empty-state p{font-size:.9rem;margin:0 0 .85rem}
-.jp-empty-state .btn+.btn{margin-left:.4rem}
-.jp-history-top{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem}
-.jp-year-select{width:160px;flex:none}
-.jp-row-actions .btn{white-space:nowrap}
-.jp-detail-section{margin-top:1rem}
-.jp-detail-heading{margin-bottom:.4rem}
-.jp-loading{padding:1.4rem;text-align:center;color:#475467;font-size:.9375rem}
-.jp .badge{font-size:.8125rem;font-weight:600}
+.jp .scroll{max-height:480px;overflow:auto}
+.jp .table thead th{position:sticky;top:0;z-index:1;background:#fff;font-size:.75rem;text-transform:uppercase;letter-spacing:.5px;color:#566a7f;white-space:nowrap}
+.jp tr.issue td{background:rgba(255,171,0,.08)}
+.jp-steps{display:flex;flex-wrap:wrap;gap:.25rem}
+.jp-step{flex:1 1 210px;display:flex;align-items:center;gap:.75rem;border:0;background:none;text-align:left;padding:.5rem .75rem;border-radius:.375rem;color:#566a7f;font-weight:500}
+.jp-step:hover{background:rgba(67,89,113,.06)}.jp-step small{display:block;font-weight:400;color:#a1acb8}
+.jp-step .n{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:600;background:rgba(105,108,255,.16);color:#696cff}
+.jp-step.done .n{background:rgba(113,221,55,.16);color:#71dd37}.jp-step.on{background:rgba(105,108,255,.12)}.jp-step.on .n{background:#696cff;color:#fff}
+.jp-drop{border:2px dashed #d9dee3;border-radius:.5rem;padding:2rem 1rem;text-align:center;cursor:pointer;transition:.15s}
+.jp-drop:hover{border-color:#696cff;background:rgba(105,108,255,.04)}
+/* Jaspro Transport: hierarki halaman dan komponen kerja */
+.jp{color:#38445b}
+.jp-page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin:0 0 1.25rem}
+.jp-page-head h4{margin:.2rem 0 .35rem;font-weight:700;color:#38445b}
+.jp-page-head p{margin:0;color:#697a91}
+.jp-kicker{display:block;font-size:.68rem;font-weight:700;letter-spacing:.09em;color:#8492a6}
+.jp-save-state{display:inline-flex;align-items:center;gap:.35rem;border:1px solid #dcefe3;border-radius:99px;padding:.42rem .75rem;background:#f4fbf6;color:#27834b;font-size:.78rem;font-weight:600;white-space:nowrap}
+.jp-step-card,.jp-panel{border:1px solid #e8ebf2;border-radius:.8rem;box-shadow:0 .15rem .65rem rgba(67,89,113,.045)}
+.jp-step-heading{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.45rem}
+.jp-step-heading small{color:#8a96a8}
+.jp-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.5rem}
+.jp-step{position:relative;min-width:0;display:flex;align-items:center;gap:.65rem;border:1px solid #e8ebf2;background:#fff;border-radius:.65rem;text-align:left;padding:.75rem;color:#566a7f;font-weight:500;transition:background .15s,border-color .15s}
+.jp-step:hover{background:#f8f9ff;border-color:#cfd2ff}
+.jp-step:focus-visible,.jp-drop:focus-visible{outline:3px solid rgba(105,108,255,.28);outline-offset:2px}
+.jp-step .n{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:700;background:#f0f1f5;color:#6f7b8b}
+.jp-step-copy{min-width:0;display:block}
+.jp-step-copy strong{display:block;color:#46536a;font-size:.82rem;line-height:1.3}
+.jp-step-copy small{display:block;margin-top:.15rem;color:#8a96a8;font-size:.68rem;line-height:1.3}
+.jp-step-status{margin-left:auto;align-self:flex-start;color:#9aa5b3;font-size:.62rem;white-space:nowrap}
+.jp-step.done .n{background:#e7f7ed;color:#27834b}
+.jp-step.on{border-color:#bfc3ff;background:#f6f6ff;box-shadow:inset 0 0 0 1px rgba(105,108,255,.08)}
+.jp-step.on .n{background:#696cff;color:#fff}
+.jp-step.on .jp-step-copy strong{color:#4e52c9}
+.jp-step.done:not(.on) .jp-step-status{color:#27834b}
+.jp-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1.25rem}
+.jp-section-head h5{margin:.15rem 0 .3rem;color:#38445b;font-weight:700}
+.jp-section-head p{margin:0;color:#697a91;font-size:.9rem}
+.jp-period-box{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;padding:1rem 1.1rem;border:1px solid #e6eaf2;border-radius:.7rem;background:#fafbfe;margin-bottom:1.1rem}
+.jp-period-fields{display:grid;grid-template-columns:repeat(2,minmax(150px,190px));gap:.8rem}
+.jp-period-fields .form-label,.jp-year-select .form-label{font-size:.78rem;font-weight:600}
+.jp-period-status{display:flex;align-items:center;gap:.7rem;color:#696cff}
+.jp-period-status>i{font-size:1.7rem}
+.jp-period-status small,.jp-period-status strong,.jp-period-status span{display:block}
+.jp-period-status small{font-size:.62rem;letter-spacing:.08em;font-weight:700;color:#8994a5}
+.jp-period-status strong{font-size:1rem;color:#46536a}
+.jp-period-status span{font-size:.74rem;color:#8492a6}
+.jp-help-alert{font-size:.82rem;padding:.65rem .8rem}
+.jp-upload-layout{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(280px,.95fr);gap:1rem;align-items:stretch}
+.jp-drop{width:100%;min-height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;padding:1.3rem;border:2px dashed #cfd5e1;border-radius:.75rem;background:#fbfcff;text-align:center;color:#46536a;cursor:pointer;transition:.15s}
+.jp-drop:hover{border-color:#696cff;background:#f7f7ff}
+.jp-drop strong{font-size:.95rem}
+.jp-drop>span:not(.jp-upload-icon){max-width:360px;color:#7b8798;font-size:.78rem}
+.jp-upload-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:#ededff;color:#696cff;font-size:1.7rem}
+.jp-upload-cta{margin-top:.2rem;padding:.48rem .9rem;border-radius:.45rem;background:#696cff;color:#fff;font-size:.78rem;font-weight:600}
+.jp-file-note{margin:.55rem 0 0;color:#8994a5;font-size:.72rem}
+.jp-format-guide{padding:1rem 1.1rem;border:1px solid #e6eaf2;border-radius:.75rem;background:#fff}
+.jp-format-title{margin-bottom:.75rem;font-size:.85rem;font-weight:700;color:#46536a}
+.jp-format-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+.jp-format-grid>div{padding:.65rem;border-radius:.55rem;background:#f7f8fc}
+.jp-format-grid b,.jp-format-grid span{display:block}
+.jp-format-grid b{margin-bottom:.2rem;font-size:.76rem;color:#4e52c9}
+.jp-format-grid span{font-size:.72rem;line-height:1.45;color:#758297}
+.jp-loaded-head,.jp-table-caption{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin:1.5rem 0 .75rem}
+.jp-loaded-head h6,.jp-table-caption h6{margin:0 0 .2rem;font-weight:700;color:#46536a}
+.jp-loaded-head p,.jp-table-caption p{margin:0;color:#8492a6;font-size:.76rem}
+.jp-table-wrap{border:1px solid #e8ebf2;border-radius:.65rem;overflow:hidden}
+.jp-table-wrap .scroll{max-height:440px;overflow:auto}
+.jp-table-foot{padding:.6rem .8rem;border:1px solid #e8ebf2;border-top:0;border-radius:0 0 .65rem .65rem;color:#8492a6;font-size:.75rem}
+.jp-master-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.8rem;margin-bottom:.8rem}
+.jp-search{width:min(100%,330px)}
+.jp-toolbar-actions{display:flex;flex-wrap:wrap;gap:.5rem}
+.jp-master-note,.jp-history-note{margin-bottom:1rem;padding:.7rem .85rem;border-radius:.55rem;background:#f5f7fb;color:#6f7d91;font-size:.78rem}
+.jp-empty-state{padding:2.3rem 1rem;text-align:center;border:1px dashed #dce1ea;border-radius:.7rem;background:#fcfcfe}
+.jp-empty-state h6{margin:.6rem 0 .35rem;color:#46536a;font-weight:700}
+.jp-empty-state p{max-width:480px;margin:0 auto 1rem;color:#8492a6;font-size:.82rem}
+.jp-empty-icon{display:inline-grid;place-items:center;width:52px;height:52px;border-radius:16px;background:#f0f1f5;color:#78879a;font-size:1.8rem}
+.jp-readiness{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin:1rem 0}
+.jp-readiness>div{display:flex;align-items:center;gap:.65rem;padding:.8rem;border:1px solid #e8ebf2;border-radius:.6rem;background:#fafbfe;color:#9aa5b3}
+.jp-readiness>div>i{font-size:1.35rem}
+.jp-readiness>div b,.jp-readiness>div small{display:block}
+.jp-readiness>div b{font-size:.8rem;color:#536176}
+.jp-readiness>div small{font-size:.7rem;color:#8a96a8}
+.jp-readiness>div.is-ready{border-color:#d6eddc;background:#f6fbf7;color:#27834b}
+.jp-settings{border:1px solid #e6eaf2;border-radius:.65rem;overflow:hidden}
+.jp-settings summary{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.85rem 1rem;background:#fafbfe;cursor:pointer;list-style:none;color:#536176;font-size:.84rem;font-weight:600}
+.jp-settings summary::-webkit-details-marker{display:none}
+.jp-settings summary:after{content:'+';font-size:1.1rem;color:#696cff}
+.jp-settings[open] summary:after{content:'−'}
+.jp-settings summary small{margin-left:auto;color:#8994a5;font-size:.7rem;font-weight:400}
+.jp-settings-body{padding:1rem}
+.jp-settings-body h6{margin-bottom:.55rem;font-size:.82rem;font-weight:700;color:#536176}
+.jp-sign-box{height:100%;padding:.85rem;border:1px solid #e8ebf2;border-radius:.6rem;background:#fafbfe}
+.jp-action-bar,.jp-download-bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:1.1rem;padding:1rem;border-radius:.65rem;background:#f7f7ff;border:1px solid #e5e5ff}
+.jp-action-bar strong,.jp-download-bar strong{display:block;font-size:.9rem;color:#46536a}
+.jp-download-bar small{display:block;margin-top:.15rem;color:#8492a6;font-size:.75rem}
+.jp-review-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin:1.4rem 0 .9rem}
+.jp-review-head h5{margin:.15rem 0 .25rem;font-weight:700;color:#38445b}
+.jp-review-head p{margin:0;color:#8492a6;font-size:.82rem}
+.jp-inline-edit{min-width:100px;max-width:150px}
+.jp-account-edit{min-width:135px}
+.jp-owner-edit{min-width:150px}
+.jp-year-select{width:150px;flex:none}
+.jp-row-actions{display:inline-flex;align-items:center;gap:.35rem}
+.jp-loading{padding:1.5rem;text-align:center;color:#8492a6}
+@media(max-width:991.98px){
+  .jp-steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .jp-upload-layout{grid-template-columns:1fr}
+}
 @media(max-width:767.98px){
-  .jp-heading,.jp-history-top{align-items:flex-start;flex-direction:column}
-  .jp-period-row{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .jp-period-current{grid-column:1/-1;padding:.6rem 0 0;border-left:0;border-top:1px solid #dfe3ea}
-  .jp-master-toolbar,.jp-process-action,.jp-download-bar{align-items:stretch;flex-direction:column}
-  .jp-master-actions{width:100%}
-  .jp-master-actions .btn{flex:1 1 auto}
-  .jp-search,.jp-year-select{width:100%}
-  .jp-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .jp-process-action .btn{width:100%}
+  .jp-page-head,.jp-section-head,.jp-review-head,.jp-loaded-head,.jp-table-caption{align-items:flex-start;flex-direction:column}
+  .jp-page-head{gap:.5rem}
+  .jp-period-box{align-items:stretch;flex-direction:column}
+  .jp-period-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .jp-period-status{padding-top:.8rem;border-top:1px solid #e8ebf2}
+  .jp-master-toolbar,.jp-action-bar,.jp-download-bar{align-items:stretch;flex-direction:column}
+  .jp-toolbar-actions{width:100%}
+  .jp-toolbar-actions .btn{flex:1 1 auto}
+  .jp-search{width:100%}
+  .jp-readiness{grid-template-columns:1fr}
+  .jp-settings summary{align-items:flex-start;flex-wrap:wrap}
+  .jp-settings summary small{width:100%;margin-left:1.7rem}
+  .jp-year-select{width:100%}
 }
 @media(max-width:575.98px){
-  .jp-section{padding:.85rem}
-  .jp-nav button{padding:.6rem .7rem}
-  .jp-period-row{grid-template-columns:1fr 1fr}
-  .jp-upload-row{align-items:stretch;flex-direction:column}
-  .jp-upload-row .btn{width:100%}
-  .jp-report-summary{align-items:flex-start}
-  .jp-report-summary .btn{width:100%;margin-left:0}
-  .jp-master-actions{flex-direction:column}
-  .jp-master-actions .btn,.jp-download-actions .btn{width:100%}
-  .jp-summary-grid{grid-template-columns:1fr 1fr}
-  .jp-download-actions{width:100%;flex-direction:column;align-items:stretch}
-  .jp-detail-section .jp-table-heading{margin-top:.8rem}
+  .jp-steps{grid-template-columns:1fr}
+  .jp-step{padding:.65rem}
+  .jp-step-status{font-size:.58rem}
+  .jp-format-grid{grid-template-columns:1fr}
+  .jp-action-bar .btn,.jp-toolbar-actions .btn{width:100%}
+  .jp-download-bar .btn{flex:1 1 100%}
 }
 
-/* Kontras kontrol dan status pada Jaspro; tidak mengubah warna modul lain. */
-.jp .btn-primary{
-  --bs-btn-color:#fff;
-  --bs-btn-bg:#5558c7;
-  --bs-btn-border-color:#5558c7;
-  --bs-btn-hover-color:#fff;
-  --bs-btn-hover-bg:#4d50b4;
-  --bs-btn-hover-border-color:#4d50b4;
-  --bs-btn-active-color:#fff;
-  --bs-btn-active-bg:#4548a8;
-  --bs-btn-active-border-color:#4548a8;
-  --bs-btn-disabled-color:#fff;
-  --bs-btn-disabled-bg:#5558c7;
-  --bs-btn-disabled-border-color:#5558c7;
-  box-shadow:none;
-}
-.jp .badge{font-size:.875rem;font-weight:600}
-.jp .bg-label-primary{color:#4548a8!important;background:#eeefff!important}
-.jp .bg-label-success{color:#246b39!important;background:#e9f6ec!important}
-.jp .bg-label-warning{color:#8a5700!important;background:#fff4d6!important}
-.jp .bg-label-danger{color:#a82e1c!important;background:#fdece9!important}
-.jp .bg-label-info{color:#176b87!important;background:#e7f4f8!important}
-.jp .bg-label-secondary{color:#475467!important;background:#eef0f2!important}
-@media(prefers-reduced-motion:reduce){
-  .jp *, .jp *:before, .jp *:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
-}
 /* Pop-up (toast) selalu paling depan: wadahnya popover manual (top layer browser, di atas <dialog> modal). z-index hanya cadangan untuk
    browser tanpa Popover API. UA stylesheet popover (inset/margin/border/background) ditimpa supaya wadah tidak berbingkai. */
 #jtoast{position:fixed;inset:auto 1rem 1rem auto;margin:0;padding:0;border:0;background:transparent;overflow:visible;z-index:2147483000;display:grid;gap:.5rem;width:min(380px,calc(100vw - 2rem));max-width:none;pointer-events:none;color:inherit}
