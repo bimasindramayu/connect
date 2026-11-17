@@ -1632,6 +1632,7 @@ async function jpBusy(btn, label, action) {
 }
 
 async function pageJaspro() {
+  const firstLoad = !J.on;
   $('view').innerHTML = `<div class="jp" id="jroot">
     <div class="jp-page-head">
       <div class="jp-page-title">
@@ -1648,6 +1649,8 @@ async function pageJaspro() {
     <div id="jpanel" aria-live="polite">Memuat riwayat…</div>
   </div>`;
   if (!J.on || REFRESH_PAGE_DATA) {
+    const selectedYear = firstLoad ? new Date().getFullYear() : J.historyYear;
+    const selectedPeriod = firstLoad ? '' : J.historySelected;
     const [{ data: masterData, error: masterError }, { data: periods, error: periodError }] = await Promise.all([
       sb.from('jaspro_data').select('master').eq('id', 1).maybeSingle(),
       sb.from('jaspro_periode').select('id,tahun,bulan,laporan,settings,updated_at').order('id', { ascending: false })
@@ -1655,15 +1658,17 @@ async function pageJaspro() {
     if (masterError) return $('jpanel').innerHTML = note('Gagal memuat Master Rekening: ' + masterError.message);
     if (periodError) return $('jpanel').innerHTML = note('Gagal memuat arsip Jaspro. Jalankan bop.sql versi terbaru di Supabase terlebih dahulu. Pesan: ' + periodError.message);
     const defaults = jpDef(), currentId = jpPeriodId(defaults);
+    const nextPeriods = periods || [];
+    const stillExists = nextPeriods.some(p => p.id === selectedPeriod && p.laporan);
     Object.assign(J, {
       master: masterData?.master || [],
-      periods: periods || [],
+      periods: nextPeriods,
       on: true,
-      historyYear: new Date().getFullYear(),
-      historySelected: '',
+      historyYear: selectedYear,
+      historySelected: stillExists ? selectedPeriod : '',
       showPreview: false
     });
-    jpLoadPeriod(currentId);
+    jpLoadPeriod(stillExists ? selectedPeriod : currentId);
   }
   jpStat('Tersimpan', 'success');
   const root = $('jroot');
