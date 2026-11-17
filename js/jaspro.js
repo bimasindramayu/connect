@@ -1365,8 +1365,8 @@ function classifyRow(row, settings) {
                         PPPK: settings.pphPPPK / 100
                     };
                     var pphRate = pphRateMap.hasOwnProperty(golClass) ? pphRateMap[golClass] : null;
-                    // File nominatif terbaru membawa tarif per peristiwa pada kolom H dan I.
-                    // Arsip lama tanpa kedua nilai itu tetap memakai tarif tersimpan agar histori lama tetap dapat dihitung.
+                    // File nominatif baru membawa total per baris pada H dan I; nominal per peristiwa dihitung dengan membagi G.
+                    // Arsip lama tanpa total H/I tetap memakai tarif tersimpan agar histori lama tetap dapat dihitung.
                     var tanggalTarif = tanggalBaris(row, settings);
                     var tarifLama = tarifPada(tanggalTarif, settings);
                     var tarifJasproPeristiwa = row.jasproTotalSumber != null
@@ -1833,7 +1833,7 @@ function jpUrutRiwayat() {   // perubahan yang tanggalnya sah diurutkan naik; ba
 const pPr = () => {
   const f = (k, l, n, c = 'col-sm-6 col-lg-3') => `<div class="${c}"><label class="form-label">${l}</label><input class="form-control" ${n ? 'type="number" min="0" data-n' : 'type="text"'} data-s="${k}" value="${esc(J.set[k])}"></div>`;
   return `<div class="card mb-4"><div class="card-body">
-    <h5 class="mb-1">Proses &amp; Unduh Laporan</h5><p class="mb-4">Tarif per peristiwa diambil dari file nominatif (kolom H untuk Jasa Profesi dan I untuk Transport). Aplikasi menghitung ulang jumlah peristiwa, PPh, dan nominal yang diterima sebelum membuat Excel atau CSV.</p>
+    <h5 class="mb-1">Proses &amp; Unduh Laporan</h5><p class="mb-4">Tarif per peristiwa dihitung dari total Jasa Profesi pada kolom H ÷ jumlah peristiwa pada G, serta total Transport pada I ÷ G. Aplikasi mengalikan kembali tarif tersebut dengan jumlah peristiwa, menghitung PPh, lalu menampilkan total bruto dan nilai dibayarkan sebelum membuat Excel atau CSV.</p>
     <p class="small text-body-secondary mb-4">Periode aktif: <b>${esc(jpPeriodLabel(J.periodId))}</b>. Pengaturan PPh dan tanda tangan disimpan bersama arsip periode ini.</p>
     <h6 class="text-uppercase small">Tarif PPh Jasa Profesi (%) <span class="fw-normal text-lowercase">· transport tidak dikenakan PPh</span></h6>
     <div class="row g-3 mb-4">${f('pphII', 'PNS Golongan II', 1)}${f('pphIII', 'PNS Golongan III', 1)}${f('pphIV', 'PNS Golongan IV', 1)}${f('pphPPPK', 'PPPK Golongan IX', 1)}</div>
@@ -1863,7 +1863,7 @@ function jpReview() {
   const sum = k => R.reduce((s, r) => s + r[k], 0), ok = R.filter(r => r.matchStatus === 'OTOMATIS').length, bad = R.filter(r => !['OTOMATIS', 'MANUAL'].includes(r.matchStatus)).length;
   const adaTgl = R.some(r => JX.tglSah(r.tanggal)), cekJ = R.filter(r => r.jumlahDiterimaSumber != null), bedaJ = cekJ.filter(r => !r.jumlahDiterimaCocok).length;
   h.innerHTML = `<div class="row g-3 mb-4">${jpCard('bx-list-ul', 'primary', R.length, 'Total baris')}${jpCard('bx-check-circle', 'success', ok, 'Cocok otomatis')}${jpCard('bx-error', bad ? 'warning' : 'success', bad, 'Perlu ditinjau')}${jpCard('bx-wallet', 'info', 'Rp ' + rp(Math.round(sum('jasproDiterima'))), 'Jaspro diterima')}${jpCard('bx-bus', 'info', 'Rp ' + rp(Math.round(sum('transpoDiterima'))), 'Transport diterima')}${jpCard('bx-check-double', bedaJ ? 'warning' : 'success', cekJ.length ? (cekJ.length - bedaJ) + '/' + cekJ.length : '–', 'Pemeriksaan kolom J')}</div>
-    <div class="card mb-3"><div class="card-body"><p class="mb-3">Tinjau hasil pencocokan. Nominal per peristiwa berasal dari kolom H dan I. Kolom J adalah jumlah bruto pada file (H+I), sebelum PPh. Hasil hitung bruto dibandingkan dengan J; nilai dibayarkan adalah hasil bruto setelah potongan PPh Jaspro. Kolom Golongan, No. Rekening, dan Nama Pemilik dapat diedit langsung (tidak disimpan ke server).</p>
+    <div class="card mb-3"><div class="card-body"><p class="mb-3">Tinjau hasil pencocokan. Tarif per peristiwa = H ÷ G untuk Jaspro dan I ÷ G untuk Transport. Kolom J adalah jumlah bruto pada file (H+I), sebelum PPh. Hasil hitung bruto dibandingkan dengan J; nilai dibayarkan adalah hasil bruto setelah potongan PPh Jaspro. Kolom Golongan, No. Rekening, dan Nama Pemilik dapat diedit langsung (tidak disimpan ke server).</p>
     <div class="scroll"><table class="table align-middle mb-0"><thead><tr><th>No</th><th>Nama</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Status</th><th>No. Rekening</th><th>Nama Pemilik</th>${adaTgl ? '<th>Tanggal</th>' : ''}<th class="text-end">Peristiwa (G)</th><th class="text-end">Jaspro diterima</th><th class="text-end">Transport</th><th class="text-end">Diterima file (J)</th><th class="text-end">Hasil hitung bruto (H+I)</th><th>Pemeriksaan</th></tr></thead>
     <tbody>${R.map((r, i) => {
       const [c, l] = JST[r.matchStatus] || JST.TIDAK_DITEMUKAN, isBad = !['OTOMATIS', 'MANUAL'].includes(r.matchStatus), cd = r.candidates?.[0], unk = r.golClass === 'UNKNOWN';
@@ -1888,7 +1888,7 @@ function jpTarifBerubah(kind = 'xlsx') {
 // Hanya arsip lama tanpa tarif pada file yang masih menggunakan tarif historis dari pengaturan.
 function jpTarifTengah(kind) {
   if (!J.rows || !jpTarifBerubah(kind)) return null;
-  const n = J.rows.filter(r => (r.tarifJasproSumber == null || r.tarifTransportSumber == null) && !JX.tglSah(r.tanggal)).length;
+  const n = J.rows.filter(r => (r.jasproTotalSumber == null || r.transportTotalSumber == null) && !JX.tglSah(r.tanggal)).length;
   return n ? { n, acuan: JX.tglID(JX.tanggalAcuan(J.set)) } : null;
 }
 function jpDl(kind) {   // kind: xlsx | jaspro | transpo
