@@ -729,8 +729,8 @@ const JX = (() => {
                     if (!transportText || !/\d/.test(transportText) || !isFinite(transportRate) || transportRate < 0 || transportRate > TARIF_MAKS) {
                         throw new Error('Nominal Transport pada kolom I tidak valid di baris ' + rowNum + '.');
                     }
-                    if (diterimaText !== '' && !/\d/.test(diterimaText)) {
-                        throw new Error('Jumlah Diterima pada kolom J tidak valid di baris ' + rowNum + '.');
+                    if (!diterimaText || !/\d/.test(diterimaText) || !isFinite(jumlahDiterimaSumber) || jumlahDiterimaSumber < 0) {
+                        throw new Error('Jumlah Diterima pada kolom J wajib diisi angka nol atau lebih (baris ' + rowNum + ').');
                     }
                     rows.push({
                         nama: namaText,
