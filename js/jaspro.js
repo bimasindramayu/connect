@@ -1749,7 +1749,7 @@ const pMa = () => {
     </div>
     <div class="jp-master-note"><i class="bx bx-info-circle me-1"></i>Nama pada laporan akan dicocokkan dengan daftar ini secara otomatis. Periksa nomor rekening dan nama pemilik sebelum memproses pembayaran.</div>
     ${J.master.length ? `<div class="jp-table-wrap"><div class="scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>Nama Penghulu</th><th>Nama Pemilik Rekening</th><th>Nomor Rekening</th><th class="text-end">Aksi</th></tr></thead><tbody id="jmt">${r.html}</tbody></table></div></div><div class="jp-table-foot" id="jmc">${jpMCount(r.n)}</div>`
-      : `<div class="jp-empty-state"><span class="jp-empty-icon"><i class="bx bx-id-card"></i></span><h6>Master rekening masih kosong</h6><p>Tambahkan data satu per satu atau impor file Excel dengan kolom Nama, NamaPemilik, dan NomorRekening.</p><button class="btn btn-primary" data-act="mimp"><i class="bx bx-upload me-1"></i>Impor Master Rekening</button><button class="btn btn-outline-secondary ms-1" data-act="madd"><i class="bx bx-plus me-1"></i>Tambah Manual</button></div>`}
+      : `<div class="jp-empty-state"><span class="jp-empty-icon"><i class="bx bx-id-card"></i></span><h6>Master rekening masih kosong</h6><p>Tambahkan data satu per satu atau impor file Excel dengan kolom Nama, NamaPemilik, dan NomorRekening.</p><button class="btn btn-outline-secondary" data-act="madd"><i class="bx bx-plus me-1"></i>Tambah Manual</button></div>`}
   </div></div>`;
 };
 
