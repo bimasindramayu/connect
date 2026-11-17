@@ -1024,11 +1024,11 @@ drop function if exists public.auto_items(int, int, int);
 drop function if exists public.auto_year(int, int, int);
 drop function if exists public.set_autopayment(jsonb);
 delete from public.config where key in ('sakti_migrasi_autopayment', 'wajib_lpj');
--- 12) JASPRO TRANSPORT (alat sekali pakai: Laporan Nominatif PNBP NR) ---------------------------------------
--- Hemat kuota: HANYA SATU baris (id = 1). Setiap simpan menimpa kolom yang dikirim; tanpa riwayat, log, atau tabel per bulan.
--- master = Master Rekening [{id,nama,namaPemilik,noRekening}] | laporan = {fileName, rows:[...]} terakhir (null = belum ada)
--- settings = periode, tarif, PPh, blok tanda tangan. Hanya yang punya menu jaspro (admin dan, bawaan, PNBP NR) yang boleh membaca
--- dan menulis (RLS).
+-- 12) JASPRO TRANSPORT (Laporan Nominatif PNBP NR + arsip historis bulanan) -------------------------------
+-- public.jaspro_data id=1 dipertahankan untuk Master Rekening dan kompatibilitas data lama.
+-- Laporan baru + pengaturannya disimpan satu baris per bulan pada public.jaspro_periode (mis. 2026-01).
+-- Laporan/settings lama di jaspro_data tidak dihapus atau ditimpa; salinannya dimigrasikan ke tabel periode satu kali.
+-- Hanya akun yang memiliki menu jaspro (admin dan, bawaan, PNBP NR) yang boleh membaca/menulis (RLS).
 -- Tarif berubah menurut tanggal: settings.tarifJaspro / tarifTransport = tarif dasar (berlaku sejak awal) dan
 -- settings.tarifRiwayat = [{"mulai":"YYYY-MM-DD","jaspro":<angka|null>,"transport":<angka|null>}]: mulai tanggal itu tarif berubah
 -- (null = tidak berubah). Jaspro dan Transport berubah sendiri-sendiri. settings.tanggalAcuan ("" = akhir bulan periode) dipakai
