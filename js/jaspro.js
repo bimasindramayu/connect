@@ -1608,6 +1608,12 @@ async function jpSave(patch) {
   }
   return jpSavePeriod(jpPeriodId(J.set), patch);
 }
+function jpModalClass(name = '') {
+  const dialog = $('dlg');
+  dialog.classList.remove('jp-dialog-upload', 'jp-dialog-master', 'jp-dialog-settings');
+  if (name) dialog.classList.add(name);
+}
+
 async function jpBusy(btn, label, action) {
   if (!btn || btn.disabled) return false;
   const original = btn.innerHTML;
@@ -1764,6 +1770,7 @@ async function jpLaporan(file, options = {}) {
       return true;
     };
     if (existing?.laporan) {
+      jpModalClass('jp-dialog-upload');
       jpDlg(`<h5 class="mb-1">Perbarui arsip ${esc(jpPeriodLabel(id))}?</h5>
         <p class="text-body-secondary">Laporan yang sudah tersimpan pada periode ini akan diganti dengan file baru. Arsip periode lain tidak berubah.</p>
         <div class="d-flex justify-content-end gap-2">
@@ -1785,6 +1792,7 @@ async function jpLaporan(file, options = {}) {
 
 /* ---- Dialog pengelolaan Jaspro ---- */
 function jpUploadDialog(periodId) {
+  jpModalClass('jp-dialog-upload');
   const id = periodId || J.periodId || jpPeriodId(jpDef());
   const [year, month] = id.split('-').map(Number);
   const period = J.periods.find(p => p.id === id);
@@ -1835,6 +1843,7 @@ function jpUploadDialog(periodId) {
 }
 
 function jpMasterDialog(preserve = false) {
+  jpModalClass('jp-dialog-master');
   if (!preserve || !Array.isArray(J.masterDraft)) J.masterDraft = J.master.map(m => ({ ...m }));
   const rows = J.masterDraft.map((m, i) => `<tr>
     <td><input class="form-control form-control-sm" data-mi="${i}" data-mf="nama" value="${esc(m.nama)}" aria-label="Nama penghulu baris ${i + 1}"></td>
@@ -1946,6 +1955,7 @@ function jpMasterDialog(preserve = false) {
         jpMasterDialog(true);
         jpToast('Data Master Rekening diganti dari file.', 'success');
       };
+      jpModalClass('jp-dialog-settings');
       jpDlg(`<h5 class="mb-2">Impor ${parsed.entries.length} data rekening</h5>
         <p>${J.masterDraft.length ? 'Pilih apakah data dari “' + esc(file.name) + '” akan digabungkan atau mengganti seluruh isi Master Rekening.' : 'Data dari “' + esc(file.name) + '” akan ditambahkan.'}</p>
         <div class="d-grid gap-2">
@@ -1958,7 +1968,8 @@ function jpMasterDialog(preserve = false) {
         confirm.querySelector('[data-x]').onclick = () => jpMasterDialog(true);
         confirm.querySelector('[data-merge]').onclick = () => merge();
         confirm.querySelector('[data-replace]')?.addEventListener('click', () => {
-          jpAsk('Ganti seluruh Master Rekening?', 'Data yang sekarang ada di daftar akan diganti dengan isi file.', 'Ganti data', replace, true);
+          jpModalClass();
+        jpAsk('Ganti seluruh Master Rekening?', 'Data yang sekarang ada di daftar akan diganti dengan isi file.', 'Ganti data', replace, true);
         });
       });
     };
@@ -1999,6 +2010,7 @@ function jpSettingsDialog(periodId) {
 }
 
 function jpSettingsDialogRender() {
+  jpModalClass('jp-dialog-settings');
   const state = J.settingsDraft;
   const [year, month] = state.periodId.split('-').map(Number);
   const value = state.values;
@@ -2499,7 +2511,10 @@ function jpCsv(kind) {
 function jpDefaultPeriodForYear(year = J.historyYear) {
   const y = Number(year) || new Date().getFullYear();
   const periods = J.periods.filter(p => Number(p.tahun) === y).sort((x, z) => z.bulan - x.bulan);
-  if (periods.length) return periods[0].id;
+  if (periods.length) {
+    const selected = J.periods.find(p => p.id === J.historySelected && Number(p.tahun) === y);
+    return selected?.id || periods[0].id;
+  }
   const now = new Date();
   const month = y === now.getFullYear() ? now.getMonth() + 1 : now.getMonth() + 1;
   return String(y).padStart(4, '0') + '-' + String(month).padStart(2, '0');
@@ -2532,6 +2547,7 @@ function jpClick(e) {
   } else if (action === 'hdel') {
     const period = J.periods.find(p => p.id === id);
     if (!period) return;
+    jpModalClass();
     jpAsk(
       'Hapus arsip ' + jpPeriodLabel(id) + '?',
       'Laporan, pengaturan tarif, dan rincian periode ini akan dihapus permanen. Periode lain dan Master Rekening tidak terpengaruh.',
