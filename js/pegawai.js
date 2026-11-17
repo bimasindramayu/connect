@@ -84,8 +84,8 @@ const pegPensiun = (jabatan, nip) => {
 };
 const pegPerluDilengkapi = p => pegJabatanLama(p?.jabatan) || /^perlu dilengkapi$/i.test(p?.jabatan || '');
 // Kolom jabatan_tambahan belum ada = bop.sql versi terbaru belum dijalankan (website lebih baru dari database)
-const pegDbLama = e => e?.code === '42703' || e?.code === 'PGRST204' || /jabatan_tambahan/i.test(e?.message || '');
-const PEG_DB_LAMA = 'Database belum diperbarui ke versi terbaru (jenis PPPK Paruh Waktu dan jabatan tambahan). Jalankan bop.sql versi terbaru di SQL Editor Supabase, lalu muat ulang halaman ini.';
+const pegDbLama = e => e?.code === '42703' || e?.code === 'PGRST204' || /(jabatan_tambahan|usia_pensiun|tmt_kua|operator_simkah|operator_bop)/i.test(e?.message || '');
+const PEG_DB_LAMA = 'Database belum diperbarui untuk field Pegawai terbaru (usia pensiun, TMT, dan tugas operator). Jalankan supabase/migrations/20261117_pegawai_fields_import.sql di SQL Editor Supabase, lalu muat ulang halaman ini.';
 const pegGalat = e => pegDbLama(e) ? PEG_DB_LAMA
   : e?.code === '23505' ? (/pegawai_(kepala|plt)_unik/.test(e?.message || '') ? 'Jabatan tambahan itu baru saja diberikan kepada pegawai lain. Muat ulang halaman, lalu periksa daftar pegawai.'
     : 'NIP ini sudah terdaftar (mungkin baru saja ditambahkan pengguna lain). Muat ulang halaman, lalu periksa daftar pegawai.')
