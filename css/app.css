@@ -249,6 +249,7 @@ body.side-mini #side details[open]>.nav-link.sub:hover:not(.active)>i:first-chil
 .jp{color:#344054;font-size:1rem;line-height:1.5}
 .jp h4,.jp h5,.jp h6{color:#344054;font-weight:600;letter-spacing:normal;text-transform:none}
 .jp p,.jp small,.jp .small,.jp .form-text{color:#475467}
+.jp small,.jp .small,.jp .form-text{font-size:.875rem!important;line-height:1.45}
 .jp p{font-size:.9375rem;line-height:1.5}
 .jp .btn{font-size:.875rem;min-height:38px}
 .jp .form-label{font-size:.875rem;font-weight:600;color:#344054}
