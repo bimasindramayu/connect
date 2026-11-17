@@ -1028,6 +1028,8 @@ delete from public.config where key in ('sakti_migrasi_autopayment', 'wajib_lpj'
 -- public.jaspro_data id=1 dipertahankan untuk Master Rekening dan kompatibilitas data lama.
 -- Laporan baru + pengaturannya disimpan satu baris per bulan pada public.jaspro_periode (mis. 2026-01).
 -- Laporan/settings lama di jaspro_data tidak dihapus atau ditimpa; salinannya dimigrasikan ke tabel periode satu kali.
+-- Upload baru: G = jumlah peristiwa, H/I = nominal per peristiwa (Jaspro/Transport), J = pembanding jumlah diterima.
+-- H/I menjadi dasar hitung ulang; PPh tetap dihitung oleh aplikasi. Arsip lama tanpa H/I memakai pengaturan tarif lama.
 -- Hanya akun yang memiliki menu jaspro (admin dan, bawaan, PNBP NR) yang boleh membaca/menulis (RLS).
 -- Tarif berubah menurut tanggal: settings.tarifJaspro / tarifTransport = tarif dasar (berlaku sejak awal) dan
 -- settings.tarifRiwayat = [{"mulai":"YYYY-MM-DD","jaspro":<angka|null>,"transport":<angka|null>}]: mulai tanggal itu tarif berubah
