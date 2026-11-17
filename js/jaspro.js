@@ -1764,16 +1764,19 @@ async function jpLaporan(file, options = {}) {
       return true;
     };
     if (existing?.laporan) {
-      jpAsk(
-        'Perbarui arsip ' + jpPeriodLabel(id) + '?',
-        'Laporan lama pada periode ini akan diganti dengan file baru. Arsip periode lain tidak akan berubah.',
-        'Perbarui Periode',
-        async () => {
-          const confirmButton = $('dlg')?.querySelector('[data-ok]');
-          await jpBusy(confirmButton, 'Menyimpan…', save);
-        },
-        true
-      );
+      jpDlg(`<h5 class="mb-1">Perbarui arsip ${esc(jpPeriodLabel(id))}?</h5>
+        <p class="text-body-secondary">Laporan yang sudah tersimpan pada periode ini akan diganti dengan file baru. Arsip periode lain tidak berubah.</p>
+        <div class="d-flex justify-content-end gap-2">
+          <button class="btn btn-outline-secondary" data-cancel-upload>Kembali</button>
+          <button class="btn btn-primary" data-confirm-upload><i class="bx bx-save"></i> Ganti dan simpan</button>
+        </div>`,
+      dialog => {
+        dialog.classList.add('jp-dialog-upload');
+        dialog.querySelector('[data-cancel-upload]').onclick = () => jpUploadDialog(id);
+        dialog.querySelector('[data-confirm-upload]').onclick = async event => {
+          await jpBusy(event.currentTarget, 'Menyimpan…', save);
+        };
+      });
       return true;
     }
     return save();
