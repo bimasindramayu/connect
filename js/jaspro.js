@@ -1767,7 +1767,7 @@ function jpUrutRiwayat() {   // perubahan yang tanggalnya sah diurutkan naik; ba
 const pPr = () => {
   const f = (k, l, n, c = 'col-sm-6 col-lg-3') => `<div class="${c}"><label class="form-label">${l}</label><input class="form-control" ${n ? 'type="number" min="0" data-n' : 'type="text"'} data-s="${k}" value="${esc(J.set[k])}"></div>`;
   return `<div class="card mb-4"><div class="card-body">
-    <h5 class="mb-1">Proses &amp; Unduh Laporan</h5><p class="mb-4">Atur periode, tarif, dan tanda tangan, cocokkan data, lalu unduh Excel (sheet JASPRO &amp; TRANSPO) atau CSV pencairan. Pengaturan tersimpan otomatis.</p>
+    <h5 class="mb-1">Proses &amp; Unduh Laporan</h5><p class="mb-4">Atur tarif dan tanda tangan, cocokkan data, lalu unduh Excel (sheet JASPRO &amp; TRANSPO) atau CSV pencairan. Pengaturan tersimpan otomatis.</p>
     <p class="small text-body-secondary mb-4">Periode aktif: <b>${esc(jpPeriodLabel(J.periodId))}</b>. Pengaturan tarif dan tanda tangan disimpan bersama arsip periode ini.</p>
     <h6 class="text-uppercase small">Tarif per peristiwa <span class="fw-normal text-lowercase">· dapat berubah pada tanggal tertentu</span></h6>
     ${pTarif()}
