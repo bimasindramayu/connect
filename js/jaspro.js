@@ -2521,6 +2521,49 @@ function jpDefaultPeriodForYear(year = J.historyYear) {
   return String(y).padStart(4, '0') + '-' + String(month).padStart(2, '0');
 }
 
+async function jpDeletePeriod(id, button, dialog) {
+  return jpBusy(button, 'Menghapus…', async () => {
+    try {
+      jpStat('Menghapus…', 'secondary');
+      const { error } = await sb.from('jaspro_periode').delete().eq('id', id);
+      if (error) {
+        jpStat('Gagal menghapus', 'danger');
+        jpToast('Gagal menghapus periode: ' + error.message, 'danger');
+        return false;
+      }
+      J.periods = J.periods.filter(p => p.id !== id);
+      if (J.periodId === id) jpLoadPeriod(jpDefaultPeriodForYear());
+      if (J.historySelected === id) J.historySelected = '';
+      J.showPreview = false;
+      dialog.close();
+      jpRender();
+      jpToast('Arsip ' + jpPeriodLabel(id) + ' berhasil dihapus.');
+      return true;
+    } catch (error) {
+      jpStat('Gagal menghapus', 'danger');
+      jpToast('Gagal menghapus periode: ' + (error?.message || error), 'danger');
+      return false;
+    }
+  });
+}
+
+function jpDeletePeriodDialog(id) {
+  const period = J.periods.find(p => p.id === id);
+  if (!period) return;
+  jpModalClass();
+  jpDlg(`<h5 class="mb-1">Hapus arsip ${esc(jpPeriodLabel(id))}?</h5>
+    <p class="text-body-secondary">Laporan, pengaturan tarif, dan rincian periode ini akan dihapus permanen. Periode lain dan Master Rekening tidak terpengaruh.</p>
+    <div class="d-flex justify-content-end gap-2">
+      <button class="btn btn-outline-secondary" data-cancel-delete>Batal</button>
+      <button class="btn btn-danger" data-confirm-delete><i class="bx bx-trash"></i> Hapus periode</button>
+    </div>`,
+  dialog => {
+    dialog.querySelector('[data-cancel-delete]').onclick = () => dialog.close();
+    dialog.querySelector('[data-confirm-delete]').onclick = event =>
+      jpDeletePeriod(id, event.currentTarget, dialog);
+  });
+}
+
 function jpClick(e) {
   const button = e.target.closest('[data-act]');
   if (!button) return;
@@ -2546,29 +2589,7 @@ function jpClick(e) {
   } else if (action === 'hedit') {
     if (J.periods.some(p => p.id === id)) jpUploadDialog(id);
   } else if (action === 'hdel') {
-    const period = J.periods.find(p => p.id === id);
-    if (!period) return;
-    jpModalClass();
-    jpAsk(
-      'Hapus arsip ' + jpPeriodLabel(id) + '?',
-      'Laporan, pengaturan tarif, dan rincian periode ini akan dihapus permanen. Periode lain dan Master Rekening tidak terpengaruh.',
-      'Hapus Periode',
-      async () => {
-        jpStat('Menghapus…', 'secondary');
-        const { error } = await sb.from('jaspro_periode').delete().eq('id', id);
-        if (error) {
-          jpStat('Gagal menghapus', 'danger');
-          return jpToast('Gagal menghapus periode: ' + error.message, 'danger');
-        }
-        J.periods = J.periods.filter(p => p.id !== id);
-        if (J.periodId === id) jpLoadPeriod(jpDefaultPeriodForYear());
-        if (J.historySelected === id) J.historySelected = '';
-        J.showPreview = false;
-        jpRender();
-        jpToast('Arsip ' + jpPeriodLabel(id) + ' berhasil dihapus.');
-      },
-      true
-    );
+    jpDeletePeriodDialog(id);
   } else if (action === 'detail-process') jpProcess();
   else if (action === 'use') {
     const row = J.rows?.[Number(button.dataset.i)];
