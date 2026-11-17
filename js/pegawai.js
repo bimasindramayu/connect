@@ -34,8 +34,6 @@ const PEG_JABATAN = ['Penghulu Ahli Pertama', 'Penghulu Ahli Muda', 'Penghulu Ah
   'Penata Layanan Operasional', 'Pengelola Layanan Operasional', 'Pengadministrasi Perkantoran', 'Pengelola Keuangan', 'Bendahara Pengeluaran Pembantu',
   'Operator SIMKAH', 'Pranata Komputer', 'Arsiparis', 'Pelaksana',
   'Pramubakti', 'Petugas Kebersihan', 'Petugas Keamanan', 'Pengemudi'];
-const PEG_KOLOM = { nama: 'Nama', nip: 'NIP', jenis_asn: 'Jenis ASN', pangkat_golongan: 'Pangkat/golongan', jabatan: 'Jabatan', jabatan_tambahan: 'Kepala KUA Definitif / Plt.', no_hp: 'No. HP', usia_pensiun: 'Usia pensiun', sumber_usia_pensiun: 'Sumber usia pensiun', tmt_kua: 'TMT di KUA saat ini', tmt_kepala_kua: 'TMT pertama menjabat Kepala KUA', operator_simkah: 'Operator SIMKAH', operator_bop: 'Operator BOP' };
-const PEG_AKSI = { tambah: ['bg-success', 'Tambah'], ubah: ['bg-info', 'Ubah'], transfer: ['bg-warning', 'Transfer'], hapus: ['bg-danger', 'Hapus'] };
 
 // 18 angka -> "19800101 200501 1 001" (tanggal lahir, tanggal pengangkatan, jenis kelamin, nomor urut)
 const pegNip = s => { const d = String(s ?? '').replace(/\D/g, '').slice(0, 18); return [d.slice(0, 8), d.slice(8, 14), d.slice(14, 15), d.slice(15, 18)].filter(Boolean).join(' '); };
@@ -68,7 +66,6 @@ const pegPltLama = j => /\b(plt|plh|pj)\b\.?\s*kepala\s/i.test(j || '');
 const pegUrut = (a, b) => (pegPeringkat(b) - pegPeringkat(a)) || (PEG_JENIS.indexOf(a.jenis_asn) - PEG_JENIS.indexOf(b.jenis_asn))
   || (pegGolIdx(b) - pegGolIdx(a)) || String(a.nama).localeCompare(String(b.nama), 'id');
 const pegHitung = list => { const c = Object.fromEntries(PEG_JENIS.map(j => [j, 0])); list.forEach(p => { if (p.jenis_asn in c) c[p.jenis_asn]++; }); return c; };
-const pegWaktu = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' }); };
 const pegTanggal = iso => { const m = String(iso ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'; };
 // Perkiraan usia pensiun: NIP dipakai untuk memastikan tanggal lahir terbaca; jenjang JF menentukan kelompok usia.
 // Hasilnya estimasi awal (58/60/65), bukan penetapan hukum; operator dapat mengganti secara manual.
@@ -113,8 +110,7 @@ async function pagePegawai() {
       <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
         ${pu ? `<div class="btn-group" role="group" aria-label="Tampilan" id="ptabs"><button type="button" class="btn btn-sm btn-primary" data-tab="daftar" aria-pressed="true">Daftar pegawai</button><button type="button" class="btn btn-sm btn-outline-primary" data-tab="rekap" aria-pressed="false">Rekap per KUA</button></div>` : ''}
         <div class="ms-auto d-flex flex-wrap gap-2">
-          ${kelola ? '<button type="button" class="btn btn-primary btn-sm" id="padd" disabled><i class="bx bx-plus"></i> Tambah Pegawai</button><button type="button" class="btn btn-outline-primary btn-sm" id="pimp" disabled><i class="bx bx-import"></i> Impor Excel</button><input type="file" id="pfile" class="d-none" accept=".xlsx">' : ''}
-          <button type="button" class="btn btn-outline-secondary btn-sm" id="phis"><i class="bx bx-history"></i> Riwayat</button>
+          ${kelola ? '<button type="button" class="btn btn-primary btn-sm" id="padd" disabled><i class="bx bx-plus"></i> Tambah Pegawai</button>' : ''}
           <button type="button" class="btn btn-outline-secondary btn-sm" id="pxls" disabled><i class="bx bx-spreadsheet"></i> Unduh Excel</button></div></div>
       <div id="pgmsg"></div>
       <div class="row g-2 mb-3" id="pflt">
@@ -220,7 +216,7 @@ async function pagePegawai() {
             ? `<label class="form-label" for="pfk">KUA <span class="text-danger">*</span></label><select id="pfk" class="form-select"><option value="">Pilih KUA…</option>${kuas.map(k => `<option value="${k.id}"${k.id === kid0 ? ' selected' : ''}>${esc(k.nama_kua)}</option>`).join('')}</select>`
             : `<div class="small">KUA: <b>${esc(kn[kid0] || me.kua || '')}</b>${baru ? '' : '. Untuk memindahkan ke KUA lain gunakan Transfer.'}</div>`}</div>
           <div class="col-12"><label class="form-label" for="pfn">Nama lengkap beserta gelar <span class="text-danger">*</span></label>
-            <input id="pfn" class="form-control" maxlength="150" placeholder="mis. Drs. H. Ahmad Fauzi, M.Ag." value="${esc(p?.nama)}"></div>
+            <input id="pfn" class="form-control text-uppercase" type="text" autocapitalize="characters" maxlength="150" placeholder="MIS. DRS. H. AHMAD FAUZI, M.AG." value="${esc(String(p?.nama || '').toLocaleUpperCase('id-ID'))}"></div>
           <div class="col-12"><div class="form-label" id="pfjl">Jenis ASN <span class="text-danger">*</span></div>
             <div class="row g-2" role="group" aria-labelledby="pfjl">${PEG_JENIS.map(j => `<div class="col-6"><input type="radio" class="btn-check" name="pfj" id="pfj-${PEG_KODE[j]}" value="${j}"${p?.jenis_asn === j ? ' checked' : ''}><label class="btn btn-outline-primary w-100" for="pfj-${PEG_KODE[j]}">${j === 'PPPK Paruh Waktu' ? 'PPPK Paruh Waktu (PW)' : j}</label></div>`).join('')}</div></div>
           <div class="col-sm-6"><label class="form-label" for="pfi">NIP</label><input id="pfi" class="form-control" inputmode="numeric" maxlength="21" value="${esc(pegNip(p?.nip))}"><div class="form-text" id="pfih"></div></div>
@@ -304,7 +300,11 @@ async function pagePegawai() {
       });
       f.addEventListener('input', e => {
         e.target.classList.remove('is-invalid');
-        if (e.target.id === 'pfi') { pegNipIn(e.target); nipInfo(); syncPensiun(false); }
+        if (e.target.id === 'pfn') {
+          const start = e.target.selectionStart, end = e.target.selectionEnd;
+          const upper = e.target.value.toLocaleUpperCase('id-ID');
+          if (e.target.value !== upper) { e.target.value = upper; e.target.setSelectionRange(start, end); }
+        } else if (e.target.id === 'pfi') { pegNipIn(e.target); nipInfo(); syncPensiun(false); }
         else if (e.target.id === 'pfb') syncPensiun(false);
         else if (e.target.id === 'pfup') el('pfus').value = 'MANUAL';
       });
@@ -315,7 +315,7 @@ async function pagePegawai() {
 
       const salah = (c, m) => { c.classList.add('is-invalid'); c.focus(); el('pfmsg').innerHTML = note(m); return null; };
       const cek = () => {   // sama dengan pegawai_guard (bop.sql); database tetap memeriksa ulang
-        const nama = el('pfn').value.replace(/\s+/g, ' ').trim(), jab = el('pfb').value.replace(/\s+/g, ' ').trim(), j = jenis(), hp = pegHp(el('pfh').value);
+        const nama = el('pfn').value.replace(/\s+/g, ' ').trim().toLocaleUpperCase('id-ID'), jab = el('pfb').value.replace(/\s+/g, ' ').trim(), j = jenis(), hp = pegHp(el('pfh').value);
         const nip = el('pfi').value.replace(/\D/g, ''), gol = el('pfg').value, kua = kuaForm(), tb = PEG_TAMBAHAN_JENIS.includes(j) ? el('pft').value : '';
         const usia = el('pfup').value ? Number(el('pfup').value) : null;
         const tmtKua = ['PNS','PPPK','PPPK Paruh Waktu'].includes(j) ? (el('pftmt').value || null) : null;
@@ -374,7 +374,7 @@ async function pagePegawai() {
       ${p.jabatan_tambahan ? `<div class="alert alert-warning py-2 small mb-3" id="ptlepas">${esc(p.nama)} saat ini <b>${esc(p.jabatan_tambahan)}</b>. Jabatan tambahan itu melekat pada KUA asal, jadi <b>dikosongkan</b> saat transfer; Operator KUA asal perlu menetapkan penggantinya.</div>` : ''}
       <label class="form-label" for="ptk">KUA tujuan</label>
       <select id="ptk" class="form-select"><option value="">Pilih KUA tujuan…</option>${tujuan.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>
-      <div class="alert alert-info py-2 small mt-3 mb-3">Pegawai langsung berpindah ke KUA tujuan dan tidak lagi tampil di daftar KUA asal. Perpindahan tercatat di Riwayat; Operator KUA tujuan dapat memindahkannya kembali bila keliru.</div>
+      <div class="alert alert-info py-2 small mt-3 mb-3">Pegawai langsung berpindah ke KUA tujuan dan tidak lagi tampil di daftar KUA asal. Operator KUA tujuan dapat memindahkannya kembali bila keliru.</div>
       <div id="ptmsg"></div>
       <div class="d-flex justify-content-end gap-2"><button type="button" class="btn btn-outline-secondary" data-x>Batal</button><button type="button" class="btn btn-primary" data-ok>Transfer</button></div>`, d => {
       d.className = 'dlg-md';
@@ -394,7 +394,7 @@ async function pagePegawai() {
   };
 
   // ---- Hapus ----
-  const hapus = p => jpAsk('Hapus pegawai?', `${p.nama}${p.nip ? ' (NIP ' + pegNip(p.nip) + ')' : ''} akan dihapus dari data pegawai ${kn[p.kua_id] || 'KUA'}. Penghapusan tercatat di Riwayat. Bila pegawai ini hanya pindah tugas, gunakan Transfer.`, 'Hapus', async () => {
+  const hapus = p => jpAsk('Hapus pegawai?', `${p.nama}${p.nip ? ' (NIP ' + pegNip(p.nip) + ')' : ''} akan dihapus dari data pegawai ${kn[p.kua_id] || 'KUA'}. Bila pegawai ini hanya pindah tugas, gunakan Transfer.`, 'Hapus', async () => {
     const { data, error } = await sb.from('pegawai').delete().eq('id', p.id).select('id');
     if (!live(ep)) return;
     if (error) return lapor($('pgmsg'), pegGalat(error), 'danger');
@@ -402,212 +402,6 @@ async function pagePegawai() {
     await refresh();   // tabel diperbarui dulu, baru pesan sukses (pesan tidak mendahului tabel)
     if (live(ep)) lapor($('pgmsg'), `${p.nama} dihapus dari data pegawai.`, 'success');
   }, true);
-
-  // ---- Riwayat ----
-  const riwayat = async () => {
-    jpDlg(`<h5>Riwayat Pegawai</h5>
-      <p class="small mb-3">${op ? `Perubahan data, transfer masuk dan keluar, serta penghapusan pegawai ${esc(me.kua || 'KUA Anda')}` : 'Perubahan data, transfer, dan penghapusan pegawai semua KUA'} (200 catatan terbaru).</p>
-      <div id="prbody">Memuat…</div>
-      <div class="d-flex justify-content-end mt-3"><button type="button" class="btn btn-outline-secondary" data-x>Tutup</button></div>`, d => {
-      d.className = 'dlg-lg'; d.querySelector('[data-x]').onclick = () => d.close();
-    });
-    const { data, error } = await sb.from('pegawai_riwayat').select('id,waktu,aksi,nama,nip,dari_kua,ke_kua,oleh_nama,rincian')
-      .order('waktu', { ascending: false }).order('id', { ascending: false }).limit(200);
-    const box = $('prbody');
-    if (!box || !live(ep)) return;
-    if (error) return box.innerHTML = note(/pegawai_riwayat|schema cache/i.test(error.message) ? 'Tabel riwayat belum ada. Jalankan bop.sql versi terbaru di SQL Editor Supabase.' : error.message);
-    const n = k => kn[k] || 'KUA lain', v = x => x == null || x === '' ? '-' : String(x);
-    const ket = r => {
-      if (r.aksi === 'tambah') return `Ditambahkan ke ${n(r.ke_kua)}`;
-      if (r.aksi === 'hapus') return `Dihapus dari ${n(r.dari_kua)}`;
-      if (r.aksi === 'transfer') {
-        const lepas = Array.isArray(r.rincian?.jabatan_tambahan) && r.rincian.jabatan_tambahan[0] ? ` (jabatan tambahan ${r.rincian.jabatan_tambahan[0]} dilepas)` : '';
-        return (op ? (r.ke_kua === me.kua_id ? `Pindah masuk dari ${n(r.dari_kua)}` : `Dipindahkan ke ${n(r.ke_kua)}`) : `${n(r.dari_kua)} → ${n(r.ke_kua)}`) + lepas;
-      }
-      return Object.entries(r.rincian || {}).filter(([, a]) => Array.isArray(a))
-        .map(([k, [a, b]]) => `${PEG_KOLOM[k] || k}: ${k === 'nip' ? v(pegNip(a)) : v(a)} → ${k === 'nip' ? v(pegNip(b)) : v(b)}`).join('; ');
-    };
-    box.innerHTML = data.length ? `<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Waktu</th><th>Aksi</th><th>Pegawai</th><th>Keterangan</th><th>Oleh</th></tr></thead><tbody>${data.map(r => {
-      const a = PEG_AKSI[r.aksi] || ['bg-secondary', r.aksi];
-      return `<tr><td class="text-nowrap">${esc(pegWaktu(r.waktu))}</td><td><span class="badge ${a[0]}">${esc(a[1])}</span></td><td>${esc(r.nama)}${r.nip ? `<div class="small">${esc(pegNip(r.nip))}</div>` : ''}</td><td>${esc(ket(r))}</td><td>${esc(r.oleh_nama || '-')}</td></tr>`;
-    }).join('')}</tbody></table></div>` : '<p class="text-center py-3 mb-0">Belum ada riwayat.</p>';
-  };
-
-  // ---- Impor XLSX ----
-  const imporExcel = async file => {
-    if (!file) return;
-    const tombol = $('pimp');
-    if (tombol) tombol.disabled = true;
-    lapor($('pgmsg'), `Membaca ${file.name}…`, 'info');
-    try {
-      await loadJs(CDN.exceljs);
-      const wb = new ExcelJS.Workbook();
-      await wb.xlsx.load(await file.arrayBuffer());
-      const ws = wb.worksheets[0];
-      if (!ws || ws.rowCount < 2) throw new Error('File Excel tidak memiliki baris data.');
-      const kunci = v => String(v ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
-      const teks = v => {
-        if (v == null) return '';
-        if (v instanceof Date) return v.toISOString().slice(0, 10);
-        if (typeof v === 'object') {
-          if (v.result != null) return teks(v.result);
-          if (v.text != null) return String(v.text).trim();
-          if (Array.isArray(v.richText)) return v.richText.map(x => x.text || '').join('').trim();
-        }
-        return String(v).trim();
-      };
-      const tanggal = v => {
-        if (v == null || v === '') return null;
-        if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0, 10);
-        if (typeof v === 'number' && Number.isFinite(v)) {
-          const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v * 86400000));
-          return isNaN(d) ? null : d.toISOString().slice(0, 10);
-        }
-        const x = String(v).trim();
-        let m = x.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-        if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
-        m = x.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-        if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-        return null;
-      };
-      const header = new Map();
-      ws.getRow(1).eachCell((cell, col) => header.set(kunci(teks(cell.value)), col));
-      const kolom = (...names) => names.map(kunci).map(x => header.get(x)).find(Boolean);
-      const ambil = (row, ...names) => { const i = kolom(...names); return i ? teks(row.getCell(i).value) : ''; };
-      if (!kolom('Nama') || !kolom('Tempat Tugas') || !kolom('Jenis Pegawai') || !kolom('Jabatan') || !kolom('NIP')) {
-        throw new Error('Header wajib tidak ditemukan. Gunakan template pendataan dengan kolom Nama, Tempat Tugas, Jenis Pegawai, Jabatan, dan NIP.');
-      }
-      const normKua = x => kunci(x).replace(/^kua/, '');
-      const cariKua = name => {
-        const key = normKua(name);
-        return kuas.find(k => normKua(k.nama_kua) === key)
-          || kuas.find(k => normKua(k.nama_kua).includes(key) || key.includes(normKua(k.nama_kua)));
-      };
-      const roman = PEG_GOL_PPPK.slice().sort((a,b) => b.length-a.length);
-      const golongan = (jenis, x) => {
-        const t = String(x || '').toUpperCase();
-        if (jenis === 'PNS') { const m = t.match(/\b((?:I{1,3}|IV)\/[A-E])\b/); return m ? m[1].replace(/\/([A-E])$/, (_, c) => '/' + c.toLowerCase()) : ''; }
-        const m = t.match(/\b(I{1,3}|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI|XVII)\b/);
-        return m && roman.includes(m[1]) ? m[1] : '';
-      };
-      const jenisPegawai = x => {
-        const t = kunci(x);
-        if (t === 'pns') return 'PNS';
-        if (t === 'pppk') return 'PPPK';
-        if (t.includes('pppkpw') || t.includes('paruhwaktu')) return 'PPPK Paruh Waktu';
-        if (t === 'honor' || t === 'honorer') return 'Honor';
-        return '';
-      };
-      const bool = x => /^(1|true|ya|yes|y|x|✓|✔)$/i.test(String(x || '').trim());
-      const nips = new Set(rows.map(p => String(p.nip || '').replace(/\D/g, '')).filter(Boolean));
-      const kepala = new Set(rows.filter(p => p.jabatan_tambahan).map(p => `${p.kua_id}:${p.jabatan_tambahan}`));
-      const staged = [], masalah = []; let total = 0;
-      ws.eachRow((row, no) => {
-        if (no === 1 || !row.values.slice(1).some(v => v != null && String(v).trim() !== '')) return;
-        total++;
-        const nama = ambil(row, 'Nama');
-        const tempat = ambil(row, 'Tempat Tugas');
-        const kua = cariKua(tempat);
-        const jenis = jenisPegawai(ambil(row, 'Jenis Pegawai'));
-        let jabatan = ambil(row, 'Jabatan');
-        let perluDilengkapi = false;
-        if (!jabatan || pegJabatanLamaSaja(jabatan)) { jabatan = 'Perlu dilengkapi'; perluDilengkapi = true; }
-        const nipRaw = ambil(row, 'NIP').replace(/\s/g, '');
-        const nip = jenis === 'Honor' ? null : (nipRaw.replace(/\D/g, '') || null);
-        const gol = jenis ? golongan(jenis, ambil(row, 'Pangkat/Golongan', 'Pangkat / Golongan')) : '';
-        const tambahanRaw = ambil(row, 'Jabatan Tambahan Kepala KUA');
-        const jabatanTambahan = /plt|plh|pj/i.test(tambahanRaw) ? 'Plt. Kepala KUA'
-          : /kepala|definitif/i.test(tambahanRaw) ? 'Kepala KUA' : null;
-        const tmtKua = tanggal(ambil(row, 'TMT di KUA saat ini'));
-        const tmtKepala = tanggal(ambil(row, 'TMT Pertama Kali Menjabat Kepala KUA'));
-        const usiaRaw = ambil(row, 'Usia Pensiun (tahun)');
-        const usia = usiaRaw ? Number.parseInt(usiaRaw, 10) : pegPensiun(jabatan, nip);
-        const sumberRaw = ambil(row, 'Sumber Usia Pensiun').toUpperCase();
-        const sumber = usia == null ? null : (sumberRaw === 'MANUAL' ? 'MANUAL' : 'AUTO');
-        const hp = pegHp(ambil(row, 'No. HP', 'Nomor HP', 'HP / WA')) || null;
-        const alasan = [];
-        if (!nama) alasan.push('Nama kosong');
-        if (!kua) alasan.push(`Tempat Tugas "` + (tempat || '-') + `" tidak cocok dengan daftar KUA`);
-        if (op && kua && kua.id !== me.kua_id) alasan.push('Operator hanya dapat mengimpor data KUA sendiri');
-        if (!jenis) alasan.push(`Jenis pegawai "` + (ambil(row, 'Jenis Pegawai') || '-') + `" tidak dikenali`);
-        if (jenis === 'PNS' || jenis === 'PPPK') {
-          if (!nip || nip.length !== 18) alasan.push(`NIP ` + jenis + ` harus 18 angka`);
-          if (!gol) alasan.push(`Pangkat/golongan ` + jenis + ` belum valid atau kosong`);
-        } else if (jenis === 'PPPK Paruh Waktu' && nip && nip.length !== 18) alasan.push('NIP PPPK PW harus 18 angka bila diisi');
-        if (jabatan.length > 100) alasan.push('Jabatan lebih dari 100 karakter');
-        if (jabatanTambahan && !PEG_TAMBAHAN_JENIS.includes(jenis)) alasan.push('Kepala KUA hanya dapat ditetapkan untuk PNS atau PPPK');
-        if (usia != null && (!Number.isInteger(usia) || usia < 40 || usia > 75)) alasan.push('Usia pensiun harus 40–75 tahun');
-        if (usiaRaw && !Number.isFinite(usia)) alasan.push('Usia pensiun bukan angka');
-        if (ambil(row, 'TMT di KUA saat ini') && !tmtKua) alasan.push('Format TMT di KUA tidak terbaca');
-        if (ambil(row, 'TMT Pertama Kali Menjabat Kepala KUA') && !tmtKepala) alasan.push('Format TMT Kepala KUA tidak terbaca');
-        if (nip && nips.has(nip)) alasan.push(`NIP ` + nip + ` sudah ada di database atau duplikat di file`);
-        const kepalaKey = kua && jabatanTambahan ? `${kua.id}:${jabatanTambahan}` : '';
-        if (kepalaKey && kepala.has(kepalaKey)) alasan.push(`${jabatanTambahan} di ${tempat} sudah memiliki pemegang`);
-        if (alasan.length) {
-          masalah.push({ no, nama: nama || '(tanpa nama)', tempat, alasan: alasan.join('; ') });
-          return;
-        }
-        if (nip) nips.add(nip);
-        if (kepalaKey) kepala.add(kepalaKey);
-        staged.push({
-          kua_id: kua.id, nama, nip, jenis_asn: jenis, pangkat_golongan: jenis === 'Honor' ? null : (gol || null),
-          jabatan, jabatan_tambahan: jabatanTambahan, no_hp: hp, usia_pensiun: usia, sumber_usia_pensiun: sumber,
-          tmt_kua: ['PNS','PPPK','PPPK Paruh Waktu'].includes(jenis) ? tmtKua : null,
-          tmt_kepala_kua: jabatanTambahan ? tmtKepala : null,
-          operator_simkah: bool(ambil(row, 'Operator SIMKAH')), operator_bop: bool(ambil(row, 'Operator BOP')),
-          _row: no, _incomplete: perluDilengkapi
-        });
-      });
-      if (!staged.length) throw new Error(`Tidak ada data yang dapat diimpor. ` + masalah.length + ` baris perlu diperbaiki.`);
-      const preview = staged.slice(0, 5).map(p => `<tr><td>` + p._row + `</td><td>` + esc(p.nama) + `</td><td>` + esc(kn[p.kua_id] || '') + `</td><td>` + esc(p.jenis_asn) + `</td><td>` + esc(p.jabatan) + `</td><td>` + (p.usia_pensiun ? p.usia_pensiun + ' th' : '-') + `</td></tr>`).join('');
-      const issueTable = masalah.map(x => `<tr><td>` + x.no + `</td><td>` + esc(x.nama) + `</td><td>` + esc(x.tempat) + `</td><td>` + esc(x.alasan) + `</td></tr>`).join('');
-      jpDlg(`<h5>Pratinjau impor pegawai</h5>
-        <p class="small mb-3">File: <b>` + esc(file.name) + `</b>. ID pada file sumber tidak digunakan; data akan dibuat sebagai data pegawai baru.</p>
-        <div class="row g-2 mb-3">
-          <div class="col-4"><div class="border rounded p-2"><div class="small text-muted">Baris terbaca</div><div class="fs-4 fw-semibold">` + total + `</div></div></div>
-          <div class="col-4"><div class="border rounded p-2"><div class="small text-muted">Siap diimpor</div><div class="fs-4 fw-semibold">` + staged.length + `</div></div></div>
-          <div class="col-4"><div class="border rounded p-2"><div class="small text-muted">Dilewati</div><div class="fs-4 fw-semibold">` + masalah.length + `</div></div></div>
-        </div>
-        ` + (staged.some(x => x._incomplete) ? '<div class="alert alert-warning py-2 small">Ada ' + staged.filter(x => x._incomplete).length + ' pegawai yang jabatan pokoknya kosong atau berisi “Kepala KUA”. Data tetap dapat diimpor dengan jabatan sementara <b>Perlu dilengkapi</b>. Lengkapi setelah impor.</div>' : '') + `
-        <div class="small fw-semibold mb-1">Contoh data yang akan diimpor</div>
-        <div class="table-responsive mb-3"><table class="table table-sm"><thead><tr><th>Baris</th><th>Nama</th><th>KUA</th><th>Jenis</th><th>Jabatan</th><th>Usia pensiun</th></tr></thead><tbody>` + preview + `</tbody></table></div>
-        ` + (masalah.length ? '<details class="mb-3"><summary class="small fw-semibold">Baris yang dilewati (' + masalah.length + ')</summary><div class="table-responsive mt-2" style="max-height:220px;overflow:auto"><table class="table table-sm"><thead><tr><th>Baris</th><th>Nama</th><th>KUA</th><th>Alasan</th></tr></thead><tbody>' + issueTable + '</tbody></table></div>' + '</details>' : '') + `
-        <div id="pimpprogress" class="small mb-2"></div>
-        <div class="d-flex justify-content-end gap-2"><button type="button" class="btn btn-outline-secondary" data-x>Batal</button><button type="button" class="btn btn-primary" id="pimpgo">Impor ` + staged.length + ` pegawai</button></div>`, d => {
-        d.className = 'dlg-lg';
-        d.querySelector('[data-x]').onclick = () => d.close();
-        d.querySelector('#pimpgo').onclick = async e => {
-          const go = e.currentTarget, status = d.querySelector('#pimpprogress');
-          go.disabled = true; d.querySelector('[data-x]').disabled = true;
-          let berhasil = 0, gagal = [];
-          const payload = p => { const { _row, _incomplete, ...data } = p; return data; };
-          for (let i = 0; i < staged.length; i += 25) {
-            const chunk = staged.slice(i, i + 25);
-            const { error } = await sb.from('pegawai').insert(chunk.map(payload));
-            if (!error) berhasil += chunk.length;
-            else {
-              for (const p of chunk) {
-                const one = await sb.from('pegawai').insert(payload(p));
-                if (one.error) gagal.push({ row: p._row, name: p.nama, message: pegGalat(one.error) });
-                else berhasil++;
-              }
-            }
-            status.textContent = 'Menyimpan ' + Math.min(i + 25, staged.length) + ' dari ' + staged.length + ' baris… Berhasil ' + berhasil + '.';
-          }
-          d.close();
-          await refresh();
-          if (live(ep)) {
-            const detailGagal = gagal.slice(0, 5).map(x => 'Baris ' + x.row + ' (' + x.name + '): ' + x.message).join(' | ');
-            lapor($('pgmsg'), 'Impor selesai: ' + berhasil + ' berhasil, ' + gagal.length + ' gagal, ' + masalah.length + ' dilewati.' + (detailGagal ? ' Rincian gagal: ' + detailGagal : ''), gagal.length || masalah.length ? 'warning' : 'success');
-          }
-        };
-      });
-    } catch (e) {
-      if (live(ep)) lapor($('pgmsg'), e?.message || String(e), 'danger');
-    } finally {
-      if (live(ep) && tombol) tombol.disabled = false;
-    }
-  };
 
   // ---- Unduh Excel (sesuai penyaring yang sedang dipakai) ----
   const unduh = async () => {
@@ -658,18 +452,13 @@ async function pagePegawai() {
     if (!p) return lapor($('pgmsg'), 'Pegawai tidak ditemukan. Muat ulang halaman.', 'warning');
     if (b.dataset.e) form(p); else if (b.dataset.t) transfer(p); else hapus(p);
   };
-  $('phis').onclick = riwayat;
   $('pxls').onclick = unduh;
-  if (kelola) {
-    $('padd').onclick = () => form(null);
-    $('pimp').onclick = () => $('pfile').click();
-    $('pfile').onchange = async e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) await imporExcel(file); };
-  }
+  if (kelola) $('padd').onclick = () => form(null);
 
   if (!(await load())) return;
   if (pu) $('pkf').innerHTML = '<option value="0">Semua KUA</option>' + kuas.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('');
   $('pxls').disabled = false;
-  if (kelola) { $('padd').disabled = false; $('pimp').disabled = false; }
+  if (kelola) $('padd').disabled = false;
   draw();
 }
 
