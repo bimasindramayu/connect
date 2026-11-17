@@ -43,9 +43,9 @@ Isi folder proyek ini (lihat `README.md` bagian 2 untuk penjelasan tiap berkas):
    - **Publishable key** (`sb_publishable_...`): aman dipasang di website.
    - **Secret key** (`sb_secret_...`, atau `service_role` pada tampilan lama): **RAHASIA**, hanya untuk `.env` di komputer Anda.
 3. **SQL Editor > New query**: tempel **seluruh isi `bop.sql`** > **Run**. Hasil `Success`. Aman dijalankan ulang kapan pun. Ini membuat tabel, aturan (trigger), hak akses (RLS), tujuh peran, hak akses menu bawaan tiap peran, dan data awal (31 KUA, 11 POS, pengaturan bawaan). Hak akses menu bawaan hanya diisi **sekali**: menjalankan ulang `bop.sql` tidak mengembalikan menu yang sudah Anda cabut di halaman Hak Akses Menu.
-3a. Bagian **12) JASPRO TRANSPORT** di `bop.sql` sekarang juga membuat tabel arsip bulanan, aturan akses, validasi jadwal ganda, dan memindahkan laporan lama secara non-destruktif. Tidak ada file SQL tambahan yang perlu dijalankan.
-5. **Authentication > Sign In / Providers** (di tampilan lama: *Settings*): matikan **Allow new users to sign up**. **Wajib.** Semua akun dibuat oleh admin (lewat `bop.mjs` atau menu Pengaturan di aplikasi). Bila pendaftaran dibiarkan terbuka, siapa pun yang tahu URL dan publishable key bisa mendaftar dengan peran apa pun (termasuk `role=admin`) di metadata dan otomatis memilikinya.
-6. **Authentication > URL Configuration**: isi **Site URL** dengan alamat website nanti, mis. `https://bimasindramayu.github.io/connect/`.
+Catatan: Bagian **12) JASPRO TRANSPORT** di `bop.sql` juga membuat tabel arsip bulanan, aturan akses, validasi jadwal ganda, dan memindahkan laporan lama secara non-destruktif. Tidak ada file SQL tambahan yang perlu dijalankan.
+4. **Authentication > Sign In / Providers** (di tampilan lama: *Settings*): matikan **Allow new users to sign up**. **Wajib.** Semua akun dibuat oleh admin (lewat `bop.mjs` atau menu Pengaturan di aplikasi). Bila pendaftaran dibiarkan terbuka, siapa pun yang tahu URL dan publishable key bisa mendaftar dengan peran apa pun (termasuk `role=admin`) di metadata dan otomatis memilikinya.
+5. **Authentication > URL Configuration**: isi **Site URL** dengan alamat website nanti, mis. `https://bimasindramayu.github.io/connect/`.
 
 ## 3. Cloudflare Turnstile (captcha login)
 
