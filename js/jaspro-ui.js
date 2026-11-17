@@ -75,11 +75,12 @@ function jpUiUploadModal() {
     return '<option value="' + month + '"' + (index === current.getMonth() ? ' selected' : '') + '>' + label + '</option>';
   }).join('');
   jpDlg(
-    '<div class="jp-modal-head"><div><div class="jp-eyebrow">LAPORAN BULANAN</div><h5 class="mb-1">Unggah Laporan XLS</h5><p class="text-body-secondary mb-0">Pilih periode dan file nominatif .xlsx. Setiap periode disimpan terpisah.</p></div><button type="button" class="btn-close" data-x aria-label="Tutup"></button></div>' +
+    '<div class="jp-modal-head"><div><div class="jp-eyebrow">LAPORAN BULANAN</div><h5 class="mb-1">Unggah Laporan XLS</h5><p class="text-body-secondary mb-0">Pilih periode dan file nominatif .xlsx. Setiap periode disimpan terpisah.</p></div><button type="button" class="btn-close jp-modal-close" data-x aria-label="Tutup"></button></div>' +
     '<div class="row g-3 mt-2 mb-3">' +
       '<div class="col-sm-6"><label class="form-label" for="jp-upload-month">Bulan laporan</label><select id="jp-upload-month" class="form-select">' + monthOptions + '</select></div>' +
       '<div class="col-sm-6"><label class="form-label" for="jp-upload-year">Tahun laporan</label><input id="jp-upload-year" class="form-control" type="number" min="1900" max="2200" step="1" value="' + current.getFullYear() + '"></div>' +
     '</div>' +
+    '<div class="alert alert-secondary d-flex align-items-center justify-content-between gap-3 py-2" id="jp-upload-period-info" role="status"><span id="jp-upload-period-status">Memeriksa arsip periode…</span><button class="btn btn-sm btn-outline-primary d-none" type="button" id="jp-upload-detail">Detail</button></div>' +
     '<input id="jp-upload-file" type="file" accept=".xlsx" hidden>' +
     '<button class="jp-drop w-100" type="button" id="jp-upload-drop">' +
       '<span class="jp-drop-icon"><i class="bx bx-cloud-upload"></i></span><span class="d-block fw-semibold">Pilih file Excel atau seret ke area ini</span>' +
@@ -96,6 +97,10 @@ function jpUiUploadModal() {
       const save = dialog.querySelector('#jp-upload-save');
       const confirmBox = dialog.querySelector('#jp-upload-confirm');
       const errorBox = dialog.querySelector('#jp-upload-error');
+      const periodStatus = dialog.querySelector('#jp-upload-period-status');
+      const detailButton = dialog.querySelector('#jp-upload-detail');
+      const monthSelect = dialog.querySelector('#jp-upload-month');
+      const yearInput = dialog.querySelector('#jp-upload-year');
       let file = null;
       let prepared = null;
       const resetPrepared = function () {
@@ -124,8 +129,47 @@ function jpUiUploadModal() {
         setFile(event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]);
       };
       fileInput.onchange = function () { setFile(fileInput.files && fileInput.files[0]); };
-      dialog.querySelector('#jp-upload-month').onchange = resetPrepared;
-      dialog.querySelector('#jp-upload-year').onchange = resetPrepared;
+      const selectedUploadPeriod = function () {
+        const monthNumber = JX.BULAN_LIST.indexOf(monthSelect.value) + 1;
+        const year = Number(yearInput.value);
+        if (!Number.isInteger(year) || year < 1900 || year > 2200 || monthNumber < 1) return null;
+        return String(year).padStart(4, '0') + '-' + String(monthNumber).padStart(2, '0');
+      };
+      const refreshPeriodInfo = function () {
+        const id = selectedUploadPeriod();
+        detailButton.classList.add('d-none');
+        if (!id) {
+          periodStatus.textContent = 'Masukkan bulan dan tahun yang valid untuk memeriksa arsip.';
+          return;
+        }
+        const existing = jpUiPeriod(id);
+        if (existing && existing.laporan) {
+          const count = Array.isArray(existing.laporan.rows) ? existing.laporan.rows.length : 0;
+          periodStatus.textContent = 'Laporan ' + jpPeriodLabel(id) + ' sudah tersedia · ' + count + ' baris · ' + (existing.laporan.fileName || 'Laporan Nominatif') + '. Unggahan baru akan mengganti arsip periode ini.';
+          detailButton.classList.remove('d-none');
+          detailButton.onclick = function () {
+            dialog.close();
+            jpUiOpenDetail(id);
+          };
+        } else {
+          periodStatus.textContent = 'Belum ada laporan tersimpan untuk ' + jpPeriodLabel(id) + '. Periode ini siap menerima unggahan baru.';
+        }
+      };
+      const handlePeriodChange = function () {
+        resetPrepared();
+        refreshPeriodInfo();
+      };
+      monthSelect.onchange = handlePeriodChange;
+      yearInput.onchange = handlePeriodChange;
+      detailButton.onclick = function () {
+        const id = selectedUploadPeriod();
+        const existing = id ? jpUiPeriod(id) : null;
+        if (existing && existing.laporan) {
+          dialog.close();
+          jpUiOpenDetail(id);
+        }
+      };
+      refreshPeriodInfo();
       save.onclick = async function () {
         errorBox.innerHTML = '';
         const month = dialog.querySelector('#jp-upload-month').value;
@@ -473,19 +517,15 @@ function jpUiAnnualPage() {
   });
   const total = function (key) { return values.reduce(function (sum, row) { return sum + (Number(row.calc[key]) || 0); }, 0); };
   const table = records.length ? (
-    '<div class="jp-table-scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>Bulan</th><th class="text-end">Baris</th><th class="text-end">Peristiwa</th><th class="text-end">Jaspro bruto</th><th class="text-end">PPh</th><th class="text-end">Jaspro bersih</th><th class="text-end">Transport</th><th class="text-end">Dibayarkan</th><th class="text-end">Rincian</th></tr></thead><tbody>' +
+    '<div class="jp-table-scroll"><table class="table table-hover align-middle mb-0"><thead><tr><th>Bulan</th><th class="text-end">Baris</th><th class="text-end">Peristiwa</th><th class="text-end">Jaspro Bruto</th><th class="text-end">Transport Bruto</th><th class="text-end">Rincian</th></tr></thead><tbody>' +
     values.map(function (item) {
       const calc = item.calc, period = item.period;
       return '<tr><td class="fw-semibold">' + esc(jpPeriodLabel(period.id).replace(' ' + period.tahun, '')) + '</td>' +
         '<td class="text-end">' + calc.rows.length + '</td><td class="text-end">' + rp(calc.peristiwa) + '</td>' +
-        '<td class="text-end text-nowrap">' + jpUiMoney(calc.jasproBruto) + '</td><td class="text-end text-nowrap">' + jpUiMoney(calc.pph) + '</td>' +
-        '<td class="text-end text-nowrap">' + jpUiMoney(calc.jaspro) + '</td><td class="text-end text-nowrap">' + jpUiMoney(calc.transport) + '</td>' +
-        '<td class="text-end text-nowrap fw-semibold">' + jpUiMoney(calc.total) + '</td>' +
+        '<td class="text-end text-nowrap">' + jpUiMoney(calc.jasproBruto) + '</td><td class="text-end text-nowrap">' + jpUiMoney(calc.transport) + '</td>' +
         '<td class="text-end"><button class="btn btn-sm btn-outline-primary" type="button" data-act="detail" data-id="' + period.id + '">Detail</button></td></tr>';
     }).join('') + '</tbody><tfoot><tr class="fw-semibold"><td>TOTAL ' + J.historyYear + '</td><td></td><td class="text-end">' + rp(total('peristiwa')) + '</td>' +
-    '<td class="text-end text-nowrap">' + jpUiMoney(total('jasproBruto')) + '</td><td class="text-end text-nowrap">' + jpUiMoney(total('pph')) + '</td>' +
-    '<td class="text-end text-nowrap">' + jpUiMoney(total('jaspro')) + '</td><td class="text-end text-nowrap">' + jpUiMoney(total('transport')) + '</td>' +
-    '<td class="text-end text-nowrap">' + jpUiMoney(total('total')) + '</td><td></td></tr></tfoot></table></div>'
+    '<td class="text-end text-nowrap">' + jpUiMoney(total('jasproBruto')) + '</td><td class="text-end text-nowrap">' + jpUiMoney(total('transport')) + '</td><td></td></tr></tfoot></table></div>'
   ) : '<div class="jp-empty"><div class="jp-empty-icon"><i class="bx bx-calendar-x"></i></div><div class="fw-semibold">Belum ada laporan pada tahun ' + J.historyYear + '</div><p class="small text-body-secondary mb-0">Pilih tahun lain atau unggah laporan untuk mulai membuat arsip tahunan.</p></div>';
   return '<section class="jp-annual">' +
     '<div class="jp-toolbar mb-3"><div><div class="jp-eyebrow">ARSIP JASPRO TRANSPORT</div><h5 class="mb-1">Riwayat Tahunan</h5><p class="text-body-secondary mb-0">Rekap laporan nominatif per bulan dan rincian pembayaran penghulu.</p></div>' +
@@ -535,7 +575,7 @@ function jpUiReview() {
   const mismatch = sourceRows.filter(function (row) { return !row.jumlahDiterimaCocok; }).length;
   const hasDate = rows.some(function (row) { return JX.tglSah(row.tanggal); });
   const columns = '<th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Status Cocok</th><th>Nomor Rekening</th><th>Nama Pemilik</th>' +
-    (hasDate ? '<th>Tanggal</th>' : '') + '<th class="text-end">Peristiwa</th><th class="text-end">Jaspro diterima</th><th class="text-end">Transport</th><th class="text-end">Diterima file (J)</th><th class="text-end">Hasil bruto (H+I)</th><th>Pemeriksaan</th><th class="text-end">Dibayarkan</th>';
+    (hasDate ? '<th>Tanggal</th>' : '') + '<th class="text-end">Peristiwa</th><th class="text-end">Jaspro Bruto</th><th class="text-end">PPh</th><th class="text-end">Jaspro Bersih</th><th class="text-end">Transport Bruto</th><th class="text-end">Hasil bruto (H+I)</th><th class="text-end">Dibayarkan</th>';
   const body = rows.map(function (row, index) {
     const status = JST[row.matchStatus] || JST.TIDAK_DITEMUKAN;
     const needs = !['OTOMATIS', 'MANUAL'].includes(row.matchStatus);
@@ -548,11 +588,11 @@ function jpUiReview() {
       '<td><input class="form-control form-control-sm jp-inline-input jp-account-input" data-i="' + index + '" data-f="rek" value="' + esc(row.rekening) + '" placeholder="Belum ada rekening">' + accountHint + '</td>' +
       '<td><input class="form-control form-control-sm jp-inline-input jp-owner-input" data-i="' + index + '" data-f="own" value="' + esc(row.namaPemilik || '') + '" placeholder="Nama pemilik rekening"></td>' +
       (hasDate ? '<td class="text-nowrap">' + (JX.tglSah(row.tanggal) ? JX.tglID(row.tanggal) : '–') + '</td>' : '') +
-      '<td class="text-end">' + rp(row.jumlahPeristiwa) + '</td><td class="text-end text-nowrap">' + jpUiMoney(row.jasproDiterima) + '<small class="d-block text-body-secondary">@ ' + rp(row.tarifJaspro) + '</small></td>' +
-      '<td class="text-end text-nowrap">' + jpUiMoney(row.transpoDiterima) + '<small class="d-block text-body-secondary">@ ' + rp(row.tarifTransport) + '</small></td>' +
-      '<td class="text-end text-nowrap">' + (row.jumlahDiterimaSumber == null ? '–' : jpUiMoney(row.jumlahDiterimaSumber)) + '</td>' +
+      '<td class="text-end">' + rp(row.jumlahPeristiwa) + '</td><td class="text-end text-nowrap">' + jpUiMoney(row.jasproSubtotal) + '<small class="d-block text-body-secondary">@ ' + rp(row.tarifJaspro) + '</small></td>' +
+      '<td class="text-end text-nowrap">' + jpUiMoney(row.jasproPph) + '</td>' +
+      '<td class="text-end text-nowrap">' + jpUiMoney(row.jasproDiterima) + '</td>' +
+      '<td class="text-end text-nowrap">' + jpUiMoney(row.transpoSubtotal) + '<small class="d-block text-body-secondary">@ ' + rp(row.tarifTransport) + '</small></td>' +
       '<td class="text-end text-nowrap fw-semibold">' + jpUiMoney(row.jumlahDiterimaHitung) + '</td>' +
-      '<td>' + (row.jumlahDiterimaSumber == null ? '<span class="badge bg-label-secondary">Tidak ada di file</span>' : row.jumlahDiterimaCocok ? '<span class="badge bg-label-success">Sesuai</span>' : '<span class="badge bg-label-warning">Selisih ' + jpUiMoney(Math.abs(row.selisihJumlahDiterima)) + '</span>') + '</td>' +
       '<td class="text-end text-nowrap fw-semibold">' + jpUiMoney(row.jumlahDiterimaBersih) + '</td></tr>';
   }).join('');
   const downloads = '<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3"><p class="small text-body-secondary mb-0">Perubahan golongan dan rekening pada pratinjau ini bersifat sementara selama halaman terbuka.</p>' +
@@ -563,11 +603,22 @@ function jpUiReview() {
     jpCard('bx-list-ul', 'primary', rows.length, 'Total baris') +
     jpCard('bx-check-circle', 'success', automatic, 'Cocok otomatis') +
     jpCard('bx-error', needReview ? 'warning' : 'success', needReview, 'Perlu ditinjau') +
-    jpCard('bx-wallet', 'info', jpUiMoney(sum('jasproDiterima')), 'Jaspro diterima') +
-    jpCard('bx-bus', 'info', jpUiMoney(sum('transpoDiterima')), 'Transport diterima') +
+    jpCard('bx-wallet', 'info', jpUiMoney(sum('jasproDiterima')), 'Jaspro bersih') +
+    jpCard('bx-bus', 'info', jpUiMoney(sum('transpoDiterima')), 'Transport bruto') +
     jpCard('bx-check-double', mismatch ? 'warning' : 'success', sourceRows.length ? (sourceRows.length - mismatch) + '/' + sourceRows.length : '–', 'Pemeriksaan kolom J') +
     '</div><div class="card"><div class="card-body"><div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3"><div><h6 class="mb-1">Pratinjau Nominatif</h6><p class="small text-body-secondary mb-0">Nomor rekening ditampilkan dari Master Rekening atau dari file sumber bila tersedia.</p></div><span class="small text-body-secondary">' + rows.length + ' baris</span></div>' +
     '<div class="jp-table-scroll"><table class="table table-sm table-hover align-middle mb-0"><thead><tr>' + columns + '</tr></thead><tbody>' + body + '</tbody></table></div>' + downloads + '</div></div>';
+}
+function jpUiOpenDetail(id) {
+  const period = jpUiPeriod(id);
+  if (!period || !period.laporan) return;
+  J.detailId = id;
+  J.historyYear = Number(period.tahun) || J.historyYear;
+  jpLoadPeriod(id);
+  J.rows = jpUiBuildRows(period.laporan, J.set);
+  J.previewPeriodId = id;
+  jpUiRender();
+  $('jpanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function jpUiDeletePeriod(id) {
   const period = jpUiPeriod(id);
@@ -639,14 +690,7 @@ jpClick = function (event) {
   if (action === 'upload') jpUiUploadModal();
   else if (action === 'master') jpUiMasterModal();
   else if (action === 'detail') {
-    const period = jpUiPeriod(id);
-    if (!period || !period.laporan) return;
-    J.detailId = id;
-    jpLoadPeriod(id);
-    J.rows = jpUiBuildRows(period.laporan, J.set);
-    J.previewPeriodId = id;
-    jpUiRender();
-    $('jpanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    jpUiOpenDetail(id);
   } else if (action === 'back') {
     J.detailId = '';
     J.rows = null;
