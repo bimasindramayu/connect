@@ -1958,7 +1958,7 @@ function jpReview() {
     </div>
     <div class="jp-table-heading"><h6>Rincian per penghulu</h6><p>Nilai bruto dibandingkan dengan kolom J sebelum PPh. Pembayaran bersih sudah memperhitungkan potongan PPh.</p></div>
     <div class="jp-table-wrap"><div class="scroll"><table class="table table-hover align-middle mb-0">
-      <thead><tr><th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Status cocok</th><th>Nomor Rekening</th><th>Nama Pemilik</th>${adaTgl?'<th>Tanggal</th>':''}<th class="text-end">Peristiwa</th><th class="text-end">Jaspro bruto</th><th class="text-end">PPh</th><th class="text-end">Jaspro bersih</th><th class="text-end">Transport bruto</th><th class="text-end">Diterima file (J)</th><th class="text-end">Hitung bruto</th><th>Pemeriksaan</th><th class="text-end">Dibayarkan bersih</th></tr></thead>
+      <thead><tr><th>No</th><th>Nama Penghulu</th><th>KUA</th><th>NIP</th><th>Golongan</th><th>Status cocok</th><th>Nomor Rekening</th><th>Nama Pemilik</th>${adaTgl?'<th>Tanggal</th>':''}<th class="text-end">Peristiwa</th><th class="text-end">Jaspro / peristiwa</th><th class="text-end">Jaspro bruto</th><th class="text-end">PPh</th><th class="text-end">Jaspro bersih</th><th class="text-end">Transport / peristiwa</th><th class="text-end">Transport bruto</th><th class="text-end">Diterima file (J)</th><th class="text-end">Hitung bruto</th><th>Pemeriksaan</th><th class="text-end">Dibayarkan bersih</th></tr></thead>
       <tbody>${R.map((r,i)=>{
         const [c,l]=JST[r.matchStatus]||JST.TIDAK_DITEMUKAN;
         const isBad=!['OTOMATIS','MANUAL'].includes(r.matchStatus),cd=r.candidates?.[0],unk=r.golClass==='UNKNOWN';
@@ -1969,9 +1969,9 @@ function jpReview() {
           <td><input class="form-control form-control-sm jp-inline-edit jp-account-edit" list="jdl-list" data-i="${i}" data-f="rek" value="${esc(r.rekening)}" aria-label="Nomor rekening ${esc(r.nama)}"></td>
           <td><input class="form-control form-control-sm jp-inline-edit jp-owner-edit" data-i="${i}" data-f="own" value="${esc(r.namaPemilik||'')}" placeholder="Sama dengan nama" aria-label="Nama pemilik rekening ${esc(r.nama)}"></td>
           ${adaTgl?`<td class="text-nowrap">${JX.tglSah(r.tanggal)?JX.tglID(r.tanggal):'–'}</td>`:''}
-          <td class="text-end">${Number(r.jumlahPeristiwa||0).toLocaleString('id-ID')}</td>
+          <td class="text-end">${Number(r.jumlahPeristiwa||0).toLocaleString('id-ID')}</td><td class="text-end text-nowrap">${f(r.tarifJaspro)}</td>
           <td class="text-end text-nowrap">${f(r.jasproSubtotal)}</td><td class="text-end text-nowrap">${f(r.jasproPph)}</td><td class="text-end text-nowrap">${f(r.jasproDiterima)}</td>
-          <td class="text-end text-nowrap">${f(r.transpoSubtotal)}</td><td class="text-end text-nowrap">${r.jumlahDiterimaSumber==null?'–':f(r.jumlahDiterimaSumber)}</td>
+          <td class="text-end text-nowrap">${f(r.tarifTransport)}</td><td class="text-end text-nowrap">${f(r.transpoSubtotal)}</td><td class="text-end text-nowrap">${r.jumlahDiterimaSumber==null?'–':f(r.jumlahDiterimaSumber)}</td>
           <td class="text-end text-nowrap">${f(r.jumlahDiterimaHitung)}</td>
           <td>${r.jumlahDiterimaSumber==null?'<span class="badge bg-label-secondary">Tidak ada di file</span>':r.jumlahDiterimaCocok?'<span class="badge bg-label-success">Sesuai</span>':'<span class="badge bg-label-warning">Selisih '+f(Math.abs(r.selisihJumlahDiterima))+'</span>'}</td>
           <td class="text-end text-nowrap fw-semibold">${f(r.jumlahDiterimaBersih)}</td>
