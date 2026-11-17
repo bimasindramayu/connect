@@ -3444,7 +3444,7 @@ end $$;
       laporan,
       coalesce(settings, '{}'::jsonb) as settings
     from public.jaspro_data
-    where id = 1 and laporan is not null
+    where id = 1 and (laporan is not null or coalesce(settings, '{}'::jsonb) <> '{}'::jsonb)
   )
   insert into public.jaspro_periode (id, tahun, bulan, laporan, settings)
   select y::text || '-' || lpad(m::text, 2, '0'), y, m, laporan, settings
