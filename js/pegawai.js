@@ -316,6 +316,7 @@ async function pagePegawai() {
       const salah = (c, m) => { c.classList.add('is-invalid'); c.focus(); el('pfmsg').innerHTML = note(m); return null; };
       const cek = () => {   // sama dengan pegawai_guard (bop.sql); database tetap memeriksa ulang
         const nama = el('pfn').value.replace(/\s+/g, ' ').trim().toLocaleUpperCase('id-ID'), jab = el('pfb').value.replace(/\s+/g, ' ').trim(), j = jenis(), hp = pegHp(el('pfh').value);
+        const hpLamaKosong = !!p && !String(p.no_hp || '').trim() && !String(el('pfh').value || '').trim();
         const nip = el('pfi').value.replace(/\D/g, ''), gol = el('pfg').value, kua = kuaForm(), tb = PEG_TAMBAHAN_JENIS.includes(j) ? el('pft').value : '';
         const usia = el('pfup').value ? Number(el('pfup').value) : null;
         const tmtKua = ['PNS','PPPK','PPPK Paruh Waktu'].includes(j) ? (el('pftmt').value || null) : null;
@@ -336,8 +337,8 @@ async function pagePegawai() {
         const b = tb && pegang(tb, kua);
         if (b) return salah(el('pft'), `${tb} di KUA ini sudah dijabat oleh ${pegAkhir(b.nama)}. Lepaskan jabatan tambahan itu dari ${b.nama} terlebih dahulu (ubah data pegawainya), lalu tetapkan di sini.`);
         if (usia !== null && (!Number.isInteger(usia) || usia < 40 || usia > 75)) return salah(el('pfup'), 'Usia pensiun harus berupa angka 40 sampai 75 tahun.');
-        if (!/^08\d{8,12}$/.test(hp)) return salah(el('pfh'), 'Nomor HP/WA tidak valid. Isi nomor aktif 10 sampai 14 angka yang diawali 08 (contoh 081234567890) atau +62.');
-        return { kua, data: { nama, jenis_asn: j, nip: j === 'Honor' ? null : (nip || null), pangkat_golongan: j === 'Honor' ? null : (gol || null), jabatan: jab, jabatan_tambahan: tb || null, no_hp: hp,
+        if (!hpLamaKosong && !/^08\d{8,12}$/.test(hp)) return salah(el('pfh'), 'Nomor HP/WA tidak valid. Isi nomor aktif 10 sampai 14 angka yang diawali 08 (contoh 081234567890) atau +62.');
+        return { kua, data: { nama, jenis_asn: j, nip: j === 'Honor' ? null : (nip || null), pangkat_golongan: j === 'Honor' ? null : (gol || null), jabatan: jab, jabatan_tambahan: tb || null, no_hp: hpLamaKosong ? null : hp,
           usia_pensiun: usia, sumber_usia_pensiun: usia === null ? null : el('pfus').value, tmt_kua: tmtKua, tmt_kepala_kua: tmtKepala,
           operator_simkah: el('pfos').checked, operator_bop: el('pfob').checked } };
       };
