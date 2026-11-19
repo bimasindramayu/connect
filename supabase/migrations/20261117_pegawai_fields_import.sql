@@ -29,7 +29,7 @@ begin
     if not public.can_menu('pegawai') then raise exception 'Anda tidak berhak mengelola data pegawai.'; end if;
     if public.my_kua() is null or public.my_kua() is distinct from new.kua_id or (tg_op = 'UPDATE' and public.my_kua() is distinct from old.kua_id) then raise exception 'Anda hanya dapat mengelola pegawai KUA Anda sendiri.'; end if;
   end if;
-  new.nama := upper(btrim(regexp_replace(coalesce(new.nama, ''), '\s+', ' ', 'g')));
+  new.nama := btrim(regexp_replace(coalesce(new.nama, ''), '\s+', ' ', 'g'));
   if new.nama = '' then raise exception 'Nama lengkap wajib diisi.'; end if;
   if char_length(new.nama) > 150 then raise exception 'Nama lengkap maksimal 150 karakter.'; end if;
   new.jabatan := btrim(regexp_replace(coalesce(new.jabatan, ''), '\s+', ' ', 'g'));
