@@ -25,7 +25,7 @@ begin
       raise exception 'Anda hanya dapat mengelola pegawai KUA Anda sendiri.'; end if;
   end if;
 
-  new.nama := upper(btrim(regexp_replace(coalesce(new.nama, ''), '\s+', ' ', 'g')));
+  new.nama := btrim(regexp_replace(coalesce(new.nama, ''), '\s+', ' ', 'g'));
   if new.nama = '' then raise exception 'Nama lengkap wajib diisi.'; end if;
   if char_length(new.nama) > 150 then raise exception 'Nama lengkap maksimal 150 karakter.'; end if;
   new.jabatan := btrim(regexp_replace(coalesce(new.jabatan, ''), '\s+', ' ', 'g'));
@@ -116,7 +116,3 @@ begin
   return new;
 end $$;
 
--- Ubah seluruh nama lama menjadi huruf kapital dan rapikan spasi.
-update public.pegawai
-   set nama = upper(btrim(regexp_replace(coalesce(nama, ''), '\s+', ' ', 'g')))
- where nama is distinct from upper(btrim(regexp_replace(coalesce(nama, ''), '\s+', ' ', 'g')));
