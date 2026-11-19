@@ -9,7 +9,7 @@ drop trigger if exists pegawai_log on public.pegawai;
 drop function if exists public.pegawai_log();
 drop table if exists public.pegawai_riwayat cascade;
 
--- Pastikan database juga memaksa kapitalisasi, termasuk jika data ditulis melalui API selain form.
+-- Database merapikan spasi nama tanpa memaksakan huruf besar/kecil.
 create or replace function public.pegawai_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare tr boolean := coalesce(current_setting('bop.pegawai_transfer', true), '') = 'on';
