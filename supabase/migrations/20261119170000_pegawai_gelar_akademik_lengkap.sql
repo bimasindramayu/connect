@@ -63,6 +63,15 @@ begin
       ('([,[:space:]]+)(S[.]?[[:space:]]*D[.]?[[:space:]]*s[.]?)([,[:space:]]|$)', E', S.Ds.\\3'),
       ('([,[:space:]]+)(S[.]?[[:space:]]*S[.]?[[:space:]]*n[.]?)([,[:space:]]|$)', E', S.Sn.\\3'),
 
+      ('([,[:space:]]+)(S[.]?[[:space:]]*K[.]?[[:space:]]*M[.]?)([,[:space:]]|$)', E', S.K.M.\\3'),
+      ('([,[:space:]]+)(S[.]?[[:space:]]*K[.]?[[:space:]]*G[.]?)([,[:space:]]|$)', E', S.KG.\\3'),
+      ('([,[:space:]]+)(S[.]?[[:space:]]*F[.]?[[:space:]]*il[.]?)([,[:space:]]|$)', E', S.Fil.\\3'),
+      ('([,[:space:]]+)(S[.]?[[:space:]]*Th[.]?[[:space:]]*I[.]?)([,[:space:]]|$)', E', S.Th.I.\\3'),
+      ('([,[:space:]]+)(S[.]?[[:space:]]*Th[.]?)([,[:space:]]|$)', E', S.Th.\\3'),
+      ('([,[:space:]]+)(S[.]?[[:space:]]*Pak[.]?)([,[:space:]]|$)', E', S.Pak.\\3'),
+      ('([,[:space:]]+)(S[.]?[[:space:]]*Ar[.]?)([,[:space:]]|$)', E', S.Ar.\\3'),
+      ('([,[:space:]]+)(S[.]?[[:space:]]*A[.]?[[:space:]]*dm[.]?)([,[:space:]]|$)', E', S.Adm.\\3'),
+
       -- Diploma / vokasi.
       ('([,[:space:]]+)(A[.]?[[:space:]]*Md[.]?[[:space:]]*K[.]?[[:space:]]*om[.]?)([,[:space:]]|$)', E', A.Md.Kom.\\3'),
       ('([,[:space:]]+)(A[.]?[[:space:]]*Md[.]?[[:space:]]*K[.]?[[:space:]]*ep[.]?)([,[:space:]]|$)', E', A.Md.Kep.\\3'),
@@ -105,6 +114,18 @@ begin
       ('([,[:space:]]+)(M[.]?[[:space:]]*P[.]?[[:space:]]*t[.]?)([,[:space:]]|$)', E', M.Pt.\\3'),
       ('([,[:space:]]+)(M[.]?[[:space:]]*P[.]?[[:space:]]*i[.]?)([,[:space:]]|$)', E', M.Pi.\\3'),
 
+      ('([,[:space:]]+)(M[.]?[[:space:]]*P[.]?[[:space:]]*d[.]?[[:space:]]*K[.]?)([,[:space:]]|$)', E', M.Pd.K.\\3'),
+      ('([,[:space:]]+)(M[.]?[[:space:]]*A[.]?[[:space:]]*P[.]?)([,[:space:]]|$)', E', M.A.P.\\3'),
+      ('([,[:space:]]+)(M[.]?[[:space:]]*F[.]?[[:space:]]*arm[.]?)([,[:space:]]|$)', E', M.Farm.\\3'),
+      ('([,[:space:]]+)(M[.]?[[:space:]]*L[.]?[[:space:]]*ing[.]?)([,[:space:]]|$)', E', M.Ling.\\3'),
+      ('([,[:space:]]+)(M[.]?[[:space:]]*A[.]?[[:space:]]*rs[.]?)([,[:space:]]|$)', E', M.Ars.\\3'),
+      ('([,[:space:]]+)(M[.]?[[:space:]]*A[.]?[[:space:]]*rch[.]?)([,[:space:]]|$)', E', M.Arch.\\3'),
+      ('([,[:space:]]+)(M[.]?[[:space:]]*K[.]?[[:space:]]*M[.]?)([,[:space:]]|$)', E', M.K.M.\\3'),
+      ('([,[:space:]]+)(M[.]?[[:space:]]*S[.]?[[:space:]]*H[.]?)([,[:space:]]|$)', E', M.S.H.\\3'),
+      ('([,[:space:]]+)(M[.]?[[:space:]]*G[.]?[[:space:]]*z[.]?)([,[:space:]]|$)', E', M.Gz.\\3'),
+      ('([,[:space:]]+)(D[.]?[[:space:]]*S[.]?[[:space:]]*c[.]?)([,[:space:]]|$)', E', D.Sc.\\3'),
+      ('([,[:space:]]+)(D[.]?[[:space:]]*E[.]?[[:space:]]*ng[.]?)([,[:space:]]|$)', E', D.Eng.\\3'),
+      ('([,[:space:]]+)(E[.]?[[:space:]]*d[.]?[[:space:]]*D[.]?)([,[:space:]]|$)', E', Ed.D.\\3'),
       -- Gelar profesi/doctorate yang lazim ditulis di belakang nama.
       ('([,[:space:]]+)(P[.]?[[:space:]]*h[.]?[[:space:]]*D[.]?)([,[:space:]]|$)', E', Ph.D.\\3'),
       ('([,[:space:]]+)(A[.]?[[:space:]]*p[.]?[[:space:]]*t[.]?)([,[:space:]]|$)', E', Apt.\\3'),
