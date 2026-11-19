@@ -681,7 +681,7 @@ function bnFilter(e) {
 function bnClick(e) {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const a = b.dataset.act, r = bnById(b.dataset.k);
-  if (a === 'bdet') bnDetail(r); else if (a === 'bpdf') bnPdf(r);
+  if (a === 'bdet') return bnDetail(r); else if (a === 'bpdf') return bnPdf(r);
   else if (a === 'bprev') { B.pg--; bnRows(); } else if (a === 'bnext') { B.pg++; bnRows(); }
 }
 function bnDetail(r) {
