@@ -688,5 +688,21 @@ function lapor(el, teks, type = 'danger') {
 const jpDlg = (h, wire) => { const d = $('dlg'); d.innerHTML = `<div class="p-4">${h}</div>`; wire?.(d); if (!d.open) d.showModal(); };
 const jpAsk = (title, msg, label, ok, danger) => jpDlg(
   `<h5 class="mb-2">${esc(title)}</h5><p>${esc(msg)}</p><div class="d-flex justify-content-end gap-2"><button class="btn btn-outline-secondary" data-x>Batal</button><button class="btn btn-${danger ? 'danger' : 'primary'}" data-ok>${esc(label)}</button></div>`,
-  d => { d.querySelector('[data-x]').onclick = () => d.close(); d.querySelector('[data-ok]').onclick = () => { d.close(); ok(); }; });
+  d => {
+    d.querySelector('[data-x]').onclick = () => d.close();
+    d.querySelector('[data-ok]').onclick = async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        await ok();
+        // Jangan menutup dialog baru yang mungkin dibuka oleh callback.
+        if (d.open && d.querySelector('[data-ok]') === button) d.close();
+      } catch (error) {
+        if (d.open && d.querySelector('[data-ok]') === button) {
+          button.disabled = false;
+          jpToast(error?.message || String(error), 'danger');
+        }
+      }
+    };
+  });
 const jpCard = (ic, c, v, l) => `<div class="col-6 col-lg"><div class="card h-100"><div class="card-body d-flex align-items-center gap-3 py-3"><div class="avatar rounded bg-label-${c}"><i class="bx ${ic} fs-4"></i></div><div class="lh-sm"><div class="fw-semibold fs-5">${v}</div><small>${l}</small></div></div></div></div>`;
