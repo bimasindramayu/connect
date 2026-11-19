@@ -140,7 +140,7 @@ async function pageRpd() {
     $('rbody').oninput = null;
     $('rbody').innerHTML = `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Kecamatan</th><th class="text-end">Anggaran (Rp)</th><th class="text-end">Total RPD (Rp)</th><th class="text-end">Sisa (Rp)</th><th></th></tr></thead><tbody>${m.kua.map(k => `<tr><td>${esc(k.nama_kua)}</td><td class="text-end">${A[k.id] != null ? rp(A[k.id]) : '<span class="badge bg-secondary">Belum diset</span>'}</td><td class="text-end">${rp(R[k.id])}</td><td class="text-end">${A[k.id] != null ? rp(A[k.id] - (R[k.id] || 0)) : '-'}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-k="${k.id}">Detail</button></td></tr>`).join('')}</tbody>
       <tfoot><tr class="fw-semibold"><td>Total ${t}</td><td class="text-end">${rp(ta)}</td><td class="text-end">${rp(tr)}</td><td class="text-end">${rp(ta - tr)}</td><td></td></tr></tfoot></table></div>`;
-    $('rbody').onclick = e => { const b = e.target.closest('[data-k]'); if (b) { $('rk').value = b.dataset.k; load(); } };
+    $('rbody').onclick = e => { const b = e.target.closest('[data-k]'); if (b) { $('rk').value = b.dataset.k; return load(); } };
   };
   const list = () => {   // satu kecamatan: 12 bulan
     const tot = sumT(rows);
@@ -149,8 +149,8 @@ async function pageRpd() {
       <div class="alert alert-primary py-2">Anggaran Tahunan ${t}: <b>${cap == null ? 'belum ditetapkan' : 'Rp ' + rp(cap)}</b> · Total RPD: <b>Rp ${rp(tot)}</b> · Sisa: <b>Rp ${rp((cap ?? 0) - tot)}</b></div>
       <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Bulan</th><th class="text-end">Total RPD (Rp)</th><th></th></tr></thead><tbody>${BULAN.map((n, i) => `<tr><td>${n}</td><td class="text-end">${rp(rows.find(x => x.bulan === i + 1)?.total)}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${i + 1}">Detail</button></td></tr>`).join('')}</tbody>
       <tfoot><tr class="fw-semibold"><td>Total ${t}</td><td class="text-end">${rp(tot)}</td><td></td></tr></tfoot></table></div>`;
-    if (pu) $('rall').onclick = () => { $('rk').value = 0; load(); };
-    $('rbody').onclick = e => { const b = e.target.closest('[data-b]'); if (b) detail(+b.dataset.b); };
+    if (pu) $('rall').onclick = () => { $('rk').value = 0; return load(); };
+    $('rbody').onclick = e => { const b = e.target.closest('[data-b]'); if (b) return detail(+b.dataset.b); };
   };
   const detail = b => {
     const locked = ro || (!admin && !(m.cfg.rpd_enabled === true && (m.cfg.bulan_edit_rpd || []).includes(b)));
@@ -237,7 +237,7 @@ async function pageRealisasi() {
         const b = i + 1, r = rec(b), st = r ? ST[r.status] : ['bg-secondary', 'Belum diisi'], au = isum(saktiOf(rs, b)); ta += au;
         return `<tr><td>${n}</td><td class="text-end">${rp(rpdOf(b)?.total)}</td><td class="text-end">${rp((r?.total || 0) + au)}</td><td><span class="badge ${st[0]}">${st[1]}</span>${r?.status === 'paid' && r.nominal_dibayar ? `<div class="small">Rp ${rp(r.nominal_dibayar)}</div>` : ''}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-b="${b}">Detail</button></td></tr>`; }).join('')}</tbody>
       <tfoot><tr class="fw-semibold"><td>Total ${ms ? BULAN[ms - 1] + ' ' : ''}${t}</td><td class="text-end">${rp(sumT(rpd.filter(x => !ms || x.bulan === ms)))}</td><td class="text-end">${rp(sumT(rl.filter(x => !ms || x.bulan === ms)) + ta)}</td><td colspan="2"></td></tr></tfoot></table></div>`;
-    $('lbody').onclick = e => { const b = e.target.closest('[data-b]'); if (b) detail(+b.dataset.b); };
+    $('lbody').onclick = e => { const b = e.target.closest('[data-b]'); if (b) return detail(+b.dataset.b); };
   };
   const detail = b => {
     const r = rec(b), au = saktiOf(rs, b), mt = Object.fromEntries(m.pos.map(p => [p.id, metodeOf(vers, me.kua_id, p.id)])), cur = r ? r.items : {}, ri = rpdOf(b)?.items || {}, lpj = r?.file_lpj_url || '';
@@ -379,7 +379,7 @@ async function pageVerifikasi() {
     $('vbody').innerHTML = G.length ? `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr>${th('kua', 'Kecamatan')}${th('periode', 'Periode')}${th('total', 'Total (Rp)', 'text-end')}${th('status', 'Status')}<th></th></tr></thead><tbody>${ord.map(i => { const f = G[i]; return `<tr><td>${esc(kn(f.kua_id))}</td><td>${BULAN[f.bulan - 1]} ${f.tahun}</td><td class="text-end">${rp(f.total)}</td><td><span class="badge ${ST[f.status][0]}">${ST[f.status][1]}</span>${f.status === 'paid' ? `<div class="small">${f.nominal_dibayar ? 'Rp ' + rp(f.nominal_dibayar) : 'nominal belum dicatat'}</div>` : ''}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-i="${i}">Detail</button></td></tr>`; }).join('')}</tbody>
       <tfoot><tr class="fw-semibold"><td colspan="2">Total (${G.length} Realisasi)</td><td class="text-end" id="vtotal">${rp(sumT(G))}</td><td id="vtdib">${dib.length ? `Dibayar: Rp ${rp(tDib)}` : ''}</td><td></td></tr></tfoot></table></div>`
       : '<p class="mb-0">Tidak ada Realisasi untuk filter ini.</p>';
-    $('vbody').onclick = e => { const s = e.target.closest('[data-s]'); if (s) return sortBy(s.dataset.s); const b = e.target.closest('[data-i]'); if (b) detail(+b.dataset.i); };
+    $('vbody').onclick = e => { const s = e.target.closest('[data-s]'); if (s) return sortBy(s.dataset.s); const b = e.target.closest('[data-i]'); if (b) return detail(+b.dataset.i); };
     $('vbody').onkeydown = e => { const s = e.target.closest('[data-s]'); if (s && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); sortBy(s.dataset.s); } };
   };
   const detail = async i => {
