@@ -604,6 +604,62 @@ function jpWrapFeedbackProperty(proto, property, kind) {
 jpWrapFeedbackProperty(HTMLElement.prototype, 'onclick', 'click');
 jpWrapFeedbackProperty(HTMLFormElement.prototype, 'onsubmit', 'submit');
 
+/* Tangkap juga handler addEventListener (dipakai sejumlah tombol di modul Sertifikat).
+   Listener asli dan removeEventListener tetap dipetakan agar perilaku registrasi tidak berubah. */
+const JP_NATIVE_ADD_EVENT_LISTENER = EventTarget.prototype.addEventListener;
+const JP_NATIVE_REMOVE_EVENT_LISTENER = EventTarget.prototype.removeEventListener;
+const JP_WRAPPED_LISTENERS = new WeakMap();
+
+function jpListenerCapture(options) {
+  return typeof options === 'boolean' ? options : !!options?.capture;
+}
+
+EventTarget.prototype.addEventListener = function (type, listener, options) {
+  if ((type !== 'click' && type !== 'submit') ||
+      (typeof listener !== 'function' && !(listener && typeof listener.handleEvent === 'function'))) {
+    return JP_NATIVE_ADD_EVENT_LISTENER.call(this, type, listener, options);
+  }
+
+  let targetMap = JP_WRAPPED_LISTENERS.get(this);
+  if (!targetMap) {
+    targetMap = new WeakMap();
+    JP_WRAPPED_LISTENERS.set(this, targetMap);
+  }
+  let listenerMap = targetMap.get(listener);
+  if (!listenerMap) {
+    listenerMap = new Map();
+    targetMap.set(listener, listenerMap);
+  }
+
+  const key = type + ':' + (jpListenerCapture(options) ? '1' : '0');
+  let wrapped = listenerMap.get(key);
+  if (!wrapped) {
+    wrapped = function (event) {
+      const button = jpFeedbackButton(this, event, type === 'submit' ? 'submit' : 'click');
+      const result = typeof listener === 'function'
+        ? listener.call(this, event)
+        : listener.handleEvent.call(listener, event);
+      return jpTrackButtonFeedback(button, result);
+    };
+    listenerMap.set(key, wrapped);
+  }
+
+  return JP_NATIVE_ADD_EVENT_LISTENER.call(this, type, wrapped, options);
+};
+
+EventTarget.prototype.removeEventListener = function (type, listener, options) {
+  let actual = listener;
+  if ((type === 'click' || type === 'submit') && listener &&
+      (typeof listener === 'function' || typeof listener === 'object')) {
+    const targetMap = JP_WRAPPED_LISTENERS.get(this);
+    const listenerMap = targetMap?.get(listener);
+    const key = type + ':' + (jpListenerCapture(options) ? '1' : '0');
+    actual = listenerMap?.get(key) || listener;
+    listenerMap?.delete(key);
+  }
+  return JP_NATIVE_REMOVE_EVENT_LISTENER.call(this, type, actual, options);
+};
+
 // Animasi tekan singkat juga berlaku untuk tombol dengan aksi sinkron.
 document.addEventListener('click', event => {
   const button = event.target instanceof Element ? event.target.closest('button') : null;
