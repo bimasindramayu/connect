@@ -215,7 +215,7 @@ async function pagePegawai() {
             ? `<label class="form-label" for="pfk">KUA <span class="text-danger">*</span></label><select id="pfk" class="form-select"><option value="">Pilih KUA…</option>${kuas.map(k => `<option value="${k.id}"${k.id === kid0 ? ' selected' : ''}>${esc(k.nama_kua)}</option>`).join('')}</select>`
             : `<div class="small">KUA: <b>${esc(kn[kid0] || me.kua || '')}</b>${baru ? '' : '. Untuk memindahkan ke KUA lain gunakan Transfer.'}</div>`}</div>
           <div class="col-12"><label class="form-label" for="pfn">Nama lengkap beserta gelar <span class="text-danger">*</span></label>
-            <input id="pfn" class="form-control text-uppercase" type="text" autocapitalize="characters" maxlength="150" placeholder="MIS. DRS. H. AHMAD FAUZI, M.AG." value="${esc(String(p?.nama || '').toLocaleUpperCase('id-ID'))}"></div>
+            <input id="pfn" class="form-control" type="text" autocapitalize="off" maxlength="150" placeholder="mis. Drs. H. Ahmad Fauzi, M.Ag." value="${esc(p?.nama || '')}"></div>
           <div class="col-12"><div class="form-label" id="pfjl">Jenis ASN <span class="text-danger">*</span></div>
             <div class="row g-2" role="group" aria-labelledby="pfjl">${PEG_JENIS.map(j => `<div class="col-6"><input type="radio" class="btn-check" name="pfj" id="pfj-${PEG_KODE[j]}" value="${j}"${p?.jenis_asn === j ? ' checked' : ''}><label class="btn btn-outline-primary w-100" for="pfj-${PEG_KODE[j]}">${j === 'PPPK Paruh Waktu' ? 'PPPK Paruh Waktu (PW)' : j}</label></div>`).join('')}</div></div>
           <div class="col-sm-6"><label class="form-label" for="pfi">NIP</label><input id="pfi" class="form-control" inputmode="numeric" maxlength="21" value="${esc(pegNip(p?.nip))}"><div class="form-text" id="pfih"></div></div>
@@ -299,11 +299,7 @@ async function pagePegawai() {
       });
       f.addEventListener('input', e => {
         e.target.classList.remove('is-invalid');
-        if (e.target.id === 'pfn') {
-          const start = e.target.selectionStart, end = e.target.selectionEnd;
-          const upper = e.target.value.toLocaleUpperCase('id-ID');
-          if (e.target.value !== upper) { e.target.value = upper; e.target.setSelectionRange(start, end); }
-        } else if (e.target.id === 'pfi') { pegNipIn(e.target); nipInfo(); syncPensiun(false); }
+        if (e.target.id === 'pfi') { pegNipIn(e.target); nipInfo(); syncPensiun(false); }
         else if (e.target.id === 'pfb') syncPensiun(false);
         else if (e.target.id === 'pfup') el('pfus').value = 'MANUAL';
       });
@@ -314,7 +310,7 @@ async function pagePegawai() {
 
       const salah = (c, m) => { c.classList.add('is-invalid'); c.focus(); el('pfmsg').innerHTML = note(m); return null; };
       const cek = () => {   // sama dengan pegawai_guard (bop.sql); database tetap memeriksa ulang
-        const nama = el('pfn').value.replace(/\s+/g, ' ').trim().toLocaleUpperCase('id-ID'), jab = el('pfb').value.replace(/\s+/g, ' ').trim(), j = jenis(), hp = pegHp(el('pfh').value);
+        const nama = el('pfn').value.replace(/\s+/g, ' ').trim(), jab = el('pfb').value.replace(/\s+/g, ' ').trim(), j = jenis(), hp = pegHp(el('pfh').value);
         const hpLamaKosong = !!p && !String(p.no_hp || '').trim() && !String(el('pfh').value || '').trim();
         const nip = el('pfi').value.replace(/\D/g, ''), gol = el('pfg').value, kua = kuaForm(), tb = PEG_TAMBAHAN_JENIS.includes(j) ? el('pft').value : '';
         const usia = el('pfup').value ? Number(el('pfup').value) : null;
