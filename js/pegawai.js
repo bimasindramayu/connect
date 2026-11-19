@@ -195,7 +195,6 @@ async function pagePegawai() {
     drawStat();
     $('pflt').classList.toggle('d-none', tab === 'rekap');
     $('pxls').classList.toggle('d-none', tab === 'rekap');
-    if (kelola) $('pimp').classList.toggle('d-none', tab === 'rekap');
     if (tab === 'rekap') drawRekap(); else drawDaftar();
   };
   const refresh = async () => { if (await load()) { draw(); } };
