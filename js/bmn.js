@@ -146,13 +146,11 @@ async function pageBMN() {
           <th>${bmnSortHeading('Nama Barang','namaBarang','table')}</th>
           <th>${bmnSortHeading('Jenis','jenis','table')}</th>
           <th>${bmnSortHeading('Tahun','tahunPerolehan','table')}</th>
-          <th class="text-end">${bmnSortHeading('Nilai Perolehan','nilaiPerolehan','table')}</th>
           <th>${bmnSortHeading('Kondisi','kondisi','table')}</th>
           <th>${bmnSortHeading('Status','status','table')}</th>
-          <th class="text-center">${bmnSortHeading('Foto','fotoCount','table')}</th>
           <th class="text-center">Aksi</th>
         </tr></thead>
-        <tbody><tr><td colspan="11" class="text-center py-4 text-body-secondary">Memuat data…</td></tr></tbody>
+        <tbody><tr><td colspan="9" class="text-center py-4 text-body-secondary">Memuat data…</td></tr></tbody>
       </table></div></div>
 
     </div>
@@ -625,12 +623,11 @@ function bmnRenderTable() {
   const tbody = $('bmnTable')?.querySelector('tbody');
   if (!tbody) return;
   tbody.innerHTML = rows.length ? rows.map((r,i) => {
-    const photos = bmnPhotoList(r);
     const actions = `<button class="btn btn-sm btn-outline-primary" data-bmn-view="${esc(r.id)}" title="Detail"><i class="bx bx-show"></i></button> ` +
       (bmnCanWrite() ? `<button class="btn btn-sm btn-outline-secondary" data-bmn-edit="${esc(r.id)}" title="Edit"><i class="bx bx-edit"></i></button>` : '') +
       (bmnCanWrite() ? ` <button class="btn btn-sm btn-outline-danger" data-bmn-delete="${esc(r.id)}" title="Hapus"><i class="bx bx-trash"></i></button>` : '');
-    return `<tr><td class="text-center text-body-secondary">${i+1}</td><td>${esc(r.satker)}</td><td class="text-nowrap">${esc(r.kodeBarang)}</td><td class="bmn-name">${esc(r.namaBarang)}</td><td>${esc(r.jenis)}</td><td>${esc(r.tahunPerolehan)}</td><td class="text-nowrap text-end">${bmnMoney(r.nilaiPerolehan)}</td><td>${bmnBadge(r.kondisi,'kondisi')}</td><td>${bmnBadge(r.status,'status')}</td><td class="text-center">${photos.length ? `<span class="badge bg-label-info">${photos.length} file</span>` : '-'}</td><td class="text-nowrap text-center">${actions}</td></tr>`;
-  }).join('') : '<tr><td colspan="11" class="text-center text-body-secondary py-4">Belum ada data BMN sesuai filter.</td></tr>';
+    return `<tr><td class="text-center text-body-secondary">${i+1}</td><td>${esc(r.satker)}</td><td class="text-nowrap">${esc(r.kodeBarang)}</td><td class="bmn-name">${esc(r.namaBarang)}</td><td>${esc(r.jenis)}</td><td>${esc(r.tahunPerolehan)}</td><td>${bmnBadge(r.kondisi,'kondisi')}</td><td>${bmnBadge(r.status,'status')}</td><td class="text-nowrap text-center">${actions}</td></tr>`;
+  }).join('') : '<tr><td colspan="9" class="text-center text-body-secondary py-4">Belum ada data BMN sesuai filter.</td></tr>';
   $('bmnTable').querySelectorAll('[data-bmn-view]').forEach(b => b.onclick = () => bmnView(b.dataset.bmnView));
   $('bmnTable').querySelectorAll('[data-bmn-edit]').forEach(b => b.onclick = () => bmnOpenForm(BMN_UI.rows.find(x=>x.id===b.dataset.bmnEdit)));
   $('bmnTable').querySelectorAll('[data-bmn-delete]').forEach(b => b.onclick = () => bmnDelete(b.dataset.bmnDelete));

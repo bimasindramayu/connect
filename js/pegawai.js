@@ -34,8 +34,6 @@ const PEG_JABATAN = ['Penghulu Ahli Pertama', 'Penghulu Ahli Muda', 'Penghulu Ah
   'Penata Layanan Operasional', 'Pengelola Layanan Operasional', 'Pengadministrasi Perkantoran', 'Pengelola Keuangan', 'Bendahara Pengeluaran Pembantu',
   'Operator SIMKAH', 'Pranata Komputer', 'Arsiparis', 'Pelaksana',
   'Pramubakti', 'Petugas Kebersihan', 'Petugas Keamanan', 'Pengemudi'];
-const PEG_KOLOM = { nama: 'Nama', nip: 'NIP', jenis_asn: 'Jenis ASN', pangkat_golongan: 'Pangkat/golongan', jabatan: 'Jabatan', jabatan_tambahan: 'Jabatan tambahan', no_hp: 'No. HP' };
-const PEG_AKSI = { tambah: ['bg-success', 'Tambah'], ubah: ['bg-info', 'Ubah'], transfer: ['bg-warning', 'Transfer'], hapus: ['bg-danger', 'Hapus'] };
 
 // 18 angka -> "19800101 200501 1 001" (tanggal lahir, tanggal pengangkatan, jenis kelamin, nomor urut)
 const pegNip = s => { const d = String(s ?? '').replace(/\D/g, '').slice(0, 18); return [d.slice(0, 8), d.slice(8, 14), d.slice(14, 15), d.slice(15, 18)].filter(Boolean).join(' '); };
@@ -68,10 +66,23 @@ const pegPltLama = j => /\b(plt|plh|pj)\b\.?\s*kepala\s/i.test(j || '');
 const pegUrut = (a, b) => (pegPeringkat(b) - pegPeringkat(a)) || (PEG_JENIS.indexOf(a.jenis_asn) - PEG_JENIS.indexOf(b.jenis_asn))
   || (pegGolIdx(b) - pegGolIdx(a)) || String(a.nama).localeCompare(String(b.nama), 'id');
 const pegHitung = list => { const c = Object.fromEntries(PEG_JENIS.map(j => [j, 0])); list.forEach(p => { if (p.jenis_asn in c) c[p.jenis_asn]++; }); return c; };
-const pegWaktu = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' }); };
+const pegTanggal = iso => { const m = String(iso ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'; };
+// Perkiraan usia pensiun: NIP dipakai untuk memastikan tanggal lahir terbaca; jenjang JF menentukan kelompok usia.
+// Hasilnya estimasi awal (58/60/65), bukan penetapan hukum; operator dapat mengganti secara manual.
+const pegPensiun = (jabatan, nip) => {
+  const n = String(nip ?? '').replace(/\D/g, ''); if (n.length !== 18) return null;
+  const y = +n.slice(0, 4), m = +n.slice(4, 6), d = +n.slice(6, 8), t = new Date(Date.UTC(y, m - 1, d));
+  if (t.getUTCFullYear() !== y || t.getUTCMonth() !== m - 1 || t.getUTCDate() !== d) return null;
+  const j = String(jabatan ?? '').trim().toLowerCase();
+  if (!j || /perlu dilengkapi|kepala/i.test(j)) return null;
+  if (/\butama\b/.test(j)) return 65;
+  if (/\bmadya\b/.test(j)) return 60;
+  return 58;
+};
+const pegPerluDilengkapi = p => pegJabatanLama(p?.jabatan) || /^perlu dilengkapi$/i.test(p?.jabatan || '');
 // Kolom jabatan_tambahan belum ada = bop.sql versi terbaru belum dijalankan (website lebih baru dari database)
-const pegDbLama = e => e?.code === '42703' || e?.code === 'PGRST204' || /jabatan_tambahan/i.test(e?.message || '');
-const PEG_DB_LAMA = 'Database belum diperbarui ke versi terbaru (jenis PPPK Paruh Waktu dan jabatan tambahan). Jalankan bop.sql versi terbaru di SQL Editor Supabase, lalu muat ulang halaman ini.';
+const pegDbLama = e => e?.code === '42703' || e?.code === 'PGRST204' || /(jabatan_tambahan|usia_pensiun|tmt_kua|operator_simkah|operator_bop)/i.test(e?.message || '');
+const PEG_DB_LAMA = 'Database belum diperbarui untuk field Pegawai terbaru (usia pensiun, TMT, dan tugas operator). Jalankan supabase/migrations/20261117_pegawai_fields_import.sql di SQL Editor Supabase, lalu muat ulang halaman ini.';
 const pegGalat = e => pegDbLama(e) ? PEG_DB_LAMA
   : e?.code === '23505' ? (/pegawai_(kepala|plt)_unik/.test(e?.message || '') ? 'Jabatan tambahan itu baru saja diberikan kepada pegawai lain. Muat ulang halaman, lalu periksa daftar pegawai.'
     : 'NIP ini sudah terdaftar (mungkin baru saja ditambahkan pengguna lain). Muat ulang halaman, lalu periksa daftar pegawai.')
@@ -80,8 +91,11 @@ const pegGalat = e => pegDbLama(e) ? PEG_DB_LAMA
 const pegAkhir = n => String(n ?? '').replace(/\.+$/, '');
 const pegSw = j => `<i class="peg-sw" style="background:${PEG_WARNA[j]}"></i>`;
 // Penanda di sel Jabatan: jabatan tambahan (bila ada) dan tanda "Perlu dilengkapi" untuk data lama yang jabatannya masih tertulis Kepala KUA
-const pegBadge = p => (p.jabatan_tambahan ? `<div class="mt-1"><span class="badge peg-tb" title="Jabatan tambahan">${esc(p.jabatan_tambahan)}</span></div>` : '')
-  + (pegJabatanLama(p.jabatan) ? '<div class="mt-1"><span class="badge peg-lengkapi" title="Jabatan masih tertulis Kepala KUA. Kepala KUA kini diisi sebagai jabatan tambahan; lengkapi jabatan fungsional pegawai ini lewat tombol Ubah.">Perlu dilengkapi</span></div>' : '');
+const pegBadge = p => {
+  const tugas = [p.jabatan_tambahan === 'Kepala KUA' ? 'Kepala KUA Definitif' : p.jabatan_tambahan, p.operator_simkah ? 'Operator SIMKAH' : '', p.operator_bop ? 'Operator BOP' : ''].filter(Boolean);
+  return (tugas.length ? `<div class="mt-1 d-flex flex-wrap gap-1">${tugas.map(x => `<span class="badge peg-tb">${esc(x)}</span>`).join('')}</div>` : '')
+    + (pegPerluDilengkapi(p) ? '<div class="mt-1"><span class="badge peg-lengkapi" title="Jabatan pokok belum dilengkapi. Ubah data pegawai untuk mengisi jabatan fungsional sebenarnya.">Perlu dilengkapi</span></div>' : '');
+};
 const pegTile = (label, nilai, jenis) => `<div class="col-6 col-lg"><div class="card h-100"><div class="card-body py-3"><div class="d-flex align-items-center gap-2">${jenis ? pegSw(jenis) : ''}<small>${esc(label)}</small></div><div class="fs-3 fw-semibold lh-1 mt-1 dash-num">${esc(nilai)}</div></div></div></div>`;
 
 async function pagePegawai() {
@@ -97,22 +111,34 @@ async function pagePegawai() {
         ${pu ? `<div class="btn-group" role="group" aria-label="Tampilan" id="ptabs"><button type="button" class="btn btn-sm btn-primary" data-tab="daftar" aria-pressed="true">Daftar pegawai</button><button type="button" class="btn btn-sm btn-outline-primary" data-tab="rekap" aria-pressed="false">Rekap per KUA</button></div>` : ''}
         <div class="ms-auto d-flex flex-wrap gap-2">
           ${kelola ? '<button type="button" class="btn btn-primary btn-sm" id="padd" disabled><i class="bx bx-plus"></i> Tambah Pegawai</button>' : ''}
-          <button type="button" class="btn btn-outline-secondary btn-sm" id="phis"><i class="bx bx-history"></i> Riwayat</button>
           <button type="button" class="btn btn-outline-secondary btn-sm" id="pxls" disabled><i class="bx bx-spreadsheet"></i> Unduh Excel</button></div></div>
       <div id="pgmsg"></div>
       <div class="row g-2 mb-3" id="pflt">
         <div class="col-md-5 col-lg-4"><label class="form-label" for="pq">Cari</label><input id="pq" type="search" class="form-control" placeholder="Nama, NIP, jabatan, atau nomor HP" autocomplete="off"></div>
         ${pu ? '<div class="col-md-4 col-lg-3"><label class="form-label" for="pkf">KUA</label><select id="pkf" class="form-select"><option value="0">Semua KUA</option></select></div>' : ''}
-        <div class="col-6 col-md-3 col-lg-2"><label class="form-label" for="pjf">Jenis ASN</label><select id="pjf" class="form-select"><option value="">Semua</option>${PEG_JENIS.map(j => `<option>${j}</option>`).join('')}</select></div></div>
+        <div class="col-6 col-md-3 col-lg-2"><label class="form-label" for="pjf">Jenis ASN</label><select id="pjf" class="form-select"><option value="">Semua</option>${PEG_JENIS.map(j => `<option>${j}</option>`).join('')}</select></div>
+        ${adm ? `<div class="col-12"><div class="d-flex flex-wrap align-items-center gap-3">
+          <span class="small fw-semibold text-muted">Tampilkan tugas:</span>
+          <label class="d-inline-flex align-items-center gap-2 small mb-0"><input class="form-check-input mt-0" type="checkbox" data-tugas="kepala"> Kepala KUA (Definitif/Plt.)</label>
+          <label class="d-inline-flex align-items-center gap-2 small mb-0"><input class="form-check-input mt-0" type="checkbox" data-tugas="simkah"> Operator SIMKAH</label>
+          <label class="d-inline-flex align-items-center gap-2 small mb-0"><input class="form-check-input mt-0" type="checkbox" data-tugas="bop"> Operator BOP</label>
+          <span class="small text-muted">Bisa pilih lebih dari satu.</span>
+        </div></div>` : ''}</div>
       <div id="ptab">Memuat…</div>
       <p class="small mt-2 mb-0" id="pcnt"></p></div></div>`;
 
   let rows = [], kuas = [], kn = {}, tab = 'daftar';
-  const F = { q: '', jenis: '', kua: 0 };   // penyaring; operator selalu terikat ke KUA-nya sendiri oleh database (RLS)
+  const F = { q: '', jenis: '', kua: 0, tugas: [] };   // penyaring; operator selalu terikat ke KUA-nya sendiri oleh database (RLS)
   const norm = s => String(s ?? '').toLowerCase();
+  const tugasCocok = p => !adm || !F.tugas.length || F.tugas.some(t => {
+    if (t === 'kepala') return PEG_TAMBAHAN.includes(p.jabatan_tambahan) || pegJabatanLama(p.jabatan);
+    if (t === 'simkah') return p.operator_simkah === true;
+    if (t === 'bop') return p.operator_bop === true;
+    return false;
+  });
   const filtered = () => {
     const q = norm(F.q).trim(), qd = /^[\d\s+-]+$/.test(q) ? q.replace(/\D/g, '') : '';
-    return rows.filter(p => (!F.kua || p.kua_id === F.kua) && (!F.jenis || p.jenis_asn === F.jenis) && (!q
+    return rows.filter(p => (!F.kua || p.kua_id === F.kua) && (!F.jenis || p.jenis_asn === F.jenis) && tugasCocok(p) && (!q
       || [p.nama, p.nip, p.jabatan, p.jabatan_tambahan, p.no_hp, kn[p.kua_id]].some(x => norm(x).includes(q)) || (qd.length >= 3 && ((p.nip || '').includes(qd) || (p.no_hp || '').includes(qd)))));
   };
   const urut = (a, b) => (pu ? String(kn[a.kua_id] || '').localeCompare(String(kn[b.kua_id] || ''), 'id') : 0) || pegUrut(a, b);
@@ -121,7 +147,7 @@ async function pagePegawai() {
     try {
       const [k, r] = await Promise.all([
         sb.from('kua').select('id,nama_kua,status').order('nama_kua'),
-        fetchAll(() => sb.from('pegawai').select('id,kua_id,nama,nip,jenis_asn,pangkat_golongan,jabatan,jabatan_tambahan,no_hp').order('id'))
+        fetchAll(() => sb.from('pegawai').select('id,kua_id,nama,nip,jenis_asn,pangkat_golongan,jabatan,jabatan_tambahan,no_hp,usia_pensiun,sumber_usia_pensiun,tmt_kua,tmt_kepala_kua,operator_simkah,operator_bop').order('id'))
       ]);
       if (k.error) throw k.error;
       if (!live(ep)) return false;
@@ -148,14 +174,17 @@ async function pagePegawai() {
     <td><span class="peg-jenis" title="${esc(p.jenis_asn)}">${pegSw(p.jenis_asn)}${esc(pegLabel(p.jenis_asn))}</span></td>
     <td>${esc(pegGol(p.jenis_asn, p.pangkat_golongan))}</td>
     <td class="peg-jab">${esc(p.jabatan)}${pegBadge(p)}</td>
-    <td class="text-nowrap"><a href="${esc(pegWa(p.no_hp))}" target="_blank" rel="noopener noreferrer" title="Buka WhatsApp">${esc(p.no_hp)}</a></td>
+    <td class="text-nowrap">${esc(pegTanggal(p.tmt_kua))}</td>
+    <td class="text-nowrap">${esc(pegTanggal(p.tmt_kepala_kua))}</td>
+    <td class="text-nowrap">${p.usia_pensiun ? `${esc(p.usia_pensiun)} tahun${p.sumber_usia_pensiun === 'MANUAL' ? ' <span class="small text-muted">(manual)</span>' : ''}` : '-'}</td>
+    <td class="text-nowrap">${p.no_hp ? `<a href="${esc(pegWa(p.no_hp))}" target="_blank" rel="noopener noreferrer" title="Buka WhatsApp">${esc(p.no_hp)}</a>` : '<span class="text-muted">-</span>'}</td>
     ${kelola ? `<td class="text-end text-nowrap peg-act">
       <button type="button" class="btn btn-sm btn-outline-secondary" data-e="${p.id}" title="Ubah" aria-label="Ubah ${esc(p.nama)}"><i class="bx bx-edit"></i></button>
       <button type="button" class="btn btn-sm btn-outline-secondary" data-t="${p.id}" title="Transfer ke KUA lain" aria-label="Transfer ${esc(p.nama)} ke KUA lain"><i class="bx bx-transfer-alt"></i></button>
       <button type="button" class="btn btn-sm btn-outline-danger" data-d="${p.id}" title="Hapus" aria-label="Hapus ${esc(p.nama)}"><i class="bx bx-trash"></i></button></td>` : ''}</tr>`;
   const drawDaftar = () => {
-    const list = filtered().sort(urut), cols = 7 + (pu ? 1 : 0) + (kelola ? 1 : 0);
-    $('ptab').innerHTML = `<div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>No</th>${pu ? '<th>KUA</th>' : ''}<th>Nama lengkap + gelar</th><th>NIP</th><th>Jenis ASN</th><th>Pangkat / golongan</th><th>Jabatan</th><th>HP / WA</th>${kelola ? '<th class="text-end">Aksi</th>' : ''}</tr></thead>
+    const list = filtered().sort(urut), cols = 10 + (pu ? 1 : 0) + (kelola ? 1 : 0);
+    $('ptab').innerHTML = `<div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>No</th>${pu ? '<th>KUA</th>' : ''}<th>Nama lengkap + gelar</th><th>NIP</th><th>Jenis ASN</th><th>Pangkat / golongan</th><th>Jabatan / tugas tambahan</th><th>TMT di KUA</th><th>TMT Kepala KUA</th><th>Usia pensiun</th><th>HP / WA</th>${kelola ? '<th class="text-end">Aksi</th>' : ''}</tr></thead>
       <tbody>${list.length ? list.map(baris).join('') : `<tr><td colspan="${cols}" class="text-center py-4">${rows.length ? 'Tidak ada pegawai yang cocok dengan penyaring.'
         : op ? 'Belum ada data pegawai. Klik <b>Tambah Pegawai</b> untuk mulai mengisi.' : 'Belum ada data pegawai.'}</td></tr>`}</tbody></table></div>`;
     $('pcnt').textContent = list.length ? `Menampilkan ${list.length} dari ${rows.length} pegawai.` : '';
@@ -188,18 +217,18 @@ async function pagePegawai() {
     const baru = !p, kid0 = p ? p.kua_id : op ? me.kua_id : (F.kua || 0);
     // Data lama: "Kepala KUA" masih tertulis di kolom jabatan (sebelum ada jabatan tambahan). Isiannya dibantu: jabatan dikosongkan agar diisi
     // jabatan fungsionalnya, dan jabatan tambahan terpilih sesuai teks lama (Plt. atau Kepala).
-    const lama = !baru && pegJabatanLama(p.jabatan), jab0 = lama && pegJabatanLamaSaja(p.jabatan) ? '' : p?.jabatan;
-    const tb0 = p?.jabatan_tambahan || (lama && PEG_TAMBAHAN_JENIS.includes(p.jenis_asn) ? (pegPltLama(p.jabatan) ? 'Plt. Kepala KUA' : 'Kepala KUA') : '');
+    const lama = !baru && pegPerluDilengkapi(p), jab0 = lama ? '' : p?.jabatan;
+    const tb0 = p?.jabatan_tambahan || (!baru && pegJabatanLama(p.jabatan) && PEG_TAMBAHAN_JENIS.includes(p.jenis_asn) ? (pegPltLama(p.jabatan) ? 'Plt. Kepala KUA' : 'Kepala KUA') : '');
     jpDlg(`<h5>${baru ? 'Tambah Pegawai' : 'Ubah Pegawai'}</h5>
       <form id="pfm" novalidate autocomplete="off">
-        ${lama ? `<div class="alert alert-warning py-2 small" id="pflama">Jabatan pegawai ini masih tertulis <b>${esc(p.jabatan)}</b>. Kepala KUA kini diisi di <b>Jabatan Tambahan</b>. Isi kolom <b>Jabatan</b> dengan jabatan fungsional pegawai (mis. Penghulu atau Penyuluh), lalu simpan.</div>` : ''}
+        ${lama ? `<div class="alert alert-warning py-2 small" id="pflama">Jabatan pokok pegawai ini belum dilengkapi pada data sumber. Isi kolom <b>Jabatan</b> dengan jabatan sebenarnya (mis. Penghulu atau Penyuluh), lalu simpan. Status Kepala KUA tetap diatur secara terpisah.</div>` : ''}
         <div id="pfmsg"></div>
         <div class="row g-3">
           <div class="col-12">${baru && adm
             ? `<label class="form-label" for="pfk">KUA <span class="text-danger">*</span></label><select id="pfk" class="form-select"><option value="">Pilih KUA…</option>${kuas.map(k => `<option value="${k.id}"${k.id === kid0 ? ' selected' : ''}>${esc(k.nama_kua)}</option>`).join('')}</select>`
             : `<div class="small">KUA: <b>${esc(kn[kid0] || me.kua || '')}</b>${baru ? '' : '. Untuk memindahkan ke KUA lain gunakan Transfer.'}</div>`}</div>
           <div class="col-12"><label class="form-label" for="pfn">Nama lengkap beserta gelar <span class="text-danger">*</span></label>
-            <input id="pfn" class="form-control" maxlength="150" placeholder="mis. Drs. H. Ahmad Fauzi, M.Ag." value="${esc(p?.nama)}"></div>
+            <input id="pfn" class="form-control" type="text" autocapitalize="off" maxlength="150" placeholder="mis. Drs. H. Ahmad Fauzi, M.Ag." value="${esc(p?.nama || '')}"></div>
           <div class="col-12"><div class="form-label" id="pfjl">Jenis ASN <span class="text-danger">*</span></div>
             <div class="row g-2" role="group" aria-labelledby="pfjl">${PEG_JENIS.map(j => `<div class="col-6"><input type="radio" class="btn-check" name="pfj" id="pfj-${PEG_KODE[j]}" value="${j}"${p?.jenis_asn === j ? ' checked' : ''}><label class="btn btn-outline-primary w-100" for="pfj-${PEG_KODE[j]}">${j === 'PPPK Paruh Waktu' ? 'PPPK Paruh Waktu (PW)' : j}</label></div>`).join('')}</div></div>
           <div class="col-sm-6"><label class="form-label" for="pfi">NIP</label><input id="pfi" class="form-control" inputmode="numeric" maxlength="21" value="${esc(pegNip(p?.nip))}"><div class="form-text" id="pfih"></div></div>
@@ -208,9 +237,17 @@ async function pagePegawai() {
             <input id="pfb" class="form-control" list="pfbl" maxlength="100" placeholder="Pilih dari daftar atau ketik sendiri" value="${esc(jab0)}">
             <datalist id="pfbl">${PEG_JABATAN.map(j => `<option value="${esc(j)}"></option>`).join('')}</datalist>
             <div class="form-text">Jabatan pokok pegawai, mis. Penghulu atau Penyuluh Agama. Klik kolom ini untuk melihat jabatan yang biasa ada di KUA; jabatan lain boleh diketik sendiri. Kepala KUA tidak diisi di sini, melainkan di Jabatan Tambahan.</div></div>
-          <div class="col-12"><label class="form-label" for="pft">Jabatan tambahan</label>
-            <select id="pft" class="form-select"><option value="">Tidak ada</option>${PEG_TAMBAHAN.map(t => `<option value="${esc(t)}"${t === tb0 ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
-            <div class="form-text" id="pfth"></div></div>
+          <div class="col-12"><label class="form-label" for="pft">Jabatan tambahan Kepala KUA</label>
+            <select id="pft" class="form-select"><option value="">Tidak ada</option>${PEG_TAMBAHAN.map(t => `<option value="${esc(t)}"${t === tb0 ? ' selected' : ''}>${esc(t === 'Kepala KUA' ? 'Kepala KUA Definitif' : t)}</option>`).join('')}</select>
+            <div class="form-text" id="pfth">Status definitif atau Plt. Kepala KUA ditetapkan di sini.</div></div>
+          <div class="col-12"><div class="form-label">Penugasan tambahan operator</div><div class="row g-2">
+            <div class="col-sm-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="pfos"${p?.operator_simkah ? ' checked' : ''}><label class="form-check-label" for="pfos">Operator SIMKAH</label></div></div>
+            <div class="col-sm-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="pfob"${p?.operator_bop ? ' checked' : ''}><label class="form-check-label" for="pfob">Operator BOP</label></div></div>
+          </div><div class="form-text">Operator SIMKAH dan Operator BOP dapat dirangkap oleh Kepala KUA Definitif maupun Plt., termasuk dirangkap sekaligus.</div></div>
+          <div class="col-md-6"><label class="form-label" for="pfup">Usia pensiun (tahun)</label><input id="pfup" type="number" min="40" max="75" step="1" class="form-control" value="${esc(p?.usia_pensiun ?? '')}"><div class="form-text">Perkiraan awal berdasarkan jenjang jabatan dan tanggal lahir pada NIP.</div></div>
+          <div class="col-md-6"><label class="form-label" for="pfus">Sumber usia pensiun</label><div class="input-group"><select id="pfus" class="form-select"><option value="AUTO"${(p?.sumber_usia_pensiun || (!p?.usia_pensiun ? 'AUTO' : 'MANUAL')) === 'AUTO' ? ' selected' : ''}>Otomatis</option><option value="MANUAL"${p?.sumber_usia_pensiun === 'MANUAL' || (!p?.sumber_usia_pensiun && p?.usia_pensiun) ? ' selected' : ''}>Manual</option></select><button type="button" class="btn btn-outline-secondary" id="pfua" title="Hitung ulang dari jabatan dan NIP">Hitung</button></div></div>
+          <div class="col-md-6" id="pftmt-wrap"><label class="form-label" for="pftmt">TMT di KUA saat ini</label><input id="pftmt" type="date" class="form-control" value="${esc(p?.tmt_kua || '')}"></div>
+          <div class="col-md-6 d-none" id="pftmtk-wrap"><label class="form-label" for="pftmtk">TMT pertama kali menjabat Kepala KUA</label><input id="pftmtk" type="date" class="form-control" value="${esc(p?.tmt_kepala_kua || '')}"></div>
           <div class="col-12"><label class="form-label" for="pfh">Nomor HP / WA aktif <span class="text-danger">*</span></label>
             <input id="pfh" class="form-control" type="tel" inputmode="tel" maxlength="20" placeholder="mis. 081234567890" value="${esc(p?.no_hp)}">
             <div class="form-text">Nomor aktif yang dapat dihubungi lewat WhatsApp. Boleh diawali 08 atau +62.</div></div>
@@ -229,6 +266,22 @@ async function pagePegawai() {
         el('pfih').textContent = j === 'Honor' ? 'Pegawai Honor tidak memiliki NIP dan pangkat/golongan.'
           : j === 'PPPK Paruh Waktu' ? `Boleh dikosongkan bila belum memiliki NIP. Bila diisi harus 18 angka. Terisi ${n} angka.`
           : j ? `18 angka (spasi boleh). Terisi ${n} angka.` : 'Pilih jenis ASN terlebih dahulu.';
+      };
+      const syncTmt = () => {
+        const j = jenis(), tb = el('pft').value;
+        const adaTmt = ['PNS','PPPK','PPPK Paruh Waktu'].includes(j);
+        el('pftmt-wrap').classList.toggle('d-none', !adaTmt); el('pftmt').disabled = !adaTmt;
+        const kepala = !!tb && PEG_TAMBAHAN_JENIS.includes(j);
+        el('pftmtk-wrap').classList.toggle('d-none', !kepala); el('pftmtk').disabled = !kepala;
+        if (!adaTmt) el('pftmt').value = '';
+        if (!kepala) el('pftmtk').value = '';
+      };
+      const syncPensiun = force => {
+        if (force || el('pfus').value === 'AUTO') {
+          const usia = pegPensiun(el('pfb').value, el('pfi').value);
+          el('pfup').value = usia ?? '';
+          el('pfus').value = 'AUTO';
+        }
       };
       const tambahanInfo = () => {   // jabatan tambahan hanya untuk PNS dan PPPK; tampilkan siapa yang kini memegang di KUA ini
         const j = jenis(), s = el('pft'), kua = kuaForm(), boleh = PEG_TAMBAHAN_JENIS.includes(j), h = el('pfth');
@@ -250,18 +303,32 @@ async function pagePegawai() {
           : '<option value="">-</option>';
         g.disabled = i.disabled = !(j === 'PNS' || j === 'PPPK' || pw);
         if (j === 'Honor') i.value = '';
-        nipInfo(); tambahanInfo();
+        nipInfo(); tambahanInfo(); syncTmt(); syncPensiun(false);
       };
-      f.addEventListener('change', e => { if (e.target.name === 'pfj') syncJenis(); else if (e.target.id === 'pfk' || e.target.id === 'pft') tambahanInfo(); });
-      f.addEventListener('input', e => { e.target.classList.remove('is-invalid'); if (e.target.id === 'pfi') { pegNipIn(e.target); nipInfo(); } });
+      f.addEventListener('change', e => {
+        if (e.target.name === 'pfj') syncJenis();
+        else if (e.target.id === 'pfk' || e.target.id === 'pft') { tambahanInfo(); syncTmt(); }
+        else if (e.target.id === 'pfus' && e.target.value === 'AUTO') syncPensiun(true);
+      });
+      f.addEventListener('input', e => {
+        e.target.classList.remove('is-invalid');
+        if (e.target.id === 'pfi') { pegNipIn(e.target); nipInfo(); syncPensiun(false); }
+        else if (e.target.id === 'pfb') syncPensiun(false);
+        else if (e.target.id === 'pfup') el('pfus').value = 'MANUAL';
+      });
+      el('pfua').onclick = () => syncPensiun(true);
       el('pfh').onblur = () => { el('pfh').value = pegHp(el('pfh').value); };
-      syncJenis(true);
+      syncJenis(true); syncTmt(); if (!el('pfup').value) syncPensiun(true);
       d.querySelector('[data-x]').onclick = () => d.close();
 
       const salah = (c, m) => { c.classList.add('is-invalid'); c.focus(); el('pfmsg').innerHTML = note(m); return null; };
       const cek = () => {   // sama dengan pegawai_guard (bop.sql); database tetap memeriksa ulang
         const nama = el('pfn').value.replace(/\s+/g, ' ').trim(), jab = el('pfb').value.replace(/\s+/g, ' ').trim(), j = jenis(), hp = pegHp(el('pfh').value);
+        const hpLamaKosong = !!p && !String(p.no_hp || '').trim() && !String(el('pfh').value || '').trim();
         const nip = el('pfi').value.replace(/\D/g, ''), gol = el('pfg').value, kua = kuaForm(), tb = PEG_TAMBAHAN_JENIS.includes(j) ? el('pft').value : '';
+        const usia = el('pfup').value ? Number(el('pfup').value) : null;
+        const tmtKua = ['PNS','PPPK','PPPK Paruh Waktu'].includes(j) ? (el('pftmt').value || null) : null;
+        const tmtKepala = tb ? (el('pftmtk').value || null) : null;
         el('pfmsg').innerHTML = '';
         if (!kua) return salah(el('pfk'), 'Pilih KUA pegawai.');
         if (!nama) return salah(el('pfn'), 'Nama lengkap wajib diisi.');
@@ -277,8 +344,11 @@ async function pagePegawai() {
         if (pegJabatanLama(jab)) return salah(el('pfb'), 'Kepala KUA dan Plt. Kepala KUA adalah jabatan tambahan. Isi kolom Jabatan dengan jabatan fungsional pegawai (mis. Penghulu atau Penyuluh), lalu pilih Kepala KUA di Jabatan Tambahan.');
         const b = tb && pegang(tb, kua);
         if (b) return salah(el('pft'), `${tb} di KUA ini sudah dijabat oleh ${pegAkhir(b.nama)}. Lepaskan jabatan tambahan itu dari ${b.nama} terlebih dahulu (ubah data pegawainya), lalu tetapkan di sini.`);
-        if (!/^08\d{8,12}$/.test(hp)) return salah(el('pfh'), 'Nomor HP/WA tidak valid. Isi nomor aktif 10 sampai 14 angka yang diawali 08 (contoh 081234567890) atau +62.');
-        return { kua, data: { nama, jenis_asn: j, nip: j === 'Honor' ? null : (nip || null), pangkat_golongan: j === 'Honor' ? null : (gol || null), jabatan: jab, jabatan_tambahan: tb || null, no_hp: hp } };
+        if (usia !== null && (!Number.isInteger(usia) || usia < 40 || usia > 75)) return salah(el('pfup'), 'Usia pensiun harus berupa angka 40 sampai 75 tahun.');
+        if (!hpLamaKosong && !/^08\d{8,12}$/.test(hp)) return salah(el('pfh'), 'Nomor HP/WA tidak valid. Isi nomor aktif 10 sampai 14 angka yang diawali 08 (contoh 081234567890) atau +62.');
+        return { kua, data: { nama, jenis_asn: j, nip: j === 'Honor' ? null : (nip || null), pangkat_golongan: j === 'Honor' ? null : (gol || null), jabatan: jab, jabatan_tambahan: tb || null, no_hp: hpLamaKosong ? null : hp,
+          usia_pensiun: usia, sumber_usia_pensiun: usia === null ? null : el('pfus').value, tmt_kua: tmtKua, tmt_kepala_kua: tmtKepala,
+          operator_simkah: el('pfos').checked, operator_bop: el('pfob').checked } };
       };
       const kirim = async lagi => {
         const v = cek();
@@ -298,7 +368,7 @@ async function pagePegawai() {
         if (!lagi) return d.close();
         const kua = el('pfk')?.value;   // tambah lagi: kosongkan isian, KUA pilihan Admin tetap
         f.reset(); if (kua != null && el('pfk')) el('pfk').value = kua;
-        syncJenis(); el('pfmsg').innerHTML = note(`${v.data.nama} tersimpan. Isi pegawai berikutnya.`, 'success'); el('pfn').focus();
+        syncJenis(); syncTmt(); syncPensiun(true); el('pfmsg').innerHTML = note(`${v.data.nama} tersimpan. Isi pegawai berikutnya.`, 'success'); el('pfn').focus();
       };
       f.onsubmit = e => { e.preventDefault(); kirim(false); };
       if (el('pfmx')) el('pfmx').onclick = () => kirim(true);
@@ -313,7 +383,7 @@ async function pagePegawai() {
       ${p.jabatan_tambahan ? `<div class="alert alert-warning py-2 small mb-3" id="ptlepas">${esc(p.nama)} saat ini <b>${esc(p.jabatan_tambahan)}</b>. Jabatan tambahan itu melekat pada KUA asal, jadi <b>dikosongkan</b> saat transfer; Operator KUA asal perlu menetapkan penggantinya.</div>` : ''}
       <label class="form-label" for="ptk">KUA tujuan</label>
       <select id="ptk" class="form-select"><option value="">Pilih KUA tujuan…</option>${tujuan.map(k => `<option value="${k.id}">${esc(k.nama_kua)}</option>`).join('')}</select>
-      <div class="alert alert-info py-2 small mt-3 mb-3">Pegawai langsung berpindah ke KUA tujuan dan tidak lagi tampil di daftar KUA asal. Perpindahan tercatat di Riwayat; Operator KUA tujuan dapat memindahkannya kembali bila keliru.</div>
+      <div class="alert alert-info py-2 small mt-3 mb-3">Pegawai langsung berpindah ke KUA tujuan dan tidak lagi tampil di daftar KUA asal. Operator KUA tujuan dapat memindahkannya kembali bila keliru.</div>
       <div id="ptmsg"></div>
       <div class="d-flex justify-content-end gap-2"><button type="button" class="btn btn-outline-secondary" data-x>Batal</button><button type="button" class="btn btn-primary" data-ok>Transfer</button></div>`, d => {
       d.className = 'dlg-md';
@@ -333,7 +403,7 @@ async function pagePegawai() {
   };
 
   // ---- Hapus ----
-  const hapus = p => jpAsk('Hapus pegawai?', `${p.nama}${p.nip ? ' (NIP ' + pegNip(p.nip) + ')' : ''} akan dihapus dari data pegawai ${kn[p.kua_id] || 'KUA'}. Penghapusan tercatat di Riwayat. Bila pegawai ini hanya pindah tugas, gunakan Transfer.`, 'Hapus', async () => {
+  const hapus = p => jpAsk('Hapus pegawai?', `${p.nama}${p.nip ? ' (NIP ' + pegNip(p.nip) + ')' : ''} akan dihapus dari data pegawai ${kn[p.kua_id] || 'KUA'}. Bila pegawai ini hanya pindah tugas, gunakan Transfer.`, 'Hapus', async () => {
     const { data, error } = await sb.from('pegawai').delete().eq('id', p.id).select('id');
     if (!live(ep)) return;
     if (error) return lapor($('pgmsg'), pegGalat(error), 'danger');
@@ -341,36 +411,6 @@ async function pagePegawai() {
     await refresh();   // tabel diperbarui dulu, baru pesan sukses (pesan tidak mendahului tabel)
     if (live(ep)) lapor($('pgmsg'), `${p.nama} dihapus dari data pegawai.`, 'success');
   }, true);
-
-  // ---- Riwayat ----
-  const riwayat = async () => {
-    jpDlg(`<h5>Riwayat Pegawai</h5>
-      <p class="small mb-3">${op ? `Perubahan data, transfer masuk dan keluar, serta penghapusan pegawai ${esc(me.kua || 'KUA Anda')}` : 'Perubahan data, transfer, dan penghapusan pegawai semua KUA'} (200 catatan terbaru).</p>
-      <div id="prbody">Memuat…</div>
-      <div class="d-flex justify-content-end mt-3"><button type="button" class="btn btn-outline-secondary" data-x>Tutup</button></div>`, d => {
-      d.className = 'dlg-lg'; d.querySelector('[data-x]').onclick = () => d.close();
-    });
-    const { data, error } = await sb.from('pegawai_riwayat').select('id,waktu,aksi,nama,nip,dari_kua,ke_kua,oleh_nama,rincian')
-      .order('waktu', { ascending: false }).order('id', { ascending: false }).limit(200);
-    const box = $('prbody');
-    if (!box || !live(ep)) return;
-    if (error) return box.innerHTML = note(/pegawai_riwayat|schema cache/i.test(error.message) ? 'Tabel riwayat belum ada. Jalankan bop.sql versi terbaru di SQL Editor Supabase.' : error.message);
-    const n = k => kn[k] || 'KUA lain', v = x => x == null || x === '' ? '-' : String(x);
-    const ket = r => {
-      if (r.aksi === 'tambah') return `Ditambahkan ke ${n(r.ke_kua)}`;
-      if (r.aksi === 'hapus') return `Dihapus dari ${n(r.dari_kua)}`;
-      if (r.aksi === 'transfer') {
-        const lepas = Array.isArray(r.rincian?.jabatan_tambahan) && r.rincian.jabatan_tambahan[0] ? ` (jabatan tambahan ${r.rincian.jabatan_tambahan[0]} dilepas)` : '';
-        return (op ? (r.ke_kua === me.kua_id ? `Pindah masuk dari ${n(r.dari_kua)}` : `Dipindahkan ke ${n(r.ke_kua)}`) : `${n(r.dari_kua)} → ${n(r.ke_kua)}`) + lepas;
-      }
-      return Object.entries(r.rincian || {}).filter(([, a]) => Array.isArray(a))
-        .map(([k, [a, b]]) => `${PEG_KOLOM[k] || k}: ${k === 'nip' ? v(pegNip(a)) : v(a)} → ${k === 'nip' ? v(pegNip(b)) : v(b)}`).join('; ');
-    };
-    box.innerHTML = data.length ? `<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Waktu</th><th>Aksi</th><th>Pegawai</th><th>Keterangan</th><th>Oleh</th></tr></thead><tbody>${data.map(r => {
-      const a = PEG_AKSI[r.aksi] || ['bg-secondary', r.aksi];
-      return `<tr><td class="text-nowrap">${esc(pegWaktu(r.waktu))}</td><td><span class="badge ${a[0]}">${esc(a[1])}</span></td><td>${esc(r.nama)}${r.nip ? `<div class="small">${esc(pegNip(r.nip))}</div>` : ''}</td><td>${esc(ket(r))}</td><td>${esc(r.oleh_nama || '-')}</td></tr>`;
-    }).join('')}</tbody></table></div>` : '<p class="text-center py-3 mb-0">Belum ada riwayat.</p>';
-  };
 
   // ---- Unduh Excel (sesuai penyaring yang sedang dipakai) ----
   const unduh = async () => {
@@ -381,9 +421,12 @@ async function pagePegawai() {
       await loadJs(CDN.exceljs);
       const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Pegawai KUA');
       ws.columns = [{ header: 'No', width: 5 }, ...(pu ? [{ header: 'KUA', width: 26 }] : []), { header: 'Nama lengkap + gelar', width: 38 }, { header: 'NIP', width: 22 },
-        { header: 'Jenis ASN', width: 18 }, { header: 'Pangkat / golongan', width: 28 }, { header: 'Jabatan', width: 36 }, { header: 'Jabatan tambahan', width: 18 }, { header: 'HP / WA', width: 16 }];
+        { header: 'Jenis ASN', width: 18 }, { header: 'Pangkat / golongan', width: 28 }, { header: 'Jabatan', width: 36 }, { header: 'Kepala KUA', width: 22 },
+        { header: 'Operator SIMKAH', width: 18 }, { header: 'Operator BOP', width: 16 }, { header: 'TMT di KUA saat ini', width: 18 },
+        { header: 'TMT pertama menjabat Kepala KUA', width: 24 }, { header: 'Usia pensiun (tahun)', width: 18 }, { header: 'Sumber usia pensiun', width: 18 }, { header: 'HP / WA', width: 16 }];
       // NIP dan nomor HP ditulis sebagai teks supaya Excel tidak membulatkan 18 angka atau menghapus angka 0 di depan
-      list.forEach((p, i) => ws.addRow([i + 1, ...(pu ? [kn[p.kua_id] || ''] : []), p.nama, p.nip || '', p.jenis_asn, p.pangkat_golongan ? pegGol(p.jenis_asn, p.pangkat_golongan) : '', p.jabatan, p.jabatan_tambahan || '', p.no_hp]));
+      list.forEach((p, i) => ws.addRow([i + 1, ...(pu ? [kn[p.kua_id] || ''] : []), p.nama, p.nip || '', p.jenis_asn, p.pangkat_golongan ? pegGol(p.jenis_asn, p.pangkat_golongan) : '', p.jabatan,
+        p.jabatan_tambahan || '', p.operator_simkah ? 'Ya' : 'Tidak', p.operator_bop ? 'Ya' : 'Tidak', p.tmt_kua || '', p.tmt_kepala_kua || '', p.usia_pensiun ?? '', p.sumber_usia_pensiun || '', p.no_hp || '']));
       const h = ws.getRow(1); h.font = { bold: true }; h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9EBFF' } };
       ws.views = [{ state: 'frozen', ySplit: 1 }];
       const slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -398,6 +441,11 @@ async function pagePegawai() {
   // ---- Sambungkan ----
   $('pq').oninput = e => { F.q = e.target.value; drawDaftar(); };
   $('pjf').onchange = e => { F.jenis = e.target.value; drawDaftar(); };
+  if (adm) $('pflt').addEventListener('change', e => {
+    if (!e.target.matches('[data-tugas]')) return;
+    F.tugas = [...$('pflt').querySelectorAll('[data-tugas]:checked')].map(x => x.dataset.tugas);
+    drawDaftar();
+  });
   if (pu) {
     $('pkf').onchange = e => { F.kua = +e.target.value || 0; draw(); };
     $('ptabs').onclick = e => {
@@ -418,7 +466,6 @@ async function pagePegawai() {
     if (!p) return lapor($('pgmsg'), 'Pegawai tidak ditemukan. Muat ulang halaman.', 'warning');
     if (b.dataset.e) form(p); else if (b.dataset.t) transfer(p); else hapus(p);
   };
-  $('phis').onclick = riwayat;
   $('pxls').onclick = unduh;
   if (kelola) $('padd').onclick = () => form(null);
 
