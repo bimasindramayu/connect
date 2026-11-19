@@ -503,6 +503,117 @@ const loadJs = src => libs[src] ||= new Promise((ok, no) => {   // library ekspo
   el.onerror = () => { delete libs[src]; no(new Error('Gagal memuat library ekspor. Periksa koneksi internet lalu coba lagi.')); };
   document.head.append(el);
 });
+/* ====== Feedback tombol aksi dan submit ======
+   Handler async yang dipasang melalui onclick/onsubmit dipantau otomatis.
+   Handler yang memakai pola disable=true/false tetap mendapat spinner hingga tombol aktif kembali. */
+const JP_BUTTON_FEEDBACK_STATE = new WeakMap();
+
+function jpFeedbackButton(receiver, event, kind) {
+  if (kind === 'submit') {
+    const form = receiver instanceof HTMLFormElement ? receiver : null;
+    const button = event?.submitter || form?.querySelector('button[type="submit"],button:not([type])');
+    return button instanceof HTMLButtonElement ? button : null;
+  }
+  const target = event?.target;
+  const button = receiver instanceof HTMLButtonElement
+    ? receiver
+    : (target instanceof Element ? target.closest('button') : null);
+  return button instanceof HTMLButtonElement ? button : null;
+}
+
+function jpStartButtonFeedback(button) {
+  if (!button || button.hasAttribute('data-no-feedback')) return () => {};
+  let state = JP_BUTTON_FEEDBACK_STATE.get(button);
+  if (!state) {
+    state = { count: 0 };
+    JP_BUTTON_FEEDBACK_STATE.set(button, state);
+  }
+  state.count++;
+  button.classList.add('jp-button-loading');
+  button.setAttribute('aria-busy', 'true');
+
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const current = JP_BUTTON_FEEDBACK_STATE.get(button);
+    if (!current) return;
+    current.count = Math.max(0, current.count - 1);
+    if (!current.count) {
+      button.classList.remove('jp-button-loading');
+      button.removeAttribute('aria-busy');
+      JP_BUTTON_FEEDBACK_STATE.delete(button);
+    }
+  };
+}
+
+function jpTrackButtonFeedback(button, result) {
+  if (!button || button.hasAttribute('data-no-feedback')) return result;
+
+  if (result && typeof result.then === 'function') {
+    const release = jpStartButtonFeedback(button);
+    return Promise.resolve(result).finally(() => window.setTimeout(release, 180));
+  }
+
+  // Sejumlah handler memulai fungsi async tanpa mengembalikan Promise, tetapi
+  // langsung menonaktifkan tombol. Pantau sampai handler mengaktifkannya lagi.
+  if (button.disabled) {
+    const release = jpStartButtonFeedback(button);
+    const observer = new MutationObserver(() => {
+      if (!button.disabled) {
+        observer.disconnect();
+        window.setTimeout(release, 180);
+      }
+    });
+    observer.observe(button, { attributes: true, attributeFilter: ['disabled'] });
+    if (!button.disabled) {
+      observer.disconnect();
+      window.setTimeout(release, 180);
+    }
+  }
+  return result;
+}
+
+function jpWrapFeedbackProperty(proto, property, kind) {
+  let owner = proto, descriptor = null;
+  while (owner && !descriptor) {
+    descriptor = Object.getOwnPropertyDescriptor(owner, property);
+    owner = Object.getPrototypeOf(owner);
+  }
+  if (!descriptor?.configurable || typeof descriptor.set !== 'function') return;
+
+  Object.defineProperty(proto, property, {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get() { return descriptor.get ? descriptor.get.call(this) : undefined; },
+    set(handler) {
+      if (typeof handler !== 'function' || handler.__jpFeedbackWrapped) {
+        return descriptor.set.call(this, handler);
+      }
+      const wrapped = function (event) {
+        const button = jpFeedbackButton(this, event, kind);
+        const result = handler.call(this, event);
+        return jpTrackButtonFeedback(button, result);
+      };
+      Object.defineProperty(wrapped, '__jpFeedbackWrapped', { value: true });
+      return descriptor.set.call(this, wrapped);
+    }
+  });
+}
+
+jpWrapFeedbackProperty(HTMLElement.prototype, 'onclick', 'click');
+jpWrapFeedbackProperty(HTMLFormElement.prototype, 'onsubmit', 'submit');
+
+// Animasi tekan singkat juga berlaku untuk tombol dengan aksi sinkron.
+document.addEventListener('click', event => {
+  const button = event.target instanceof Element ? event.target.closest('button') : null;
+  if (!button || button.disabled || button.hasAttribute('data-no-feedback')) return;
+  button.classList.remove('jp-button-tap');
+  void button.offsetWidth;
+  button.classList.add('jp-button-tap');
+  window.setTimeout(() => button.classList.remove('jp-button-tap'), 220);
+}, true);
+
 /* ====== Pemberitahuan pop-up (toast): SELALU paling depan ======
    <dialog>.showModal() menaruh dialog di "top layer" browser, lapisan yang tidak dapat dikalahkan z-index berapa pun, jadi toast biasa
    (position:fixed + z-index) tertutup dialog yang sedang terbuka. Wadah toast dijadikan popover manual: popover juga masuk top layer
@@ -527,16 +638,46 @@ if (typeof HTMLDialogElement !== 'undefined') {
   const showModal = HTMLDialogElement.prototype.showModal;
   HTMLDialogElement.prototype.showModal = function (...a) { const r = showModal.apply(this, a); toastUp(); return r; };
 }
-// c: success | danger | warning | info. Pesan panjang dan galat dibaca lebih lama (4,5 detik sampai 12 detik).
+// c: success | danger | warning | info. Durasi 4,5–12 detik ditampilkan sebagai progress bar.
 const jpToast = (m, c = 'success') => {
   const h = toastHost(), teks = String(m ?? '');
-  const e = Object.assign(document.createElement('div'), { className: 'jp-toast ' + c, textContent: teks });
+  const duration = Math.min(12000, Math.max(4500, 2500 + teks.length * 60));
+  const e = document.createElement('div');
+  e.className = 'jp-toast ' + c;
   e.setAttribute('role', c === 'danger' ? 'alert' : 'status');
+  e.style.setProperty('--jp-toast-duration', duration + 'ms');
+
+  const message = Object.assign(document.createElement('span'), {
+    className: 'jp-toast-message',
+    textContent: teks
+  });
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'jp-toast-close';
+  close.setAttribute('aria-label', 'Tutup notifikasi');
+  close.title = 'Tutup notifikasi';
+  close.innerHTML = '<i class="bx bx-x" aria-hidden="true"></i>';
+
+  const timebar = document.createElement('span');
+  timebar.className = 'jp-toast-timebar';
+  timebar.setAttribute('aria-hidden', 'true');
+  timebar.append(document.createElement('span'));
+
+  let dismissed = false, timer = 0;
+  const dismiss = () => {
+    if (dismissed) return;
+    dismissed = true;
+    clearTimeout(timer);
+    e.classList.add('jp-toast-out');
+    window.setTimeout(() => {
+      e.remove();
+      if (!h.children.length && TOAST_POP) { try { h.hidePopover(); } catch { /* sudah tertutup */ } }
+    }, 170);
+  };
+  close.addEventListener('click', dismiss, { once: true });
+  e.append(message, close, timebar);
   h.append(e); toastUp();
-  setTimeout(() => {
-    e.remove();
-    if (!h.children.length && TOAST_POP) { try { h.hidePopover(); } catch { /* sudah tertutup */ } }
-  }, Math.min(12000, Math.max(4500, 2500 + teks.length * 60)));
+  timer = window.setTimeout(dismiss, duration);
 };
 // Hasil sebuah aksi (simpan, kirim, ubah status): catatan di tempatnya DAN pop-up paling depan, supaya tidak terlewat walau layar
 // sedang menggulir jauh dari catatan itu atau dialog sedang terbuka. type: success | danger | warning | info.
