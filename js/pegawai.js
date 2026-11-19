@@ -116,16 +116,29 @@ async function pagePegawai() {
       <div class="row g-2 mb-3" id="pflt">
         <div class="col-md-5 col-lg-4"><label class="form-label" for="pq">Cari</label><input id="pq" type="search" class="form-control" placeholder="Nama, NIP, jabatan, atau nomor HP" autocomplete="off"></div>
         ${pu ? '<div class="col-md-4 col-lg-3"><label class="form-label" for="pkf">KUA</label><select id="pkf" class="form-select"><option value="0">Semua KUA</option></select></div>' : ''}
-        <div class="col-6 col-md-3 col-lg-2"><label class="form-label" for="pjf">Jenis ASN</label><select id="pjf" class="form-select"><option value="">Semua</option>${PEG_JENIS.map(j => `<option>${j}</option>`).join('')}</select></div></div>
+        <div class="col-6 col-md-3 col-lg-2"><label class="form-label" for="pjf">Jenis ASN</label><select id="pjf" class="form-select"><option value="">Semua</option>${PEG_JENIS.map(j => `<option>${j}</option>`).join('')}</select></div>
+        ${adm ? `<div class="col-12"><div class="d-flex flex-wrap align-items-center gap-3">
+          <span class="small fw-semibold text-muted">Tampilkan tugas:</span>
+          <label class="d-inline-flex align-items-center gap-2 small mb-0"><input class="form-check-input mt-0" type="checkbox" data-tugas="kepala"> Kepala KUA (Definitif/Plt.)</label>
+          <label class="d-inline-flex align-items-center gap-2 small mb-0"><input class="form-check-input mt-0" type="checkbox" data-tugas="simkah"> Operator SIMKAH</label>
+          <label class="d-inline-flex align-items-center gap-2 small mb-0"><input class="form-check-input mt-0" type="checkbox" data-tugas="bop"> Operator BOP</label>
+          <span class="small text-muted">Bisa pilih lebih dari satu.</span>
+        </div></div>` : ''}</div>
       <div id="ptab">Memuat…</div>
       <p class="small mt-2 mb-0" id="pcnt"></p></div></div>`;
 
   let rows = [], kuas = [], kn = {}, tab = 'daftar';
-  const F = { q: '', jenis: '', kua: 0 };   // penyaring; operator selalu terikat ke KUA-nya sendiri oleh database (RLS)
+  const F = { q: '', jenis: '', kua: 0, tugas: [] };   // penyaring; operator selalu terikat ke KUA-nya sendiri oleh database (RLS)
   const norm = s => String(s ?? '').toLowerCase();
+  const tugasCocok = p => !adm || !F.tugas.length || F.tugas.some(t => {
+    if (t === 'kepala') return PEG_TAMBAHAN.includes(p.jabatan_tambahan) || pegJabatanLama(p.jabatan);
+    if (t === 'simkah') return p.operator_simkah === true;
+    if (t === 'bop') return p.operator_bop === true;
+    return false;
+  });
   const filtered = () => {
     const q = norm(F.q).trim(), qd = /^[\d\s+-]+$/.test(q) ? q.replace(/\D/g, '') : '';
-    return rows.filter(p => (!F.kua || p.kua_id === F.kua) && (!F.jenis || p.jenis_asn === F.jenis) && (!q
+    return rows.filter(p => (!F.kua || p.kua_id === F.kua) && (!F.jenis || p.jenis_asn === F.jenis) && tugasCocok(p) && (!q
       || [p.nama, p.nip, p.jabatan, p.jabatan_tambahan, p.no_hp, kn[p.kua_id]].some(x => norm(x).includes(q)) || (qd.length >= 3 && ((p.nip || '').includes(qd) || (p.no_hp || '').includes(qd)))));
   };
   const urut = (a, b) => (pu ? String(kn[a.kua_id] || '').localeCompare(String(kn[b.kua_id] || ''), 'id') : 0) || pegUrut(a, b);
@@ -428,6 +441,11 @@ async function pagePegawai() {
   // ---- Sambungkan ----
   $('pq').oninput = e => { F.q = e.target.value; drawDaftar(); };
   $('pjf').onchange = e => { F.jenis = e.target.value; drawDaftar(); };
+  if (adm) $('pflt').addEventListener('change', e => {
+    if (!e.target.matches('[data-tugas]')) return;
+    F.tugas = [...$('pflt').querySelectorAll('[data-tugas]:checked')].map(x => x.dataset.tugas);
+    drawDaftar();
+  });
   if (pu) {
     $('pkf').onchange = e => { F.kua = +e.target.value || 0; draw(); };
     $('ptabs').onclick = e => {
