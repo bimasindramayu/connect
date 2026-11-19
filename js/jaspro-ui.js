@@ -691,23 +691,23 @@ jpClick = function (event) {
   if (action === 'upload') jpUiUploadModal();
   else if (action === 'master') jpUiMasterModal();
   else if (action === 'detail') {
-    jpUiOpenDetail(id);
+    return jpUiOpenDetail(id);
   } else if (action === 'back') {
     J.detailId = '';
     J.rows = null;
     J.previewPeriodId = '';
     jpUiRender();
   } else if (action === 'setting') jpUiSettingsModal();
-  else if (action === 'delete-period') jpUiDeletePeriod(J.detailId);
+  else if (action === 'delete-period') return jpUiDeletePeriod(J.detailId);
   else if (action === 'use') {
     const row = J.rows && J.rows[Number(button.dataset.i)];
     const candidate = row && row.candidates && row.candidates[0];
     if (!row || !candidate) return;
     Object.assign(row, { rekening: candidate.noRekening, namaPemilik: candidate.namaPemilik || candidate.nama, matchStatus: 'MANUAL' });
     jpUiReview();
-  } else if (action === 'dxl') jpDl('xlsx');
-  else if (action === 'dcj') jpDl('jaspro');
-  else if (action === 'dct') jpDl('transpo');
+  } else if (action === 'dxl') return jpDl('xlsx');
+  else if (action === 'dcj') return jpDl('jaspro');
+  else if (action === 'dct') return jpDl('transpo');
 };
 jpChange = async function (event) {
   const target = event.target;
