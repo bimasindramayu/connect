@@ -1349,7 +1349,7 @@ begin
       raise exception 'Anda hanya dapat mengelola pegawai KUA Anda sendiri.'; end if;
   end if;
 
-  new.nama := upper(btrim(regexp_replace(coalesce(new.nama, ''), '\s+', ' ', 'g')));
+  new.nama := btrim(regexp_replace(coalesce(new.nama, ''), '\s+', ' ', 'g'));
   if new.nama = '' then raise exception 'Nama lengkap wajib diisi.'; end if;
   if char_length(new.nama) > 150 then raise exception 'Nama lengkap maksimal 150 karakter.'; end if;
   new.jabatan := btrim(regexp_replace(coalesce(new.jabatan, ''), '\s+', ' ', 'g'));
@@ -1433,11 +1433,6 @@ create trigger pegawai_guard before insert or update on public.pegawai for each 
 drop trigger if exists pegawai_log on public.pegawai;
 drop function if exists public.pegawai_log();
 drop table if exists public.pegawai_riwayat cascade;
-
--- Data lama dinormalisasi menjadi huruf kapital; trigger menjaga semua penambahan/perubahan berikutnya.
-update public.pegawai
-   set nama = upper(btrim(regexp_replace(coalesce(nama, ''), '\s+', ' ', 'g')))
- where nama is distinct from upper(btrim(regexp_replace(coalesce(nama, ''), '\s+', ' ', 'g')));
 
 -- Baca: pegawai KUA sendiri (menu pegawai atau dashboard) atau semua KUA (pegawai_baca_semua). Tulis: Admin (semua KUA) dan Operator
 -- KUA bermenu pegawai untuk KUA-nya sendiri. Peran pusat selain Admin hanya membaca. Pindah KUA hanya lewat pegawai_transfer().
