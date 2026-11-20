@@ -503,6 +503,173 @@ const loadJs = src => libs[src] ||= new Promise((ok, no) => {   // library ekspo
   el.onerror = () => { delete libs[src]; no(new Error('Gagal memuat library ekspor. Periksa koneksi internet lalu coba lagi.')); };
   document.head.append(el);
 });
+/* ====== Feedback tombol aksi dan submit ======
+   Handler async yang dipasang melalui onclick/onsubmit dipantau otomatis.
+   Handler yang memakai pola disable=true/false tetap mendapat spinner hingga tombol aktif kembali. */
+const JP_BUTTON_FEEDBACK_STATE = new WeakMap();
+
+function jpFeedbackButton(receiver, event, kind) {
+  if (kind === 'submit') {
+    const form = receiver instanceof HTMLFormElement ? receiver : null;
+    const button = event?.submitter || form?.querySelector('button[type="submit"],button:not([type])');
+    return button instanceof HTMLButtonElement ? button : null;
+  }
+  const target = event?.target;
+  const button = receiver instanceof HTMLButtonElement
+    ? receiver
+    : (target instanceof Element ? target.closest('button') : null);
+  return button instanceof HTMLButtonElement ? button : null;
+}
+
+function jpStartButtonFeedback(button) {
+  if (!button || button.hasAttribute('data-no-feedback')) return () => {};
+  let state = JP_BUTTON_FEEDBACK_STATE.get(button);
+  if (!state) {
+    state = { count: 0 };
+    JP_BUTTON_FEEDBACK_STATE.set(button, state);
+  }
+  state.count++;
+  button.classList.add('jp-button-loading');
+  button.setAttribute('aria-busy', 'true');
+
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const current = JP_BUTTON_FEEDBACK_STATE.get(button);
+    if (!current) return;
+    current.count = Math.max(0, current.count - 1);
+    if (!current.count) {
+      button.classList.remove('jp-button-loading');
+      button.removeAttribute('aria-busy');
+      JP_BUTTON_FEEDBACK_STATE.delete(button);
+    }
+  };
+}
+
+function jpTrackButtonFeedback(button, result) {
+  if (!button || button.hasAttribute('data-no-feedback')) return result;
+
+  if (result && typeof result.then === 'function') {
+    const release = jpStartButtonFeedback(button);
+    return Promise.resolve(result).finally(() => window.setTimeout(release, 180));
+  }
+
+  // Sejumlah handler memulai fungsi async tanpa mengembalikan Promise, tetapi
+  // langsung menonaktifkan tombol. Pantau sampai handler mengaktifkannya lagi.
+  if (button.disabled) {
+    const release = jpStartButtonFeedback(button);
+    const observer = new MutationObserver(() => {
+      if (!button.disabled) {
+        observer.disconnect();
+        window.setTimeout(release, 180);
+      }
+    });
+    observer.observe(button, { attributes: true, attributeFilter: ['disabled'] });
+    if (!button.disabled) {
+      observer.disconnect();
+      window.setTimeout(release, 180);
+    }
+  }
+  return result;
+}
+
+function jpWrapFeedbackProperty(proto, property, kind) {
+  let owner = proto, descriptor = null;
+  while (owner && !descriptor) {
+    descriptor = Object.getOwnPropertyDescriptor(owner, property);
+    owner = Object.getPrototypeOf(owner);
+  }
+  if (!descriptor?.configurable || typeof descriptor.set !== 'function') return;
+
+  Object.defineProperty(proto, property, {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get() { return descriptor.get ? descriptor.get.call(this) : undefined; },
+    set(handler) {
+      if (typeof handler !== 'function' || handler.__jpFeedbackWrapped) {
+        return descriptor.set.call(this, handler);
+      }
+      const wrapped = function (event) {
+        const button = jpFeedbackButton(this, event, kind);
+        const result = handler.call(this, event);
+        return jpTrackButtonFeedback(button, result);
+      };
+      Object.defineProperty(wrapped, '__jpFeedbackWrapped', { value: true });
+      return descriptor.set.call(this, wrapped);
+    }
+  });
+}
+
+jpWrapFeedbackProperty(HTMLElement.prototype, 'onclick', 'click');
+jpWrapFeedbackProperty(HTMLFormElement.prototype, 'onsubmit', 'submit');
+
+/* Tangkap juga handler addEventListener (dipakai sejumlah tombol di modul Sertifikat).
+   Listener asli dan removeEventListener tetap dipetakan agar perilaku registrasi tidak berubah. */
+const JP_NATIVE_ADD_EVENT_LISTENER = EventTarget.prototype.addEventListener;
+const JP_NATIVE_REMOVE_EVENT_LISTENER = EventTarget.prototype.removeEventListener;
+const JP_WRAPPED_LISTENERS = new WeakMap();
+
+function jpListenerCapture(options) {
+  return typeof options === 'boolean' ? options : !!options?.capture;
+}
+
+EventTarget.prototype.addEventListener = function (type, listener, options) {
+  if ((type !== 'click' && type !== 'submit') ||
+      (typeof listener !== 'function' && !(listener && typeof listener.handleEvent === 'function'))) {
+    return JP_NATIVE_ADD_EVENT_LISTENER.call(this, type, listener, options);
+  }
+
+  let targetMap = JP_WRAPPED_LISTENERS.get(this);
+  if (!targetMap) {
+    targetMap = new WeakMap();
+    JP_WRAPPED_LISTENERS.set(this, targetMap);
+  }
+  let listenerMap = targetMap.get(listener);
+  if (!listenerMap) {
+    listenerMap = new Map();
+    targetMap.set(listener, listenerMap);
+  }
+
+  const key = type + ':' + (jpListenerCapture(options) ? '1' : '0');
+  let wrapped = listenerMap.get(key);
+  if (!wrapped) {
+    wrapped = function (event) {
+      const button = jpFeedbackButton(this, event, type === 'submit' ? 'submit' : 'click');
+      const result = typeof listener === 'function'
+        ? listener.call(this, event)
+        : listener.handleEvent.call(listener, event);
+      return jpTrackButtonFeedback(button, result);
+    };
+    listenerMap.set(key, wrapped);
+  }
+
+  return JP_NATIVE_ADD_EVENT_LISTENER.call(this, type, wrapped, options);
+};
+
+EventTarget.prototype.removeEventListener = function (type, listener, options) {
+  let actual = listener;
+  if ((type === 'click' || type === 'submit') && listener &&
+      (typeof listener === 'function' || typeof listener === 'object')) {
+    const targetMap = JP_WRAPPED_LISTENERS.get(this);
+    const listenerMap = targetMap?.get(listener);
+    const key = type + ':' + (jpListenerCapture(options) ? '1' : '0');
+    actual = listenerMap?.get(key) || listener;
+    listenerMap?.delete(key);
+  }
+  return JP_NATIVE_REMOVE_EVENT_LISTENER.call(this, type, actual, options);
+};
+
+// Animasi tekan singkat juga berlaku untuk tombol dengan aksi sinkron.
+document.addEventListener('click', event => {
+  const button = event.target instanceof Element ? event.target.closest('button') : null;
+  if (!button || button.disabled || button.hasAttribute('data-no-feedback')) return;
+  button.classList.remove('jp-button-tap');
+  void button.offsetWidth;
+  button.classList.add('jp-button-tap');
+  window.setTimeout(() => button.classList.remove('jp-button-tap'), 220);
+}, true);
+
 /* ====== Pemberitahuan pop-up (toast): SELALU paling depan ======
    <dialog>.showModal() menaruh dialog di "top layer" browser, lapisan yang tidak dapat dikalahkan z-index berapa pun, jadi toast biasa
    (position:fixed + z-index) tertutup dialog yang sedang terbuka. Wadah toast dijadikan popover manual: popover juga masuk top layer
@@ -527,16 +694,46 @@ if (typeof HTMLDialogElement !== 'undefined') {
   const showModal = HTMLDialogElement.prototype.showModal;
   HTMLDialogElement.prototype.showModal = function (...a) { const r = showModal.apply(this, a); toastUp(); return r; };
 }
-// c: success | danger | warning | info. Pesan panjang dan galat dibaca lebih lama (4,5 detik sampai 12 detik).
+// c: success | danger | warning | info. Durasi 4,5–12 detik ditampilkan sebagai progress bar.
 const jpToast = (m, c = 'success') => {
   const h = toastHost(), teks = String(m ?? '');
-  const e = Object.assign(document.createElement('div'), { className: 'jp-toast ' + c, textContent: teks });
+  const duration = Math.min(12000, Math.max(4500, 2500 + teks.length * 60));
+  const e = document.createElement('div');
+  e.className = 'jp-toast ' + c;
   e.setAttribute('role', c === 'danger' ? 'alert' : 'status');
+  e.style.setProperty('--jp-toast-duration', duration + 'ms');
+
+  const message = Object.assign(document.createElement('span'), {
+    className: 'jp-toast-message',
+    textContent: teks
+  });
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'jp-toast-close';
+  close.setAttribute('aria-label', 'Tutup notifikasi');
+  close.title = 'Tutup notifikasi';
+  close.innerHTML = '<i class="bx bx-x" aria-hidden="true"></i>';
+
+  const timebar = document.createElement('span');
+  timebar.className = 'jp-toast-timebar';
+  timebar.setAttribute('aria-hidden', 'true');
+  timebar.append(document.createElement('span'));
+
+  let dismissed = false, timer = 0;
+  const dismiss = () => {
+    if (dismissed) return;
+    dismissed = true;
+    clearTimeout(timer);
+    e.classList.add('jp-toast-out');
+    window.setTimeout(() => {
+      e.remove();
+      if (!h.children.length && TOAST_POP) { try { h.hidePopover(); } catch { /* sudah tertutup */ } }
+    }, 170);
+  };
+  close.addEventListener('click', dismiss, { once: true });
+  e.append(message, close, timebar);
   h.append(e); toastUp();
-  setTimeout(() => {
-    e.remove();
-    if (!h.children.length && TOAST_POP) { try { h.hidePopover(); } catch { /* sudah tertutup */ } }
-  }, Math.min(12000, Math.max(4500, 2500 + teks.length * 60)));
+  timer = window.setTimeout(dismiss, duration);
 };
 // Hasil sebuah aksi (simpan, kirim, ubah status): catatan di tempatnya DAN pop-up paling depan, supaya tidak terlewat walau layar
 // sedang menggulir jauh dari catatan itu atau dialog sedang terbuka. type: success | danger | warning | info.
@@ -547,5 +744,21 @@ function lapor(el, teks, type = 'danger') {
 const jpDlg = (h, wire) => { const d = $('dlg'); d.innerHTML = `<div class="p-4">${h}</div>`; wire?.(d); if (!d.open) d.showModal(); };
 const jpAsk = (title, msg, label, ok, danger) => jpDlg(
   `<h5 class="mb-2">${esc(title)}</h5><p>${esc(msg)}</p><div class="d-flex justify-content-end gap-2"><button class="btn btn-outline-secondary" data-x>Batal</button><button class="btn btn-${danger ? 'danger' : 'primary'}" data-ok>${esc(label)}</button></div>`,
-  d => { d.querySelector('[data-x]').onclick = () => d.close(); d.querySelector('[data-ok]').onclick = () => { d.close(); ok(); }; });
+  d => {
+    d.querySelector('[data-x]').onclick = () => d.close();
+    d.querySelector('[data-ok]').onclick = async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        await ok();
+        // Jangan menutup dialog baru yang mungkin dibuka oleh callback.
+        if (d.open && d.querySelector('[data-ok]') === button) d.close();
+      } catch (error) {
+        if (d.open && d.querySelector('[data-ok]') === button) {
+          button.disabled = false;
+          jpToast(error?.message || String(error), 'danger');
+        }
+      }
+    };
+  });
 const jpCard = (ic, c, v, l) => `<div class="col-6 col-lg"><div class="card h-100"><div class="card-body d-flex align-items-center gap-3 py-3"><div class="avatar rounded bg-label-${c}"><i class="bx ${ic} fs-4"></i></div><div class="lh-sm"><div class="fw-semibold fs-5">${v}</div><small>${l}</small></div></div></div></div>`;
