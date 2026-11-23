@@ -139,7 +139,7 @@
     });
     var u = Auth.user();
     $('#who').textContent = u.nama || u.username;
-    $('#peran').textContent = (u.role === 'admin' ? 'Admin sistem' : 'Pengelola satker') + ' · TA ' + App.state.tahun;
+    $('#peran').textContent = (u.role === 'admin' ? 'Admin sistem' : 'Pengelola Pengadaan') + ' · TA ' + App.state.tahun;
   }
   $('#burger').addEventListener('click', function () { document.body.classList.toggle('nav-buka'); });
   $('#keluar').addEventListener('click', function () {

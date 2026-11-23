@@ -525,8 +525,8 @@
                 onclick: function () { UI.drivePreview(b); }
               });
               API.call('fileGet', { file_id: b.file_id }, { jsonp: false }).then(function (r) {
-                if (r.data) img.src = 'data:' + (r.mime || b.mime || 'image/jpeg') + ';base64,' + r.data;
-                else if (r.url) img.src = r.url;
+                if (r.url) img.src = r.url;
+                else if (r.data) img.src = 'data:' + (r.mime || b.mime || 'image/jpeg') + ';base64,' + r.data;
                 else img.alt = (b.nama_file || 'Foto') + ' — pratinjau tidak tersedia';
               }).catch(function () {
                 img.alt = (b.nama_file || 'Foto') + ' — gagal memuat pratinjau';
@@ -612,14 +612,36 @@
           no_bap: m.no_bap, tgl_bap: m.tgl_bap, no_bayar: m.no_bayar, tgl_bayar: m.tgl_bayar
         };
       }
+      function perkecilFotoDokumen(src) {
+        return new Promise(function (resolve) {
+          var im = new Image();
+          im.onload = function () {
+            try {
+              var w0 = im.naturalWidth || im.width, h0 = im.naturalHeight || im.height;
+              var skala = Math.min(1, 1200 / Math.max(w0, h0));
+              var canvas = document.createElement('canvas');
+              canvas.width = Math.max(1, Math.round(w0 * skala));
+              canvas.height = Math.max(1, Math.round(h0 * skala));
+              canvas.getContext('2d').drawImage(im, 0, 0, canvas.width, canvas.height);
+              resolve(canvas.toDataURL('image/jpeg', 0.84));
+            } catch (e) { resolve(src); }
+          };
+          im.onerror = function () { resolve(src); };
+          im.src = src;
+        });
+      }
+
       function siapkanFotoDokumen(ctx) {
         var foto = (ctx.dokumen || []).filter(function (x) {
           return String(x.kode) === '13' && /^image\//i.test(x.mime || '') && !x.render_src;
         });
         return Promise.all(foto.map(function (x) {
           return API.call('fileGet', { file_id: x.file_id }, { jsonp: false }).then(function (r) {
-            if (r.data) x.render_src = 'data:' + (r.mime || x.mime || 'image/jpeg') + ';base64,' + r.data;
-            else if (r.url) x.render_src = r.url;
+            if (r.data) {
+              var data = 'data:' + (r.mime || x.mime || 'image/jpeg') + ';base64,' + r.data;
+              return perkecilFotoDokumen(data).then(function (src) { x.render_src = src; });
+            }
+            if (r.url) x.render_src = r.url;
           }).catch(function (e) {
             x.render_error = e.message || String(e);
           });
