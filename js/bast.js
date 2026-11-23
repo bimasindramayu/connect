@@ -764,7 +764,7 @@ async function pageBastBuat() {
       <div class="row g-3"><div class="col-sm-6"><label class="form-label">Bulan Surat</label><select id="bb-bs" class="form-select">${BX.BULAN_ID.map((b, i) => `<option value="${i + 1}">${b}</option>`).join('')}</select></div>
         <div class="col-sm-6"><label class="form-label">Nomor Urut</label><input type="number" min="1" id="bb-no" class="form-control"></div></div>
       <label class="form-label mt-3">Nomor Surat Lengkap</label><input id="bb-ns" class="form-control" readonly></div></div></div>
-    <div class="col-lg-6"><div class="card h-100"><div class="card-body"><h5 class="mb-3">Para Pihak</h5>
+    <div class="col-lg-6"><div class="card h-100"><div class="card-body"><div class="d-flex align-items-center justify-content-between gap-2 mb-3"><h5 class="mb-0">Para Pihak</h5><button type="button" class="btn btn-sm btn-outline-primary text-nowrap" id="bb-add-pegawai"><i class="bx bx-user-plus me-1"></i>Tambah Pegawai</button></div>
       <label class="form-label">Pihak Pertama (Seksi Bimas Islam)</label><select id="bb-p1" class="form-select"><option value="">— Pilih —</option>${pg('Bimas Islam')}</select>
       <label class="form-label mt-3">Pihak Kedua: KUA Kecamatan</label><select id="bb-kua" class="form-select"><option value="">— Pilih KUA —</option>${BX.KUA_LIST.map(k => `<option>${esc(k.nama)}</option>`).join('')}</select>
       <label class="form-label mt-3">Pihak Kedua: Pegawai</label><select id="bb-p2" class="form-select" disabled><option value="">— Pilih KUA dulu —</option></select><div id="bb-p2i" class="small mt-1"></div></div></div></div>
@@ -777,7 +777,17 @@ async function pageBastBuat() {
       <div id="bb-por" class="mt-3"></div>
       <div class="mt-3 small">Mengetahui: <b>${esc(B.set.KASI_NAMA) || '(belum diatur di Pengaturan BAST)'}</b> ${esc(B.set.KASI_NIP)}</div>
       <div class="d-flex justify-content-end mt-4"><button class="btn btn-primary" id="bb-save"><i class="bx bx-save"></i> Simpan Berita Acara</button></div></div></div></div></div>`;
-  const r = $('broot'); r.oninput = r.onchange = bbEvent; $('bb-save').onclick = bbSave; bbDate(true);
+  const r = $('broot'); r.oninput = r.onchange = bbEvent; $('bb-save').onclick = bbSave;
+  $('bb-add-pegawai').onclick = () => bnPegForm('', p => {
+    if (p.kategori === 'Bimas Islam') {
+      $('bb-p1').value = p.nip;
+    } else {
+      $('bb-kua').value = p.kua;
+      bbEvent({ target: $('bb-kua') });
+      $('bb-p2').value = p.nip;
+    }
+  });
+  bbDate(true);
 }
 function bbDate(force) {
   const v = $('bb-tgl').value; if (!v) return;
@@ -834,9 +844,11 @@ async function bbSave() {
   try { data = (await gas('bastSaveBA', { row })).data; }
   catch (e) { btn.disabled = false; return jpToast(e.message, 'danger'); }
   btn.disabled = false;
-  B.ba.unshift(bnOut(data));
   if (String(y) !== B.set.LAST_NUMBER_YEAR || row.nomor_urut > (+B.set.LAST_NUMBER || 0)) Object.assign(B.set, { LAST_NUMBER: String(row.nomor_urut), LAST_NUMBER_YEAR: String(y) });
-  jpToast(`Berita Acara Nomor ${BX.pad3(row.nomor_urut)}/${y} disimpan.`); pageBastBuat();
+  // Ambil ulang data dari server saat membuka Riwayat agar baris yang baru disimpan pasti tampil.
+  B.on = false;
+  jpToast(`Berita Acara Nomor ${BX.pad3(row.nomor_urut)}/${y} disimpan.`);
+  location.hash = '#bast';
 }
 
 /* ---- Pegawai ---- */
@@ -858,7 +870,7 @@ function bpRows() {
     || '<tr><td colspan="6" class="text-center py-4">Belum ada pegawai.</td></tr>';
   $('bpc').textContent = `Total: ${B.peg.length} pegawai${L.length !== B.peg.length ? ' · ' + L.length + ' cocok' : ''}`;
 }
-function bnPegForm(nip) {
+function bnPegForm(nip, onSaved) {
   const p = B.peg.find(x => x.nip === nip) || { kategori: 'Bimas Islam', nip: '', nama: '', jabatan: '', kua: '', alamat: BX.ALAMAT_BIMAS_DEFAULT };
   const f = (id, l, v, ex = '') => `<div class="mb-3"><label class="form-label">${l}</label><input id="${id}" class="form-control" value="${esc(v)}" ${ex}></div>`;
   bnDlg(`<h5 class="mb-3">${nip ? 'Ubah' : 'Tambah'} Pegawai</h5><div id="bfe"></div>
@@ -882,7 +894,10 @@ function bnPegForm(nip) {
       if (err) return $('bfe').innerHTML = note(err, 'warning');
       try { await gas('bastSavePegawai', { nip: nip || '', data: v }); } catch (e) { return $('bfe').innerHTML = note(e.message); }
       B.peg = (nip ? B.peg.map(x => x.nip === nip ? v : x) : [...B.peg, v]).sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
-      BX.set(B.set, B.peg); d.close(); bpRows(); jpToast('Pegawai disimpan.');
+      BX.set(B.set, B.peg); d.close();
+      if (typeof onSaved === 'function') onSaved(v);
+      else bpRows();
+      jpToast('Pegawai disimpan.');
     };
   }, 'min(560px,95vw)');
 }
