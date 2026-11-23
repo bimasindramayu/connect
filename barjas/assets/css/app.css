@@ -370,3 +370,66 @@ hr.pisah { border: 0; border-top: 1px solid var(--garis2); margin: 16px 0; }
   .isi { margin: 0; padding: 0; }
   body { background: #fff; }
 }
+
+/* ---------- Penampil dokumen BARJAS (diadaptasi dari penampil bersama BIMASATU) ---------- */
+#vdlg {
+  border: 0;
+  border-radius: 14px;
+  padding: 0;
+  width: min(1100px, calc(100% - 1rem));
+  height: calc(100% - 1rem);
+  max-width: none;
+  max-height: none;
+  overflow: hidden;
+  color: var(--tinta);
+  background: var(--papan);
+  box-shadow: 0 18px 60px rgba(0,0,0,.28);
+}
+#vdlg::backdrop { background: rgba(18, 27, 22, .72); }
+#vdlg.wide { width: min(1100px, calc(100% - 1rem)); height: calc(100% - 1rem); }
+#vdlg .vw-shell { height: 100%; min-height: 0; display: flex; flex-direction: column; background: var(--papan); }
+#vdlg .vw-head {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  min-height: 58px; padding: 9px 12px; background: var(--putih);
+  border-bottom: 1px solid var(--garis);
+}
+#vdlg .vw-title { flex: 1 1 180px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; color: var(--tinta); }
+#vdlg .vw-select {
+  flex: 1 1 180px; min-width: 0; max-width: 440px; padding: 8px 10px;
+  border: 1px solid var(--garis); border-radius: var(--r); background: var(--putih); color: var(--tinta);
+}
+#vdlg .vw-page { font-size: 12px; color: var(--biru); background: #e8f0f7; border-radius: 99px; padding: 5px 9px; white-space: nowrap; }
+#vdlg .vw-page:empty { display: none; }
+#vdlg .vw-controls { display: flex; flex-wrap: nowrap; gap: 4px; }
+#vdlg .vw-btn, #vdlg .vw-close {
+  border: 1px solid var(--garis); border-radius: 8px; background: var(--putih);
+  color: var(--tinta); min-height: 36px; padding: 6px 10px; font: inherit;
+  font-size: 13px; cursor: pointer;
+}
+#vdlg .vw-btn { min-width: 36px; font-size: 17px; line-height: 1; }
+#vdlg .vw-btn:hover, #vdlg .vw-close:hover { background: var(--hijau-muda); border-color: #bcdcc7; }
+#vdlg .vw-close { background: var(--hijau); border-color: var(--hijau); color: #fff; font-weight: 600; }
+#vdlg .vw-close:hover { background: var(--hijau-tua); border-color: var(--hijau-tua); }
+#vdlg .vw-stage-wrap { flex: 1; min-height: 0; display: flex; position: relative; }
+#vdlg #vwp {
+  flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden;
+  touch-action: none; background: #e5e9e6; user-select: none; -webkit-user-select: none;
+}
+#vdlg #vws { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+#vdlg #vwi { position: absolute; left: 0; top: 0; }
+#vdlg #vwm {
+  position: absolute; z-index: 2; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(560px, calc(100% - 32px)); text-align: center; color: var(--tinta);
+  pointer-events: none;
+}
+#vdlg .vw-error { display: inline-block; background: rgba(255,255,255,.94); border-radius: 10px; padding: 12px 16px; box-shadow: 0 2px 12px rgba(0,0,0,.12); }
+#vdlg .vw-open { display: inline-block; margin: 10px 0 0; padding: 9px 13px; border-radius: 8px; background: var(--hijau); color: #fff; text-decoration: none; pointer-events: auto; }
+#vdlg .vw-hint { padding: 7px 12px; border-top: 1px solid var(--garis); background: var(--putih); color: var(--tinta2); font-size: 11.5px; }
+@media (max-width: 720px) {
+  #vdlg, #vdlg.wide { width: 100%; height: 100%; max-width: none; max-height: none; border-radius: 0; }
+  #vdlg .vw-head { gap: 5px; padding: 8px; }
+  #vdlg .vw-title, #vdlg .vw-select { flex-basis: 100%; max-width: none; }
+  #vdlg .vw-page { margin-right: auto; }
+  #vdlg .vw-btn { min-width: 32px; padding: 6px 8px; }
+  #vdlg .vw-hint { display: none; }
+}
