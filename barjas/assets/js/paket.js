@@ -381,7 +381,7 @@
                       b.dari_penyedia ? UI.badge('dari data penyedia', 'info') : null,
                       b.size ? el('span.diam', { text: Fmt.bytes(b.size) }) : null,
                       b.file_id ? el('button.btn.kecil', {
-                        title: 'Lihat pratinjau berkas (berkas harus dibagikan "Anyone with link")',
+                        title: 'Pratinjau berkas tersimpan di BARJAS atau arsip lama',
                         onclick: function () { UI.drivePreview(b); }
                       }, 'Pratinjau') : null,
                       b.id ? el('button.btn.kecil.danger', { onclick: function () {
