@@ -1022,12 +1022,18 @@
       var fid = file.file_id || file.id;
       if (!fid) return UI.toast('Berkas tidak memiliki ID.', 'bad');
       var nama = file.nama_file || file.nama || 'berkas';
-      var item = { name: nama, mimeType: file.mime || '', url: file.url || '' };
+      var ekstensi = String(nama).toLowerCase().split('.').pop();
+      var mimeEkstensi = ({
+        pdf: 'application/pdf',
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', jpe: 'image/jpeg',
+        png: 'image/png', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp'
+      })[ekstensi] || '';
+      var item = { name: nama, mimeType: file.mime || mimeEkstensi || 'application/octet-stream', url: file.url || '' };
 
       var load = async function () {
         var r = await API.call('fileGet', { file_id: fid }, { jsonp: false });
         item.url = r.url || item.url;
-        var mime = r.mime || item.mimeType || 'application/octet-stream';
+        var mime = r.mime && r.mime !== 'application/octet-stream' ? r.mime : item.mimeType;
         if (r.data) {
           var binary = atob(r.data);
           var bytes = new Uint8Array(binary.length);
