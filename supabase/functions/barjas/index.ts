@@ -380,9 +380,9 @@ Deno.serve(async (req) => {
         if (row.storage_path) {
           // Berkas yang sudah tersimpan di bucket SIPADU lama tetap dapat dibaca setelah rename.
           let bucket = 'barjas-files';
-          let downloaded = await db.storage.from(bucket).download(row.storage_path);
+          let downloaded = await admin.storage.from(bucket).download(row.storage_path);
           if (downloaded.error) {
-            const legacyDownload = await db.storage.from('sipadu-files').download(row.storage_path);
+            const legacyDownload = await admin.storage.from('sipadu-files').download(row.storage_path);
             if (!legacyDownload.error) {
               downloaded = legacyDownload;
               bucket = 'sipadu-files';
@@ -394,7 +394,7 @@ Deno.serve(async (req) => {
           const step = 0x8000;
           for (let i = 0; i < bytes.length; i += step) binary += String.fromCharCode(...bytes.subarray(i, i + step));
           const base64 = btoa(binary);
-          const signed = checked(await db.storage.from(bucket).createSignedUrl(row.storage_path, 600), 'Tautan berkas');
+          const signed = checked(await admin.storage.from(bucket).createSignedUrl(row.storage_path, 600), 'Tautan berkas');
           return json({ ok: true, data: {
             nama: row.nama_file || 'berkas', mime: row.mime || blob.type || 'application/octet-stream',
             size: row.size || blob.size, data: base64, url: signed.signedUrl,
