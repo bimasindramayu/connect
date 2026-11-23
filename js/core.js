@@ -36,7 +36,7 @@ const can = menu => !!me && Array.isArray(me.menus) && me.menus.includes(menu); 
 // operator; Pegawai KUA paling akhir supaya halaman awal peran lain tidak berubah.
 const HOME_ORDER = ['dashboard', 'bop', 'rpd', 'realisasi', 'verifikasi', 'sakti', 'metode', 'anggaran', 'laporan', 'config', 'impor',
   'bast', 'bast-buat', 'bast-pegawai', 'bast-setting', 'bmn', 'sert-masjid', 'sert-kiblat', 'sert-pengaturan', 'jaspro', 'akses', 'pegawai'];
-const homeMenu = () => HOME_ORDER.find(can) || 'profil';
+const homeMenu = () => HOME_ORDER.find(can) || (can('sipadu') ? 'sipadu' : 'profil');
 // Hanya dipakai bila database belum diperbarui (fungsi akses_saya belum ada): perilaku lama, admin semua menu dan operator 4 menu.
 // Dashboard dan Pegawai KUA butuh tabel baru di bop.sql, jadi tidak ikut.
 const MENU_LAMA = {
@@ -142,6 +142,7 @@ function route() {
   if (!me) return;
   const h = location.hash.slice(1);
   let k = h in pages ? h : homeMenu();
+  if (k === 'sipadu') { location.replace('sipadu/app.html'); return; }
   if (k === 'pengaturan' && me.role !== 'admin') { k = 'profil'; if (location.hash !== '#profil') history.replaceState(null, '', '#profil'); }
   if (k !== 'pengaturan' && k !== 'profil' && !can(k)) {   // menu ini tidak diberikan ke peran akun ini: ke halaman awal. Server tetap menolak bila diakali lewat alamat.
     k = homeMenu();
