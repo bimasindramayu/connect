@@ -15,7 +15,7 @@ alter table public.hak_akses add constraint hak_akses_role_check
 
 -- 0) Kompatibilitas rename dari skema SIPADU yang mungkin sudah pernah diterapkan.
 -- Data lama dipertahankan: tabel dan sequence hanya diganti nama, tidak dihapus.
-do $
+do $$
 declare r record;
 begin
   for r in
@@ -43,7 +43,7 @@ begin
      and to_regclass('public.barjas_log_id_seq') is null then
     alter sequence public.sipadu_log_id_seq rename to barjas_log_id_seq;
   end if;
-end $;
+end $$;
 
 -- Alihkan hak menu yang sebelumnya bernama "sipadu" ke kunci baru "barjas".
 insert into public.hak_akses (role, menu, updated_by, updated_at)
@@ -276,7 +276,7 @@ alter table public.barjas_monev enable row level security;
 alter table public.barjas_log enable row level security;
 
 -- Hapus policy bernama lama setelah tabel SIPADU diganti nama.
-do $
+do $$
 declare r record;
 begin
   for r in
@@ -306,7 +306,7 @@ begin
   execute 'drop policy if exists sipadu_storage_insert on storage.objects';
   execute 'drop policy if exists sipadu_storage_update on storage.objects';
   execute 'drop policy if exists sipadu_storage_delete on storage.objects';
-end $;
+end $$;
 
 drop function if exists public.sipadu_can_satker(text, integer);
 
@@ -484,7 +484,7 @@ revoke all on public.barjas_config, public.barjas_user_map, public.barjas_pejaba
 
 -- Hak menu: role Pengelola Pengadaan hanya boleh memiliki menu BARJAS.
 create or replace function public.set_hak_akses(p_data jsonb) returns void
-language plpgsql security definer set search_path = public as $
+language plpgsql security definer set search_path = public as $$
 declare r text; m text; menus text[];
 begin
   if not public.is_admin() then raise exception 'Hanya admin yang dapat mengatur hak akses menu.'; end if;
@@ -510,7 +510,7 @@ begin
     delete from public.hak_akses where role = r;
     insert into public.hak_akses (role, menu, updated_by) select r, x, auth.uid() from unnest(menus) x;
   end loop;
-end $;
+end $$;
 revoke execute on function public.set_hak_akses(jsonb) from public, anon;
 grant execute on function public.set_hak_akses(jsonb) to authenticated;
 
