@@ -269,6 +269,263 @@
   };
 
   /* ---------- komponen UI ---------- */
+  async function openViewer(files, idx, load) {
+    const V_GAP = 8, V_ZOOM = 10, V_MAXPX = 16e6, V_MAXSIDE = 8192;
+    const d = $('vdlg'), btn = (k, label, title) => `<button type="button" class="vw-btn" data-v="${k}" aria-label="${title}" title="${title}">${label}</button>`;
+    d.className = 'wide';
+    d.innerHTML = `<div class="vw-shell">
+      <header class="vw-head">
+        ${files.length > 1
+          ? `<select id="vwf" class="vw-select">${files.map((f, i) => `<option value="${i}"${i === idx ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}</select>`
+          : `<div class="vw-title" title="${esc(files[idx].name)}">${esc(files[idx].name)}</div>`}
+        <span id="vwg" class="vw-page" aria-live="polite"></span>
+        <div class="vw-controls">
+          ${btn('out', '−', 'Perkecil')}${btn('in', '+', 'Perbesar')}${btn('fit', 'Pas layar', 'Pas layar')}${btn('ccw', '↶', 'Putar kiri')}${btn('cw', '↻', 'Putar kanan')}
+        </div>
+        <button type="button" class="vw-close" id="vwx">Tutup</button>
+      </header>
+      <div class="vw-stage-wrap">
+        <div id="vwp">
+          <div id="vws"><div id="vwi"></div></div>
+          <div id="vwm" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+      <footer class="vw-hint">Geser dengan klik-tahan atau scroll. Ctrl + scroll, pinch, atau dua kali klik untuk zoom.</footer>
+    </div>`;
+    d.showModal();
+    const vp = $('vwp'), st = $('vws'), inn = $('vwi'), P = new Map();
+    // Ruang dokumen: lebar halaman = W. Tiap halaman punya "kotak" (ukuran asli W x h, diputar dengan transform) di dalam "slot" (ukuran
+    // halaman SETELAH diputar, ditaruh di tumpukan). hl[k] = { h, doc (halaman pdf.js, null untuk gambar), slot, box, sc (satuan dokumen per titik PDF),
+    // l, t, w, hh (letak dan ukuran slot), tile (kanvas tajam yang sudah jadi), task dan pend (render tajam yang sedang jalan dan cakupannya) }.
+    // s, x, y = zoom dan posisi panggung (#vws) di layar: titik panggung (a, b) tampil di (x + a * s, y + b * s).
+    let W = 0, SW = 0, SH = 0, LW = 0, LH = 0, NW = 0, rot = 0, s = 1, x = 0, y = 0, gen = 0, pdf = null, url = null, io = null, cur = -1, tm = 0, hl = [];
+    // titik di slot (sudah diputar) <-> titik di kotak halaman (ukuran asli); h = tinggi asli halaman
+    const toBox = (p, q, h) => [[p, q], [q, h - p], [W - p, h - q], [W - q, p]][rot / 90];
+    const toSlot = (u, v, h) => [[u, v], [h - v, u], [W - u, h - v], [v, W - u]][rot / 90];
+    const layout = () => {   // susun ulang halaman ke bawah menurut rotasi sekarang (halaman lebih sempit dari tumpukan ditaruh di tengah)
+      const sw = rot % 180;
+      SW = hl.reduce((m, p) => Math.max(m, sw ? p.h : W), 0);
+      let t = 0;
+      hl.forEach(p => {
+        p.w = sw ? p.h : W; p.hh = sw ? W : p.h; p.l = (SW - p.w) / 2; p.t = t; t += p.hh + V_GAP;
+        Object.assign(p.slot.style, { left: p.l + 'px', top: p.t + 'px', width: p.w + 'px', height: p.hh + 'px' });
+        p.box.style.transform = ['', `translate(${p.h}px,0) rotate(90deg)`, `translate(${W}px,${p.h}px) rotate(180deg)`, `translate(0,${W}px) rotate(270deg)`][rot / 90];
+      });
+      SH = Math.max(0, t - V_GAP);
+      inn.style.width = SW + 'px'; inn.style.height = SH + 'px';
+    };
+    // Batas zoom TIDAK bergantung pada rotasi (dulu dihitung dari tumpukan yang sedang diputar, jadi batas atasnya runtuh setelah PDF
+    // banyak halaman diputar). LW/LH = ukuran tumpukan terbesar di rotasi mana pun. Batas atas = V_ZOOM kali "pas lebar", dan untuk gambar
+    // paling sedikit 3 piksel layar per piksel asli (foto dokumen beresolusi tinggi bisa diperbesar sampai hurufnya terbaca).
+    const lim = () => {
+      const vw = vp.clientWidth, vh = vp.clientHeight;
+      return [Math.max(0.9 * Math.min(vw / LW, vh / LH), 0.15 * vw / LW), Math.max(V_ZOOM * vw / W, 3 * NW / W)];
+    };
+    const pageInd = () => {   // halaman yang paling banyak terlihat; halaman selalu tersusun ke bawah, jadi cukup dihitung di sumbu tegak
+      const el = $('vwg');
+      if (!el) return;
+      if (!pdf || !W) { el.classList.add('d-none'); cur = -1; return; }
+      const a = -y / s, b = (vp.clientHeight - y) / s;
+      let best = 0, bo = -Infinity;
+      hl.forEach((p, k) => { const o = Math.min(b, p.t + p.hh) - Math.max(a, p.t); if (o > bo) { bo = o; best = k; } });
+      if (best !== cur || el.classList.contains('d-none')) { cur = best; el.textContent = `Halaman ${best + 1} dari ${hl.length}`; el.classList.remove('d-none'); }
+    };
+    const apply = () => {   // jepit zoom dan posisi: dokumen selalu terlihat (kecil = di tengah, besar = tepi tak keluar layar)
+      const vw = vp.clientWidth, vh = vp.clientHeight;
+      if (!W || !vw || !vh) return;
+      const [lo, hi] = lim();
+      s = Math.min(hi, Math.max(lo, s));
+      x = SW * s <= vw ? (vw - SW * s) / 2 : Math.min(0, Math.max(vw - SW * s, x));
+      y = SH * s <= vh ? (vh - SH * s) / 2 : Math.min(0, Math.max(vh - SH * s, y));
+      st.style.width = SW + 'px'; st.style.height = SH + 'px';
+      st.style.transform = `translate(${x}px,${y}px) scale(${s})`;
+      pageInd();
+      clearTimeout(tm); tm = setTimeout(sharp, 150);   // kanvas tajam digambar setelah zoom/geser berhenti
+    };
+    const anchor = () => {   // titik di tengah layar: halaman terdekat dan letaknya di kotak halaman (tak diputar), agar bisa dikembalikan setelah tata letak berubah
+      const a = (vp.clientWidth / 2 - x) / s, b = (vp.clientHeight / 2 - y) / s;
+      let k = 0, best = Infinity;
+      hl.forEach((p, i) => { const g = Math.max(p.t - b, b - p.t - p.hh, 0); if (g < best) { best = g; k = i; } });
+      const p = hl[k], [u, v] = toBox(a - p.l, Math.min(p.hh, Math.max(0, b - p.t)), p.h);
+      return { k, u, v };
+    };
+    const turn = by => {   // putar: zoom tetap, halaman dan titik yang tadi di tengah layar tetap di tengah layar
+      const an = anchor(), p = hl[an.k];
+      rot = (rot + by) % 360; layout();
+      const [a, b] = toSlot(an.u, an.v, p.h);
+      x = vp.clientWidth / 2 - (p.l + a) * s; y = vp.clientHeight / 2 - (p.t + b) * s;
+      apply();
+    };
+    const fit = k => {   // pas lebar, bagian atas halaman k di atas layar (tanpa k: halaman yang sedang dilihat)
+      if (!W) return;
+      if (k == null) k = anchor().k;
+      s = vp.clientWidth / SW; x = 0; y = -hl[k].t * s; apply();
+    };
+    const zoomAt = (cx, cy, k) => {
+      if (!W) return;
+      const n = Math.min(lim()[1], Math.max(lim()[0], s * k)), f = n / s;
+      x = cx - (cx - x) * f; y = cy - (cy - y) * f; s = n;
+    };
+    d.onclick = e => {
+      const b = e.target.closest('[data-v]'); if (!b) return;
+      if (!W) return;
+      const k = b.dataset.v, c = [vp.clientWidth / 2, vp.clientHeight / 2];
+      if (k === 'fit') return fit();
+      if (k === 'cw' || k === 'ccw') return turn(k === 'cw' ? 90 : 270);
+      zoomAt(c[0], c[1], k === 'in' ? 1.4 : 1 / 1.4); apply();
+    };
+    vp.onpointerdown = e => { vp.setPointerCapture(e.pointerId); P.set(e.pointerId, [e.clientX, e.clientY]); };
+    vp.onpointermove = e => {
+      if (!P.has(e.pointerId) || !W) return;
+      const r = vp.getBoundingClientRect(), a = [...P.values()];
+      P.set(e.pointerId, [e.clientX, e.clientY]);
+      const b = [...P.values()];
+      if (b.length === 1) { x += b[0][0] - a[0][0]; y += b[0][1] - a[0][1]; }
+      else {   // dua jari: geser mengikuti titik tengah + zoom mengikuti jarak
+        const d0 = Math.hypot(a[0][0] - a[1][0], a[0][1] - a[1][1]), d1 = Math.hypot(b[0][0] - b[1][0], b[0][1] - b[1][1]);
+        const cx = (b[0][0] + b[1][0]) / 2 - r.left, cy = (b[0][1] + b[1][1]) / 2 - r.top;
+        x += cx - ((a[0][0] + a[1][0]) / 2 - r.left); y += cy - ((a[0][1] + a[1][1]) / 2 - r.top);
+        if (d0 > 0) zoomAt(cx, cy, d1 / d0);
+      }
+      apply();
+    };
+    vp.onpointerup = vp.onpointercancel = e => P.delete(e.pointerId);
+    vp.addEventListener('wheel', e => {   // scroll = geser; Ctrl+scroll dan pinch trackpad (Chrome/Firefox/Edge) = zoom
+      e.preventDefault();
+      const r = vp.getBoundingClientRect(), u = e.deltaMode === 1 ? 16 : 1;
+      if (e.ctrlKey || e.metaKey) zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * u * 0.01));
+      else { x -= e.deltaX * u; y -= e.deltaY * u; }
+      apply();
+    }, { passive: false });
+    let g0 = 1;   // pinch trackpad Safari
+    vp.addEventListener('gesturestart', e => { e.preventDefault(); g0 = s; });
+    vp.addEventListener('gesturechange', e => {
+      e.preventDefault();
+      if (P.size < 2) { const r = vp.getBoundingClientRect(); zoomAt(e.clientX - r.left, e.clientY - r.top, g0 * e.scale / s); apply(); }
+    });
+    vp.ondblclick = e => {
+      const r = vp.getBoundingClientRect(), base = vp.clientWidth / (SW || 1);
+      if (s > base * 1.2) fit(); else { zoomAt(e.clientX - r.left, e.clientY - r.top, base * 2.5 / s); apply(); }
+    };
+    const ro = new ResizeObserver(apply); ro.observe(vp);
+  
+    // ---- PDF: render dasar (sekali, saat halaman mendekati layar) dan kanvas tajam (bagian yang tampak, sesuai zoom) ----
+    const paint = async p => {
+      const v = p.doc.getViewport({ scale: p.sc * Math.min(window.devicePixelRatio || 1, 1.5) }), c = document.createElement('canvas');
+      c.width = v.width; c.height = v.height; c.style.cssText = 'width:100%;height:100%;display:block';
+      p.box.append(c);
+      await p.doc.render({ canvasContext: c.getContext('2d'), viewport: v }).promise;
+    };
+    // irisan persegi di ruang panggung (a0, b0, a1, b1) dengan slot halaman p, sebagai [u0, v0, u1, v1] di kotak halaman; null bila kosong
+    const cut = (p, a0, b0, a1, b1) => {
+      const p0 = Math.max(a0, p.l) - p.l, p1 = Math.min(a1, p.l + p.w) - p.l, q0 = Math.max(b0, p.t) - p.t, q1 = Math.min(b1, p.t + p.hh) - p.t;
+      if (p1 <= p0 || q1 <= q0) return null;
+      const [ua, va] = toBox(p0, q0, p.h), [ub, vb] = toBox(p1, q1, p.h);
+      return [Math.min(ua, ub), Math.min(va, vb), Math.max(ua, ub), Math.max(va, vb)];
+    };
+    const drop = p => {   // buang kanvas tajam halaman (di luar layar, atau render dasar sudah cukup tajam)
+      if (p.task) { p.task.cancel(); p.task = p.pend = null; }
+      if (p.tile) { p.tile.c.width = p.tile.c.height = 0; p.tile.c.remove(); p.tile = null; }
+    };
+    const sharp = () => {
+      if (!pdf || !W) return;
+      const my = gen, vw = vp.clientWidth, vh = vp.clientHeight, dpr = window.devicePixelRatio || 1, m = s * dpr;   // m = piksel layar per satuan ruang dokumen
+      const a0 = -x / s, b0 = -y / s, a1 = (vw - x) / s, b1 = (vh - y) / s, ma = vw * 0.3 / s, mb = vh * 0.3 / s;
+      hl.forEach(p => {
+        try {   // satu halaman gagal (mis. kanvas ditolak peramban karena memori) tidak boleh menghentikan halaman lain
+          const vis = m > Math.min(dpr, 1.5) * 1.1 ? cut(p, a0, b0, a1, b1) : null;   // render dasar memakai min(dpr, 1,5) piksel per satuan
+          if (!vis) return drop(p);
+          const cukup = t => t && t.want >= m * 0.9 && t.u0 <= vis[0] + 1 && t.v0 <= vis[1] + 1 && t.u1 >= vis[2] - 1 && t.v1 >= vis[3] - 1;   // mencakup bagian yang tampak, dengan kerapatan memadai
+          if (cukup(p.pend)) return;   // render yang sedang berjalan sudah mencukupi
+          if (p.task) { p.task.cancel(); p.task = p.pend = null; }   // render usang: tampilan sudah berubah
+          if (cukup(p.tile)) return;   // kanvas tajam yang ada masih mencukupi
+          let k = m, r = cut(p, a0 - ma, b0 - mb, a1 + ma, b1 + mb);   // bagian yang tampak ditambah margin 30% agar geser pendek tak perlu menggambar ulang
+          const px = () => (r[2] - r[0]) * (r[3] - r[1]) * k * k;
+          if (px() > V_MAXPX) r = vis;
+          if (px() > V_MAXPX) k *= Math.sqrt(V_MAXPX / px());
+          k = Math.min(k, V_MAXSIDE / (r[2] - r[0]), V_MAXSIDE / (r[3] - r[1]));
+          const u0 = Math.floor(r[0]), v0 = Math.floor(r[1]), c = document.createElement('canvas');
+          c.width = Math.ceil((r[2] - u0) * k); c.height = Math.ceil((r[3] - v0) * k);
+          p.pend = { u0, v0, u1: u0 + c.width / k, v1: v0 + c.height / k, want: m };
+          // transform menggeser hasil render supaya kanvas hanya berisi bagian [u0, v0] ke kanan-bawah (dalam piksel kanvas)
+          const task = p.task = p.doc.render({ canvasContext: c.getContext('2d'), viewport: p.doc.getViewport({ scale: p.sc * k }), transform: [1, 0, 0, 1, -u0 * k, -v0 * k] });
+          task.promise.then(() => {
+            if (my !== gen || p.task !== task) return;   // dokumen sudah diganti/ditutup, atau ada render yang lebih baru
+            p.task = p.pend = null;
+            c.style.cssText = `position:absolute;z-index:1;left:${u0}px;top:${v0}px;width:${c.width / k}px;height:${c.height / k}px;display:block;pointer-events:none`;
+            const lama = p.tile;
+            p.box.append(c); p.tile = { c, u0, v0, u1: u0 + c.width / k, v1: v0 + c.height / k, want: m };
+            if (lama) { lama.c.width = lama.c.height = 0; lama.c.remove(); }
+          }, () => { if (p.task === task) p.task = p.pend = null; /* dibatalkan (render lebih baru/ditutup): p.task sudah diganti; galat sungguhan: boleh dicoba lagi */ });
+        } catch { p.task = p.pend = null; }
+      });
+    };
+  
+    const clean = () => {
+      clearTimeout(tm); hl.forEach(drop);
+      if (io) io.disconnect(); if (pdf) pdf.destroy(); if (url) URL.revokeObjectURL(url);
+      io = pdf = url = null; inn.replaceChildren(); W = SW = SH = LW = LH = NW = 0; rot = 0; hl = []; pageInd();
+    };
+    const show = async i => {
+      const my = ++gen; clean(); $('vwm').textContent = 'Memuat dokumen…';
+      try {
+        const blob = await (await load(files[i])).blob();
+        if (my !== gen) return;
+        const cw = Math.min(vp.clientWidth, 1100);
+        const add = (h, doc) => {   // halaman baru di tumpukan; mengembalikan kotaknya
+          const slot = document.createElement('div'), box = document.createElement('div');
+          slot.style.position = 'absolute';
+          box.dataset.n = hl.length; box.style.cssText = `position:absolute;left:0;top:0;width:${cw}px;height:${h}px;transform-origin:0 0;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25)`;
+          slot.append(box); inn.append(slot);
+          hl.push({ h, doc, slot, box, sc: doc ? cw / doc.getViewport({ scale: 1 }).width : 1, tile: null, pend: null, task: null });
+          return box;
+        };
+        const mime = String(blob.type || files[i].mimeType || '').toLowerCase();
+        const isPdf = mime.includes('pdf') || /\.pdf$/i.test(files[i].name || '');
+        const isImage = mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp)$/i.test(files[i].name || '');
+        if (isPdf) {
+          if (!w.pdfjsLib) throw new Error('Pustaka PDF belum termuat. Muat ulang halaman BARJAS.');
+          if (!w.pdfjsLib.GlobalWorkerOptions.workerSrc) w.pdfjsLib.GlobalWorkerOptions.workerSrc = 'assets/js/lib/pdf.worker.min.js';
+          const doc = await w.pdfjsLib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+          if (my !== gen) return doc.destroy();
+          pdf = doc;
+          const pgs = [];
+          for (let n = 1; n <= doc.numPages; n++) pgs.push(await doc.getPage(n));
+          io = new IntersectionObserver(es => es.forEach(en => {
+            if (en.isIntersecting && !en.target.dataset.done) { en.target.dataset.done = 1; paint(hl[+en.target.dataset.n]).catch(() => { /* ditutup saat digambar */ }); }
+          }), { root: vp, rootMargin: '100% 0px' });
+          pgs.forEach(pg => { const v1 = pg.getViewport({ scale: 1 }); io.observe(add(Math.round(v1.height * cw / v1.width), pg)); });
+        } else if (isImage) {
+          url = URL.createObjectURL(blob);
+          const img = new Image(); img.src = url; await img.decode();
+          if (my !== gen) return;
+          img.style.cssText = 'width:100%;height:100%;display:block;pointer-events:none';
+          add(Math.round(cw * img.naturalHeight / img.naturalWidth), null).append(img);
+          NW = img.naturalWidth;
+        } else {
+          throw new Error('Jenis berkas ini (' + (mime || 'tidak diketahui') + ') belum didukung untuk pratinjau.');
+        }
+        W = cw;
+        LW = hl.reduce((m, p) => Math.max(m, p.h), W);   // tumpukan terlebar (halaman tertinggi diputar 90 derajat)
+        LH = Math.max(hl.reduce((m, p) => m + p.h, 0), hl.length * W) + (hl.length - 1) * V_GAP;   // tumpukan tertinggi (tanpa atau dengan diputar)
+        layout(); $('vwm').textContent = ''; fit(0);
+      } catch (e) {
+        if (my === gen) {
+          const msg = $('vwm');
+          clear(msg);
+          msg.appendChild(el('div.vw-error', { text: e.message || String(e) }));
+          const link = files[i] && files[i].url;
+          if (link) msg.appendChild(el('a.vw-open', { href: link, target: '_blank', rel: 'noopener' }, 'Buka berkas di tab baru'));
+        }
+      }
+    };
+    if ($('vwf')) $('vwf').onchange = () => show(+$('vwf').value);
+    $('vwx').onclick = () => d.close();
+    d.addEventListener('close', function () { gen++; clean(); ro.disconnect(); d.onclick = null; }, { once: true });
+    d.addEventListener('click', function (e) { if (e.target === d) d.close(); });
+    show(idx);
+  }
+
   var UI = {
     toast: function (msg, kind) {
       var box = $('#toast') || document.body.appendChild(el('div#toast'));
@@ -765,42 +1022,29 @@
     drivePreview: function (file) {
       if (!file) return;
       var fid = file.file_id || file.id;
-      if (!fid) return UI.toast('Berkas tidak memiliki ID Drive', 'bad');
+      if (!fid) return UI.toast('Berkas tidak memiliki ID.', 'bad');
       var nama = file.nama_file || file.nama || 'berkas';
-      var remoteUrl = file.url || '';
-      var stage = el('div.pv-panggung', null, [el('div.pv-muat', { text: 'Memuat pratinjau…' })]);
-      var modal = UI.modal({
-        title: 'Pratinjau: ' + nama,
-        kelas: 'penuh',
-        body: stage,
-        actions: [
-          { label: 'Buka berkas', onclick: function () { if (remoteUrl) window.open(remoteUrl, '_blank'); else UI.toast('Tautan berkas tidak tersedia.', 'bad'); return false; } },
-          { label: 'Tutup', kind: 'primary' }
-        ]
-      });
-      API.call('fileGet', { file_id: fid }, { jsonp: false }).then(function (r) {
-        remoteUrl = r.url || remoteUrl;
-        if (!r.data && r.url) {
-          clear(stage).appendChild(UI.empty('Berkas lama masih di penyimpanan sebelumnya', 'Berkas ini belum disalin ke Supabase Storage. Tautan lama tetap disediakan.',
-            el('a.btn.primary', { href: r.url, target: '_blank', rel: 'noopener' }, 'Buka berkas')));
-          return;
+      var item = { name: nama, mimeType: file.mime || '', url: file.url || '' };
+
+      var load = async function () {
+        var r = await API.call('fileGet', { file_id: fid }, { jsonp: false });
+        item.url = r.url || item.url;
+        var mime = r.mime || item.mimeType || 'application/octet-stream';
+        if (r.data) {
+          var binary = atob(r.data);
+          var bytes = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          return new Response(new Blob([bytes], { type: mime }));
         }
-        var mime = (r.mime || '').toLowerCase();
-        if (/^image\//.test(mime)) {
-          UI._penampilGambar(stage, 'data:' + mime + ';base64,' + r.data);
-        } else if (mime === 'application/pdf' || /\.pdf$/i.test(r.nama || nama)) {
-          var bytes = Uint8Array.from(atob(r.data), function (c) { return c.charCodeAt(0); });
-          UI._penampilPdf(stage, bytes);
-        } else {
-          clear(stage).appendChild(UI.empty(
-            'Pratinjau tidak didukung', 'Jenis berkas ini (' + (r.mime || 'tidak diketahui') + ') tidak dapat dipratinjau langsung di sini.',
-            el('button.btn.primary', { onclick: function () { if (remoteUrl) window.open(remoteUrl, '_blank'); else UI.toast('Tautan berkas tidak tersedia.', 'bad'); } }, 'Buka berkas')
-          ));
+        if (r.url) {
+          var response = await fetch(r.url);
+          if (!response.ok) throw new Error('Berkas lama tidak dapat diambil dari penyimpanan sumber (HTTP ' + response.status + ').');
+          return response;
         }
-      }).catch(function (e) {
-        clear(stage).appendChild(UI.empty('Gagal memuat pratinjau', e.message || String(e)));
-      });
-      return modal;
+        throw new Error('Isi berkas tidak tersedia untuk dipratinjau.');
+      };
+
+      openViewer([item], 0, load);
     }
   };
 
