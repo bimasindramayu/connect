@@ -18,6 +18,8 @@ npx supabase functions deploy bop --no-verify-jwt
 npx supabase functions deploy barjas --no-verify-jwt
 \`\`\`
 
+Jika file SQL SIPADU versi sebelumnya pernah dijalankan, `barjas.sql` akan mengganti nama tabel `sipadu_*` dan sequence menjadi `barjas_*`, serta memindahkan hak menu lama `sipadu` ke `barjas` tanpa menghapus isi tabel. Bucket lama `sipadu-files` tidak dihapus; Edge Function BARJAS tetap dapat membaca dan menghapus berkas lama di sana. Semua unggahan baru disimpan ke `barjas-files`.
+
 Edge Function BARJAS memakai environment bawaan Supabase: \`SUPABASE_URL\`, \`SUPABASE_ANON_KEY\`, dan \`SUPABASE_SERVICE_ROLE_KEY\`. Tidak ada service-role key yang ditaruh di browser. Bucket \`barjas-files\` dibuat privat oleh SQL.
 
 ## Akun dan hak akses
