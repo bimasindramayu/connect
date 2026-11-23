@@ -193,7 +193,16 @@ Deno.serve(async (req) => {
         if (entity === 'Penugasan') {
           payload.tahun = Number(payload.tahun);
           payload.ada_pengadaan = payload.ada_pengadaan === undefined ? true : asBool(payload.ada_pengadaan);
-          if (payload.tgl_dipa) payload.tgl_dipa = String(payload.tgl_dipa).slice(0, 10);
+          payload.tgl_dipa = payload.tgl_dipa ? String(payload.tgl_dipa).slice(0, 10) : null;
+          payload.user_id = payload.user_id || null;
+          if (!payload.id) {
+            const previous = checked(await db.from('sipadu_penugasan').select('id')
+              .eq('satker_id', payload.satker_id).eq('tahun', payload.tahun).maybeSingle(), 'Cari penugasan');
+            payload.id = previous?.id || uid('T');
+          }
+        } else if (!payload.id) {
+          const prefix: Record<string, string> = { Satker: 'S', Pejabat: 'J', Penyedia: 'V' };
+          payload.id = uid(prefix[entity] || 'S');
         }
         if (entity === 'Satker' && !isAdmin) {
           if (!payload.id) throw new Error('Pengelola satker tidak dapat menambah satuan kerja.');
@@ -279,6 +288,7 @@ Deno.serve(async (req) => {
         row.pagu = Number(row.pagu || 0);
         row.nilai = Number(row.nilai || 0);
         row.ada_pph = asBool(row.ada_pph);
+        row.penyedia_id = row.penyedia_id || null;
         row.updated_at = now();
         if (row.meta && typeof row.meta === 'string') row.meta = parseObject(row.meta, {});
         if (!row.id) { row.id = uid('P'); row.created_at = now(); }
@@ -440,9 +450,15 @@ Deno.serve(async (req) => {
 
         const paketRows = (d.paket || []).map((x: any) => ({
           ...x, id: String(x.id), tahun: Number(x.tahun), pagu: Number(x.pagu || 0),
-          nilai: Number(x.nilai || 0), ada_pph: asBool(x.ada_pph), meta: parseObject(x.meta, {}),
+          nilai: Number(x.nilai || 0), ada_pph: asBool(x.ada_pph), penyedia_id: x.penyedia_id || null, meta: parseObject(x.meta, {}),
         }));
         await upsertMany(db, 'sipadu_paket', paketRows);
+        // HPS/Monev disinkronkan per paket agar impor ulang juga membersihkan versi lama yang sudah dihapus di sumber.
+        const paketIds = paketRows.map((x: any) => String(x.id));
+        if (paketIds.length) {
+          checked(await db.from('sipadu_hps').delete().in('paket_id', paketIds), 'Sinkronisasi HPS');
+          checked(await db.from('sipadu_monev').delete().in('paket_id', paketIds), 'Sinkronisasi Monev');
+        }
 
         const hpsRows: any[] = [];
         for (const x of (d.hps || [])) {
