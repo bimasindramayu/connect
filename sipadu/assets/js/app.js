@@ -186,10 +186,10 @@
   }).catch(function (e) {
     clear($('#view')).appendChild(UI.empty(
       'Tidak dapat menghubungi server',
-      e.message + ' — periksa alamat Web App dan pastikan deployment terbaru sudah dipublikasikan.',
+      e.message + ' — periksa koneksi proyek Supabase dan pastikan Edge Function SIPADU sudah di-deploy.',
       el('div.baris', { style: 'justify-content:center' }, [
         el('button.btn.primary', { onclick: function () { location.reload(); } }, 'Muat ulang'),
-        el('button.btn', { onclick: function () { Auth.clear(); location.href = '../index.html'; } }, 'Ganti alamat server')
+        el('button.btn', { onclick: function () { Auth.clear(); location.href = '../index.html'; } }, 'Kembali ke BIMASATU')
       ])
     ));
   });
