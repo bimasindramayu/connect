@@ -1,4 +1,4 @@
-/* SIPADU - kisi HPS/RAB.
+/* BARJAS - kisi HPS/RAB.
    Menerima tempelan langsung dari Excel (lengkap dengan sel gabung),
    impor berkas .xlsx, atau pengetikan manual. */
 (function (w) {

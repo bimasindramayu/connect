@@ -1,4 +1,4 @@
-/* SIPADU - paket pengadaan: daftar, detail, berkas, dan cetak dokumen. */
+/* BARJAS - paket pengadaan: daftar, detail, berkas, dan cetak dokumen. */
 (function (w) {
   'use strict';
   var C = w.CONFIG, B = w.Bantu;

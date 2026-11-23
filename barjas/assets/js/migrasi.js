@@ -1,4 +1,4 @@
-/* SIPADU - migrasi data dari Google Apps Script/Spreadsheet lama ke Supabase.
+/* BARJAS - migrasi data dari Google Apps Script/Spreadsheet lama ke Supabase.
    Login lama hanya dipakai selama halaman ini terbuka; kredensial tidak disimpan. */
 (function (w) {
   'use strict';
@@ -247,7 +247,7 @@
   }
 
   function page(host) {
-    App.setJudul('Migrasi Data SIPADU', 'Pindahkan data lama ke database dan penyimpanan Supabase');
+    App.setJudul('Migrasi Data BARJAS', 'Pindahkan data lama ke database dan penyimpanan Supabase');
     if (!Auth.isAdmin()) {
       host.innerHTML = '<div class="kartu"><p class="tegas">Khusus Admin</p><p class="mini">Hanya Admin CONNECT yang dapat menjalankan migrasi data.</p></div>';
       return;
@@ -266,8 +266,8 @@
       '<div id="sm-progress-wrap" class="mt-3 d-none"><div class="d-flex justify-content-between small mb-1"><span>Progres</span><span id="sm-progress-text"></span></div><div class="meter"><i id="sm-progress" style="width:0%"></i></div></div>' +
       '<div class="border rounded p-3 mt-3" style="max-height:260px;overflow:auto" id="sm-log" aria-live="polite"></div></div></div>' +
       '<div class="kartu"><div class="badan"><h3 class="h6">Catatan migrasi</h3><ul class="mini mb-0">' +
-      '<li>Master satuan kerja, pejabat, penyedia, konfigurasi, penugasan, paket, HPS, dan Monev dipindahkan ke tabel Supabase SIPADU.</li>' +
-      '<li>Dokumen diunduh dari Google Drive lama lalu diunggah ke bucket privat <code>sipadu-files</code>. Jika sumber tidak bisa dibaca, metadata dan URL lamanya tetap disimpan sebagai rujukan.</li>' +
+      '<li>Master satuan kerja, pejabat, penyedia, konfigurasi, penugasan, paket, HPS, dan Monev dipindahkan ke tabel Supabase BARJAS.</li>' +
+      '<li>Dokumen diunduh dari Google Drive lama lalu diunggah ke bucket privat <code>barjas-files</code>. Jika sumber tidak bisa dibaca, metadata dan URL lamanya tetap disimpan sebagai rujukan.</li>' +
       '<li>Jalankan migrasi ulang untuk melanjutkan. Data menggunakan ID lama sebagai kunci sehingga proses bersifat idempoten.</li>' +
       '<li>Jangan hapus Spreadsheet, Apps Script, atau folder Drive lama sampai jumlah data dan sampel dokumen sudah diverifikasi.</li>' +
       '</ul></div></div>';
@@ -277,7 +277,7 @@
       connectOld().catch(function (e) { log(e.message, 'bad'); });
     };
     $('sm-run').onclick = function () {
-      if (!confirm('Jalankan migrasi data SIPADU ke Supabase? Data lama tidak akan dihapus.')) return;
+      if (!confirm('Jalankan migrasi data BARJAS ke Supabase? Data lama tidak akan dihapus.')) return;
       runMigration().catch(function (e) { log('Migrasi berhenti: ' + e.message, 'bad'); });
     };
     $('sm-clear').onclick = function () {
@@ -287,5 +287,5 @@
     };
   }
 
-  w.SipaduMigrasi = { page: page };
+  w.BarjasMigrasi = { page: page };
 })(window);

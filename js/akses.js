@@ -17,7 +17,7 @@ const AKSES_BAWAAN = {   // isi awal di bop.sql (tombol "Kembalikan ke bawaan" h
   bast_nr: ['bast', 'bast-buat', 'bast-pegawai', 'bast-setting'],
   kemasjidan: ['sert-masjid', 'sert-kiblat', 'sert-pengaturan'],
   pnbp_nr: ['jaspro'],
-  pengadaan: ['sipadu']
+  pengadaan: ['barjas']
 };
 // [kunci, nama menu, keterangan]
 const MENU_DEF = [
@@ -47,7 +47,7 @@ const MENU_DEF = [
     ['sert-kiblat', 'Arah Kiblat', 'Data kalibrasi arah kiblat dan cetak sertifikat.'],
     ['sert-pengaturan', 'Pengaturan Sertifikat', 'Nama penanda tangan dan tanda tangan petugas ukur.']]],
   ['Pengadaan', [
-    ['sipadu', 'SIPADU · Pengadaan', 'Pengelolaan paket pengadaan, dokumen pengadaan, HPS/RAB, penugasan, penyedia, pejabat, dan monitoring-evaluasi. Khusus Pengelola Pengadaan.']]],
+    ['barjas', 'BARJAS · Pengadaan', 'Pengelolaan paket pengadaan, dokumen pengadaan, HPS/RAB, penugasan, penyedia, pejabat, dan monitoring-evaluasi. Khusus Pengelola Pengadaan.']]],
   ['Lainnya', [
     ['jaspro', 'Jaspro Transport', 'Menghitung Jaspro dan Transport dari data presensi dan membuat laporannya.'],
     ['akses', 'Hak Akses Menu', 'Halaman ini. Khusus Admin.']]
@@ -57,14 +57,14 @@ const MENU_INFO = Object.fromEntries(MENU_DEF.flatMap(([, ms]) => ms).map(([k, n
 // Boleh diberikan ke peran ini? (sama dengan set_hak_akses di database)
 const aksesBoleh = (peran, menu) => {
   if (AKSES_ADMIN.includes(menu)) return false;
-  if (peran === 'pengadaan' && menu !== 'sipadu') return false;
-  if (peran !== 'pengadaan' && menu === 'sipadu') return false;
+  if (peran === 'pengadaan' && menu !== 'barjas') return false;
+  if (peran !== 'pengadaan' && menu === 'barjas') return false;
   if (peran === 'operator' && AKSES_TAK_OPERATOR.includes(menu)) return false;
   if (peran !== 'operator' && menu in AKSES_HANYA_OPERATOR) return false;
   return true;
 };
 const aksesAlasan = (peran, menu) => AKSES_ADMIN.includes(menu) ? 'Khusus Admin'
-  : peran === 'pengadaan' || menu === 'sipadu' ? 'Menu SIPADU hanya untuk Pengelola Pengadaan'
+  : peran === 'pengadaan' || menu === 'barjas' ? 'Menu BARJAS hanya untuk Pengelola Pengadaan'
   : peran === 'operator' ? 'Operator KUA hanya mengakses data KUA-nya sendiri' : AKSES_HANYA_OPERATOR[menu];
 
 async function pageAkses() {

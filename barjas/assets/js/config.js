@@ -1,4 +1,4 @@
-/* SIPADU - konfigurasi aplikasi.
+/* BARJAS - konfigurasi aplikasi.
    Satu-satunya berkas yang perlu diubah saat deploy. */
 window.CONFIG = {
   APP_NAME: 'PROCIMY',
@@ -9,13 +9,13 @@ window.CONFIG = {
   /* Kredensial publik proyek Supabase CONNECT. Hak akses dan data tetap divalidasi server-side. */
   SUPABASE_URL: 'https://lpfwkitppdnlcakkncov.supabase.co',
   SUPABASE_KEY: 'sb_publishable_AfVmUT86ttPMaiO3iUmJew_u3l3IBPF',
-  EDGE_URL: 'https://lpfwkitppdnlcakkncov.supabase.co/functions/v1/sipadu',
+  EDGE_URL: 'https://lpfwkitppdnlcakkncov.supabase.co/functions/v1/barjas',
 
   CACHE_TTL: 5 * 60 * 1000,   // umur cache data master di perangkat
   MAX_UPLOAD_MB: 15,
   CHUNK_SIZE: 512 * 1024,     // dipertahankan untuk kompatibilitas UI; file diunggah langsung ke Supabase Storage
-  SESSION_KEY: 'sipadu.session',
-  API_KEY: 'sipadu.api', // cadangan kompatibilitas; tidak dipakai untuk autentikasi Supabase
+  SESSION_KEY: 'barjas.session',
+  API_KEY: 'barjas.api', // cadangan kompatibilitas; tidak dipakai untuk autentikasi Supabase
   LOGO: '../assets/logo-kemenag.png', // ganti dengan logo resmi, .png transparan
   LOGO_CM: 2.3,                        // sisi terpanjang logo pada kop dokumen (cm), rentang 1-5. Resolusi berkas bebas:
                                        // logo diperkecil otomatis dan proporsi aslinya dijaga (pratinjau, cetak, .pdf, .doc)
@@ -163,7 +163,7 @@ window.dokByKode = function (kode) {
 };
 // Pakai penyimpanan sesi yang SAMA dengan BIMASATU (localStorage bila "Ingat saya",
 // sessionStorage bila tidak). Nama storageKey Supabase otomatis sama karena proyeknya sama.
-const SIPADU_AUTH_STORE = {
+const BARJAS_AUTH_STORE = {
   getItem: function (key) { return localStorage.getItem(key) || sessionStorage.getItem(key); },
   setItem: function (key, value) {
     var ingat = localStorage.getItem('bop.remember') === '1';
@@ -177,6 +177,6 @@ const SIPADU_AUTH_STORE = {
     sessionStorage.removeItem(key);
   }
 };
-const SIPADU_SB = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_KEY, {
-  auth: { storage: SIPADU_AUTH_STORE }
+const BARJAS_SB = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_KEY, {
+  auth: { storage: BARJAS_AUTH_STORE }
 });

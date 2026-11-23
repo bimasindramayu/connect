@@ -1,16 +1,16 @@
-/* SIPADU - boot aplikasi. */
+/* BARJAS - boot aplikasi. */
 (async function (w) {
   'use strict';
-  var authState = await SIPADU_SB.auth.getSession();
+  var authState = await BARJAS_SB.auth.getSession();
   var sharedSession = authState && authState.data && authState.data.session;
   if (!sharedSession) { location.href = '../index.html'; return; }
-  var accessResult = await SIPADU_SB.rpc('akses_saya');
+  var accessResult = await BARJAS_SB.rpc('akses_saya');
   var access = accessResult && accessResult.data;
-  if (accessResult.error || !access || (access.role !== 'admin' && !(access.menus || []).includes('sipadu'))) {
-    document.body.innerHTML = '<main style="max-width:620px;margin:12vh auto;padding:24px;font:16px/1.5 Arial,sans-serif"><h2>Akses SIPADU tidak diberikan</h2><p>Akun ini tidak memiliki hak menu SIPADU. Hubungi Admin CONNECT untuk mengatur hak akses.</p><a href="../index.html">Kembali ke BIMASATU</a></main>';
+  if (accessResult.error || !access || (access.role !== 'admin' && !(access.menus || []).includes('barjas'))) {
+    document.body.innerHTML = '<main style="max-width:620px;margin:12vh auto;padding:24px;font:16px/1.5 Arial,sans-serif"><h2>Akses BARJAS tidak diberikan</h2><p>Akun ini tidak memiliki hak menu BARJAS. Hubungi Admin CONNECT untuk mengatur hak akses.</p><a href="../index.html">Kembali ke BIMASATU</a></main>';
     return;
   }
-  var authUserResult = await SIPADU_SB.auth.getUser();
+  var authUserResult = await BARJAS_SB.auth.getUser();
   var authUser = authUserResult && authUserResult.data && authUserResult.data.user;
   Auth.save({
     token: sharedSession.access_token,
@@ -57,7 +57,7 @@
   ];
 
   var App = {
-    state: { user: Auth.user(), tahun: localStorage.getItem('sipadu.tahun') || String(new Date().getFullYear()), master: null },
+    state: { user: Auth.user(), tahun: localStorage.getItem('barjas.tahun') || String(new Date().getFullYear()), master: null },
 
     /* pencarian cepat berbasis peta id */
     peta: { satker: {}, pejabat: {}, penyedia: {}, users: {} },
@@ -76,7 +76,7 @@
       clear($('#judul'));
       $('#judul').appendChild(document.createTextNode(t));
       if (sub) $('#judul').appendChild(el('span.sub', { text: sub }));
-      document.title = t + ' — SIPADU';
+      document.title = t + ' — BARJAS';
     },
     alat: function (nodes) {
       var box = clear($('#alat-atas'));
@@ -106,7 +106,7 @@
     },
     gantiTahun: function (t) {
       App.state.tahun = String(t);
-      localStorage.setItem('sipadu.tahun', App.state.tahun);
+      localStorage.setItem('barjas.tahun', App.state.tahun);
       App.state.master = null;
       App.muat(true).then(function () { w.dispatchEvent(new Event('hashchange')); });
     },
@@ -143,8 +143,8 @@
   }
   $('#burger').addEventListener('click', function () { document.body.classList.toggle('nav-buka'); });
   $('#keluar').addEventListener('click', function () {
-    UI.confirm('Keluar dari SIPADU?', function () {
-      SIPADU_SB.auth.signOut().catch(function () { }).then(function () { Auth.clear(); location.href = '../index.html'; });
+    UI.confirm('Keluar dari BARJAS?', function () {
+      BARJAS_SB.auth.signOut().catch(function () { }).then(function () { Auth.clear(); location.href = '../index.html'; });
     }, { yes: 'Keluar', kind: 'danger' });
   });
 
@@ -174,7 +174,7 @@
       .add('pejabat', P.pejabat)
       .add('pengguna', P.pengguna)
       .add('pengaturan', P.pengaturan)
-      .add('migrasi', w.SipaduMigrasi.page)
+      .add('migrasi', w.BarjasMigrasi.page)
       .add('paket', function (host, ctx) { return ctx.id ? K.detail(host, ctx) : K.daftar(host, ctx); });
   }
 
@@ -186,7 +186,7 @@
   }).catch(function (e) {
     clear($('#view')).appendChild(UI.empty(
       'Tidak dapat menghubungi server',
-      e.message + ' — periksa koneksi proyek Supabase dan pastikan Edge Function SIPADU sudah di-deploy.',
+      e.message + ' — periksa koneksi proyek Supabase dan pastikan Edge Function BARJAS sudah di-deploy.',
       el('div.baris', { style: 'justify-content:center' }, [
         el('button.btn.primary', { onclick: function () { location.reload(); } }, 'Muat ulang'),
         el('button.btn', { onclick: function () { Auth.clear(); location.href = '../index.html'; } }, 'Kembali ke BIMASATU')

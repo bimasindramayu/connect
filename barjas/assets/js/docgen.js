@@ -1,4 +1,4 @@
-/* SIPADU - pembuat dokumen.
+/* BARJAS - pembuat dokumen.
    Seluruh proses berjalan di peramban: server hanya menyimpan data,
    tidak pernah merakit dokumen.
 

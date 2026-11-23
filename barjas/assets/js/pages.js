@@ -1,4 +1,4 @@
-/* SIPADU - halaman data master dan ringkasan. */
+/* BARJAS - halaman data master dan ringkasan. */
 (function (w) {
   'use strict';
   var C = w.CONFIG;
@@ -522,7 +522,7 @@
 
   /* ================= PENGGUNA ================= */
   Pages.pengguna = function (host) {
-    App.setJudul('Pengguna', 'Akun pengelola dan admin SIPADU');
+    App.setJudul('Pengguna', 'Akun pengelola dan admin BARJAS');
     if (!Auth.isAdmin()) { clear(host).appendChild(UI.empty('Khusus admin', 'Halaman ini hanya untuk admin sistem.')); return; }
     App.alat([el('button.btn.primary.kecil', { onclick: function () { edit(null); } }, 'Tambah pengguna')]);
     var isi = el('div');

@@ -63,7 +63,7 @@ end $$;
 
 -- 1) PROFIL AKUN DAN PERAN -------------------------------------------------------------
 -- Peran: admin | operator (= Operator KUA, terikat ke satu KUA lewat kua_id) | bendahara_bop | verifikator_bop | bast_nr |
--- kemasjidan | pnbp_nr | pengadaan (Pengelola Pengadaan, hanya menu SIPADU; tidak terikat KUA). Daftar ini juga ada di handle_new_user(), set_hak_akses(),
+-- kemasjidan | pnbp_nr | pengadaan (Pengelola Pengadaan, hanya menu BARJAS; tidak terikat KUA). Daftar ini juga ada di handle_new_user(), set_hak_akses(),
 -- supabase/functions/bop/index.ts (PERAN) dan js/core.js (PERAN): ubah semuanya bersama.
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -195,7 +195,7 @@ create trigger profiles_admin_guard before update of role on public.profiles
 -- mengelola pegawai KUA-nya sendiri; peran lain yang diberi menu ini oleh admin hanya MELIHAT pegawai semua KUA (bagian 13).
 create or replace function public.menu_keys() returns text[] language sql immutable as $$
   select array['dashboard','pegawai','bop','anggaran','rpd','realisasi','verifikasi','metode','sakti','config','impor','laporan',
-               'bast','bast-buat','bast-pegawai','bast-setting','sert-masjid','sert-kiblat','sert-pengaturan','jaspro','bmn','akses','sipadu'];
+               'bast','bast-buat','bast-pegawai','bast-setting','sert-masjid','sert-kiblat','sert-pengaturan','jaspro','bmn','akses','barjas'];
 $$;
 
 create or replace function public.peran_label(p_role text) returns text language sql immutable as $$
@@ -280,10 +280,10 @@ begin
         raise exception 'Menu realisasi hanya untuk Operator KUA (mengisi Realisasi KUA sendiri).'; end if;
       if r <> 'operator' and m = 'dashboard' then
         raise exception 'Menu dashboard hanya untuk Operator KUA (ringkasan KUA-nya sendiri).'; end if;
-      if r = 'pengadaan' and m <> 'sipadu' then
-        raise exception 'Peran Pengelola Pengadaan hanya dapat diberi menu SIPADU.'; end if;
-      if r <> 'pengadaan' and m = 'sipadu' then
-        raise exception 'Menu SIPADU hanya dapat diberikan kepada peran Pengelola Pengadaan.'; end if;
+      if r = 'pengadaan' and m <> 'barjas' then
+        raise exception 'Peran Pengelola Pengadaan hanya dapat diberi menu BARJAS.'; end if;
+      if r <> 'pengadaan' and m = 'barjas' then
+        raise exception 'Menu BARJAS hanya dapat diberikan kepada peran Pengelola Pengadaan.'; end if;
     end loop;
     delete from public.hak_akses where role = r;
     insert into public.hak_akses (role, menu, updated_by) select r, x, auth.uid() from unnest(menus) x;
@@ -399,7 +399,7 @@ begin
       ('verifikator_bop','bop'),('verifikator_bop','rpd'),('verifikator_bop','verifikasi'),('verifikator_bop','laporan'),
       ('bast_nr','bast'),('bast_nr','bast-buat'),('bast_nr','bast-pegawai'),('bast_nr','bast-setting'),
       ('kemasjidan','sert-masjid'),('kemasjidan','sert-kiblat'),('kemasjidan','sert-pengaturan'),
-      ('pnbp_nr','jaspro'),('operator','bmn'),('pengadaan','sipadu')
+      ('pnbp_nr','jaspro'),('operator','bmn'),('pengadaan','barjas')
     on conflict do nothing;
     insert into public.config (key, value) values ('hak_akses_awal', 'true') on conflict (key) do nothing;
   end if;

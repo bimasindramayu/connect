@@ -1,4 +1,4 @@
-// SIPADU backend for BIMASATU CONNECT.
+// BARJAS backend for BIMASATU CONNECT.
 // Authentication and row-level authorization are shared with the existing Supabase project.
 // The frontend never receives the service-role key.
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -71,20 +71,20 @@ Deno.serve(async (req) => {
     const access = checked(await db.rpc('akses_saya'), 'Hak akses');
     if (!access) return fail('Profil akun tidak ditemukan.', 'AUTH', 401);
     const isAdmin = access.role === 'admin';
-    const canSipadu = isAdmin || (Array.isArray(access.menus) && access.menus.includes('sipadu'));
-    if (!canSipadu) return fail('Akun ini tidak memiliki hak akses SIPADU.', 'FORBIDDEN', 403);
+    const canBarjas = isAdmin || (Array.isArray(access.menus) && access.menus.includes('barjas'));
+    if (!canBarjas) return fail('Akun ini tidak memiliki hak akses BARJAS.', 'FORBIDDEN', 403);
 
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || '');
     const d = body.data || {};
     const adminOnly = () => { if (!isAdmin) throw new Error('Hanya Admin yang dapat melakukan tindakan ini.'); };
     const getPackage = async (id: string) => {
-      const row = checked(await db.from('sipadu_paket').select('*').eq('id', id).maybeSingle(), 'Paket');
+      const row = checked(await db.from('barjas_paket').select('*').eq('id', id).maybeSingle(), 'Paket');
       if (!row) throw new Error('Paket tidak ditemukan atau Anda tidak ditugaskan pada satker ini.');
       return row;
     };
     const log = async (aksi: string, detail = '') => {
-      await db.from('sipadu_log').insert({ user_id: user.id, aksi, detail: String(detail).slice(0, 1000) });
+      await db.from('barjas_log').insert({ user_id: user.id, aksi, detail: String(detail).slice(0, 1000) });
     };
 
     switch (action) {
@@ -94,12 +94,12 @@ Deno.serve(async (req) => {
       case 'bootstrap': {
         const tahun = Number(d.tahun || new Date().getFullYear());
         const [cfg, satker, pejabat, penyedia, penugasan, paketYears] = await Promise.all([
-          db.from('sipadu_config').select('key,value'),
-          db.from('sipadu_satker').select('*').order('nama'),
-          db.from('sipadu_pejabat').select('*').order('nama'),
-          db.from('sipadu_penyedia').select('*').order('nama'),
-          db.from('sipadu_penugasan').select('*'),
-          db.from('sipadu_paket').select('tahun'),
+          db.from('barjas_config').select('key,value'),
+          db.from('barjas_satker').select('*').order('nama'),
+          db.from('barjas_pejabat').select('*').order('nama'),
+          db.from('barjas_penyedia').select('*').order('nama'),
+          db.from('barjas_penugasan').select('*'),
+          db.from('barjas_paket').select('tahun'),
         ]);
         const configRows = checked(cfg, 'Config') || [];
         const satkerRows = checked(satker, 'Satuan kerja') || [];
@@ -157,9 +157,9 @@ Deno.serve(async (req) => {
           const role = row.role === 'admin' ? 'admin' : 'pengadaan';
           let email = String(row.email || '').trim().toLowerCase();
           if (!email) {
-            const domain = Deno.env.get('SIPADU_EMAIL_DOMAIN') || '';
+            const domain = Deno.env.get('BARJAS_EMAIL_DOMAIN') || '';
             const username = String(row.username || '').trim().toLowerCase();
-            if (!domain || !username) throw new Error('Email wajib diisi untuk membuat akun Supabase. Atur SIPADU_EMAIL_DOMAIN atau isi kolom Email.');
+            if (!domain || !username) throw new Error('Email wajib diisi untuk membuat akun Supabase. Atur BARJAS_EMAIL_DOMAIN atau isi kolom Email.');
             email = username + '@' + domain;
           }
           let authResult: any;
@@ -183,8 +183,8 @@ Deno.serve(async (req) => {
 
         if (entity === 'Penugasan' || entity === 'Users') adminOnly();
         const tableMap: Record<string, string> = {
-          Pejabat: 'sipadu_pejabat', Satker: 'sipadu_satker', Penugasan: 'sipadu_penugasan',
-          Penyedia: 'sipadu_penyedia',
+          Pejabat: 'barjas_pejabat', Satker: 'barjas_satker', Penugasan: 'barjas_penugasan',
+          Penyedia: 'barjas_penyedia',
         };
         const table = tableMap[entity];
         if (!table) throw new Error('Entitas tidak dikenal: ' + entity + '.');
@@ -196,7 +196,7 @@ Deno.serve(async (req) => {
           payload.tgl_dipa = payload.tgl_dipa ? String(payload.tgl_dipa).slice(0, 10) : null;
           payload.user_id = payload.user_id || null;
           if (!payload.id) {
-            const previous = checked(await db.from('sipadu_penugasan').select('id')
+            const previous = checked(await db.from('barjas_penugasan').select('id')
               .eq('satker_id', payload.satker_id).eq('tahun', payload.tahun).maybeSingle(), 'Cari penugasan');
             payload.id = previous?.id || uid('T');
           }
@@ -213,7 +213,7 @@ Deno.serve(async (req) => {
 
       case 'remove': {
         adminOnly();
-        const tableMap: Record<string, string> = { Pejabat: 'sipadu_pejabat', Satker: 'sipadu_satker', Penyedia: 'sipadu_penyedia' };
+        const tableMap: Record<string, string> = { Pejabat: 'barjas_pejabat', Satker: 'barjas_satker', Penyedia: 'barjas_penyedia' };
         const table = tableMap[String(d.entity || '')];
         if (!table) throw new Error('Entitas tidak dikenal atau tidak dapat dihapus.');
         checked(await db.from(table).delete().eq('id', d.id), 'Hapus data');
@@ -232,17 +232,17 @@ Deno.serve(async (req) => {
       case 'saveConfig': {
         adminOnly();
         const rows = Object.keys(d || {}).map((key) => ({ key, value: d[key], updated_at: now() }));
-        await upsertMany(db, 'sipadu_config', rows, 'key');
-        await log('ubah-pengaturan', 'Config SIPADU');
+        await upsertMany(db, 'barjas_config', rows, 'key');
+        await log('ubah-pengaturan', 'Config BARJAS');
         return json({ ok: true, data: true });
       }
 
       case 'paketList': {
         const tahun = Number(d.tahun || new Date().getFullYear());
         const [paketResult, dokResult, penyediaResult] = await Promise.all([
-          db.from('sipadu_paket').select('*').eq('tahun', tahun).order('nama'),
-          db.from('sipadu_dokumen').select('paket_id,kode'),
-          db.from('sipadu_penyedia').select('id,cp_storage_path,cp_legacy_file_id,cp_file_id'),
+          db.from('barjas_paket').select('*').eq('tahun', tahun).order('nama'),
+          db.from('barjas_dokumen').select('paket_id,kode'),
+          db.from('barjas_penyedia').select('id,cp_storage_path,cp_legacy_file_id,cp_file_id'),
         ]);
         const paket = checked(paketResult, 'Daftar paket') || [];
         const docs = checked(dokResult, 'Daftar dokumen') || [];
@@ -265,9 +265,9 @@ Deno.serve(async (req) => {
       case 'paketDetail': {
         const p = await getPackage(String(d.id || ''));
         const [dok, hps, monev] = await Promise.all([
-          db.from('sipadu_dokumen').select('*').eq('paket_id', p.id).order('uploaded_at', { ascending: false }),
-          db.from('sipadu_hps').select('*').eq('paket_id', p.id).order('part'),
-          db.from('sipadu_monev').select('*').eq('paket_id', p.id).maybeSingle(),
+          db.from('barjas_dokumen').select('*').eq('paket_id', p.id).order('uploaded_at', { ascending: false }),
+          db.from('barjas_hps').select('*').eq('paket_id', p.id).order('part'),
+          db.from('barjas_monev').select('*').eq('paket_id', p.id).maybeSingle(),
         ]);
         const docs = checked(dok, 'Dokumen') || [];
         docs.forEach((x: any) => { if (x.storage_path) x.file_id = x.storage_path; else if (x.legacy_file_id) x.file_id = x.legacy_file_id; });
@@ -292,15 +292,15 @@ Deno.serve(async (req) => {
         row.updated_at = now();
         if (row.meta && typeof row.meta === 'string') row.meta = parseObject(row.meta, {});
         if (!row.id) { row.id = uid('P'); row.created_at = now(); }
-        return json({ ok: true, data: checked(await db.from('sipadu_paket').upsert(row).select().single(), 'Simpan paket') });
+        return json({ ok: true, data: checked(await db.from('barjas_paket').upsert(row).select().single(), 'Simpan paket') });
       }
 
       case 'removePaket': {
         const p = await getPackage(String(d.id || ''));
-        const docs = checked(await db.from('sipadu_dokumen').select('storage_path').eq('paket_id', p.id), 'Dokumen') || [];
+        const docs = checked(await db.from('barjas_dokumen').select('storage_path').eq('paket_id', p.id), 'Dokumen') || [];
         const paths = docs.map((r: any) => r.storage_path).filter(Boolean);
-        if (paths.length) await admin.storage.from('sipadu-files').remove(paths);
-        checked(await db.from('sipadu_paket').delete().eq('id', p.id), 'Hapus paket');
+        if (paths.length) await Promise.all([admin.storage.from('barjas-files').remove(paths), admin.storage.from('sipadu-files').remove(paths)]);
+        checked(await db.from('barjas_paket').delete().eq('id', p.id), 'Hapus paket');
         await log('hapus-paket', p.nama || p.id);
         return json({ ok: true, data: true });
       }
@@ -309,12 +309,12 @@ Deno.serve(async (req) => {
         const p = await getPackage(String(d.paket_id || ''));
         const payload = String(d.payload || '');
         const parts = payload.match(/[\s\S]{1,40000}/g) || [];
-        checked(await db.from('sipadu_hps').delete().eq('paket_id', p.id), 'Kosongkan HPS');
+        checked(await db.from('barjas_hps').delete().eq('paket_id', p.id), 'Kosongkan HPS');
         const rows = parts.map((part, i) => ({
           id: 'H' + p.id + '-' + i, paket_id: p.id, part: i, payload: part,
           total: Number(d.total || 0), updated_at: now(),
         }));
-        await upsertMany(db, 'sipadu_hps', rows, 'paket_id,part');
+        await upsertMany(db, 'barjas_hps', rows, 'paket_id,part');
         return json({ ok: true, data: true });
       }
 
@@ -322,7 +322,7 @@ Deno.serve(async (req) => {
         const p = await getPackage(String(d.paket_id || ''));
         const payload = String(d.payload || '');
         const row = { id: 'M' + p.id, paket_id: p.id, payload, updated_at: now() };
-        return json({ ok: true, data: checked(await db.from('sipadu_monev').upsert(row, { onConflict: 'paket_id' }).select().single(), 'Simpan Monev') });
+        return json({ ok: true, data: checked(await db.from('barjas_monev').upsert(row, { onConflict: 'paket_id' }).select().single(), 'Simpan Monev') });
       }
 
       case 'registerFile': {
@@ -331,7 +331,7 @@ Deno.serve(async (req) => {
         if (!path || !path.startsWith('penyedia/') && !path.startsWith(String(meta.paket_id || '') + '/'))
           throw new Error('Lokasi berkas tidak valid.');
         if (meta.penyedia_id) {
-          const row = checked(await db.from('sipadu_penyedia').update({
+          const row = checked(await db.from('barjas_penyedia').update({
             cp_file_id: path, cp_storage_path: path, cp_legacy_file_id: meta.legacy_file_id || null, cp_url: '',
             updated_at: now(),
           }).eq('id', meta.penyedia_id).select().single(), 'Simpan company profile');
@@ -353,22 +353,22 @@ Deno.serve(async (req) => {
           uploaded_by: user.id,
           uploaded_at: now(),
         };
-        return json({ ok: true, data: checked(await db.from('sipadu_dokumen').upsert(row).select().single(), 'Simpan metadata dokumen') });
+        return json({ ok: true, data: checked(await db.from('barjas_dokumen').upsert(row).select().single(), 'Simpan metadata dokumen') });
       }
 
       case 'fileGet': {
         const fid = String(d.file_id || '').trim();
         if (!fid) throw new Error('ID berkas tidak diberikan.');
         let row: any = null;
-        let docResult = await db.from('sipadu_dokumen').select('*').eq('storage_path', fid).limit(1).maybeSingle();
-        if (!docResult.data && !docResult.error) docResult = await db.from('sipadu_dokumen').select('*').eq('file_id', fid).limit(1).maybeSingle();
-        if (!docResult.data && !docResult.error) docResult = await db.from('sipadu_dokumen').select('*').eq('legacy_file_id', fid).limit(1).maybeSingle();
+        let docResult = await db.from('barjas_dokumen').select('*').eq('storage_path', fid).limit(1).maybeSingle();
+        if (!docResult.data && !docResult.error) docResult = await db.from('barjas_dokumen').select('*').eq('file_id', fid).limit(1).maybeSingle();
+        if (!docResult.data && !docResult.error) docResult = await db.from('barjas_dokumen').select('*').eq('legacy_file_id', fid).limit(1).maybeSingle();
         if (docResult.error) throw new Error('Dokumen: ' + docResult.error.message);
         row = docResult.data;
         if (!row) {
-          let providerResult = await db.from('sipadu_penyedia').select('*').eq('cp_storage_path', fid).limit(1).maybeSingle();
-          if (!providerResult.data && !providerResult.error) providerResult = await db.from('sipadu_penyedia').select('*').eq('cp_file_id', fid).limit(1).maybeSingle();
-          if (!providerResult.data && !providerResult.error) providerResult = await db.from('sipadu_penyedia').select('*').eq('cp_legacy_file_id', fid).limit(1).maybeSingle();
+          let providerResult = await db.from('barjas_penyedia').select('*').eq('cp_storage_path', fid).limit(1).maybeSingle();
+          if (!providerResult.data && !providerResult.error) providerResult = await db.from('barjas_penyedia').select('*').eq('cp_file_id', fid).limit(1).maybeSingle();
+          if (!providerResult.data && !providerResult.error) providerResult = await db.from('barjas_penyedia').select('*').eq('cp_legacy_file_id', fid).limit(1).maybeSingle();
           if (providerResult.error) throw new Error('Penyedia: ' + providerResult.error.message);
           const provider = providerResult.data;
           if (provider) row = {
@@ -378,13 +378,23 @@ Deno.serve(async (req) => {
         }
         if (!row) throw new Error('Berkas tidak ditemukan atau Anda tidak berwenang melihatnya.');
         if (row.storage_path) {
-          const blob = checked(await db.storage.from('sipadu-files').download(row.storage_path), 'Unduh berkas');
+          // Berkas yang sudah tersimpan di bucket SIPADU lama tetap dapat dibaca setelah rename.
+          let bucket = 'barjas-files';
+          let downloaded = await db.storage.from(bucket).download(row.storage_path);
+          if (downloaded.error) {
+            const legacyDownload = await db.storage.from('sipadu-files').download(row.storage_path);
+            if (!legacyDownload.error) {
+              downloaded = legacyDownload;
+              bucket = 'sipadu-files';
+            }
+          }
+          const blob = checked(downloaded, 'Unduh berkas');
           const bytes = new Uint8Array(await blob.arrayBuffer());
           let binary = '';
           const step = 0x8000;
           for (let i = 0; i < bytes.length; i += step) binary += String.fromCharCode(...bytes.subarray(i, i + step));
           const base64 = btoa(binary);
-          const signed = checked(await db.storage.from('sipadu-files').createSignedUrl(row.storage_path, 600), 'Tautan berkas');
+          const signed = checked(await db.storage.from(bucket).createSignedUrl(row.storage_path, 600), 'Tautan berkas');
           return json({ ok: true, data: {
             nama: row.nama_file || 'berkas', mime: row.mime || blob.type || 'application/octet-stream',
             size: row.size || blob.size, data: base64, url: signed.signedUrl,
@@ -395,10 +405,10 @@ Deno.serve(async (req) => {
       }
 
       case 'removeDok': {
-        const row = checked(await db.from('sipadu_dokumen').select('*').eq('id', d.id).maybeSingle(), 'Dokumen');
+        const row = checked(await db.from('barjas_dokumen').select('*').eq('id', d.id).maybeSingle(), 'Dokumen');
         if (!row) return json({ ok: true, data: true });
-        if (row.storage_path) await admin.storage.from('sipadu-files').remove([row.storage_path]);
-        checked(await db.from('sipadu_dokumen').delete().eq('id', d.id), 'Hapus dokumen');
+        if (row.storage_path) await Promise.all([admin.storage.from('barjas-files').remove([row.storage_path]), admin.storage.from('sipadu-files').remove([row.storage_path])]);
+        checked(await db.from('barjas_dokumen').delete().eq('id', d.id), 'Hapus dokumen');
         await log('hapus-berkas', row.nama_file || row.id);
         return json({ ok: true, data: true });
       }
@@ -406,8 +416,8 @@ Deno.serve(async (req) => {
       case 'importState': {
         adminOnly();
         const [docs, providers] = await Promise.all([
-          admin.from('sipadu_dokumen').select('id,legacy_file_id,storage_path'),
-          admin.from('sipadu_penyedia').select('id,cp_legacy_file_id,cp_storage_path'),
+          admin.from('barjas_dokumen').select('id,legacy_file_id,storage_path'),
+          admin.from('barjas_penyedia').select('id,cp_legacy_file_id,cp_storage_path'),
         ]);
         return json({ ok: true, data: {
           dokumen: checked(docs, 'Status dokumen') || [],
@@ -418,11 +428,11 @@ Deno.serve(async (req) => {
       case 'importBatch': {
         adminOnly();
         const configRows = Object.entries(d.config || {}).map(([key, value]) => ({ key, value, updated_at: now() }));
-        await upsertMany(db, 'sipadu_config', configRows, 'key');
+        await upsertMany(db, 'barjas_config', configRows, 'key');
 
         const mapRows = (d.user_map || []).filter((x: any) => x.legacy_id && x.auth_user_id)
           .map((x: any) => ({ legacy_id: String(x.legacy_id), auth_user_id: x.auth_user_id, legacy_username: x.legacy_username || '' }));
-        await upsertMany(db, 'sipadu_user_map', mapRows, 'legacy_id');
+        await upsertMany(db, 'barjas_user_map', mapRows, 'legacy_id');
 
         const satkerRows = (d.satker || []).map((x: any) => ({ ...x, id: String(x.id), aktif: x.aktif === undefined ? true : asBool(x.aktif) }));
         const pejabatRows = (d.pejabat || []).map((x: any) => ({ ...x, id: String(x.id), aktif: x.aktif === undefined ? true : asBool(x.aktif) }));
@@ -433,9 +443,9 @@ Deno.serve(async (req) => {
           row.cp_file_id = x.cp_file_id || null;
           return row;
         });
-        await upsertMany(db, 'sipadu_satker', satkerRows);
-        await upsertMany(db, 'sipadu_pejabat', pejabatRows);
-        await upsertMany(db, 'sipadu_penyedia', penyediaRows);
+        await upsertMany(db, 'barjas_satker', satkerRows);
+        await upsertMany(db, 'barjas_pejabat', pejabatRows);
+        await upsertMany(db, 'barjas_penyedia', penyediaRows);
 
         const maps = new Map(mapRows.map((x: any) => [x.legacy_id, x.auth_user_id]));
         const assignments = (d.penugasan || []).map((x: any) => ({
@@ -446,18 +456,18 @@ Deno.serve(async (req) => {
           user_id: maps.get(String(x.user_id)) || (String(x.user_id || '').includes('-') ? x.user_id : null),
           ada_pengadaan: x.ada_pengadaan === undefined ? true : asBool(x.ada_pengadaan),
         }));
-        await upsertMany(db, 'sipadu_penugasan', assignments);
+        await upsertMany(db, 'barjas_penugasan', assignments);
 
         const paketRows = (d.paket || []).map((x: any) => ({
           ...x, id: String(x.id), tahun: Number(x.tahun), pagu: Number(x.pagu || 0),
           nilai: Number(x.nilai || 0), ada_pph: asBool(x.ada_pph), penyedia_id: x.penyedia_id || null, meta: parseObject(x.meta, {}),
         }));
-        await upsertMany(db, 'sipadu_paket', paketRows);
+        await upsertMany(db, 'barjas_paket', paketRows);
         // HPS/Monev disinkronkan per paket agar impor ulang juga membersihkan versi lama yang sudah dihapus di sumber.
         const paketIds = paketRows.map((x: any) => String(x.id));
         if (paketIds.length) {
-          checked(await db.from('sipadu_hps').delete().in('paket_id', paketIds), 'Sinkronisasi HPS');
-          checked(await db.from('sipadu_monev').delete().in('paket_id', paketIds), 'Sinkronisasi Monev');
+          checked(await db.from('barjas_hps').delete().in('paket_id', paketIds), 'Sinkronisasi HPS');
+          checked(await db.from('barjas_monev').delete().in('paket_id', paketIds), 'Sinkronisasi Monev');
         }
 
         const hpsRows: any[] = [];
@@ -469,14 +479,14 @@ Deno.serve(async (req) => {
             payload: part, total: Number(x.total || 0), updated_at: x.updated_at || now(),
           }));
         }
-        if (hpsRows.length) await upsertMany(db, 'sipadu_hps', hpsRows, 'paket_id,part');
+        if (hpsRows.length) await upsertMany(db, 'barjas_hps', hpsRows, 'paket_id,part');
 
         const monevRows = (d.monev || []).map((x: any) => ({
           id: 'M' + String(x.paket_id), paket_id: String(x.paket_id),
           payload: typeof x.payload === 'string' ? x.payload : JSON.stringify(x.payload),
           updated_at: x.updated_at || now(),
         }));
-        if (monevRows.length) await upsertMany(db, 'sipadu_monev', monevRows, 'paket_id');
+        if (monevRows.length) await upsertMany(db, 'barjas_monev', monevRows, 'paket_id');
 
         await log('migrasi-data', 'Satker ' + satkerRows.length + ', paket ' + paketRows.length);
         return json({ ok: true, data: {
@@ -505,13 +515,13 @@ Deno.serve(async (req) => {
           uploaded_by: null,
           uploaded_at: doc.uploaded_at || now(),
         };
-        return json({ ok: true, data: checked(await db.from('sipadu_dokumen').upsert(row).select().single(), 'Impor metadata dokumen') });
+        return json({ ok: true, data: checked(await db.from('barjas_dokumen').upsert(row).select().single(), 'Impor metadata dokumen') });
       }
 
       case 'importProviderLink': {
         adminOnly();
         const id = String(d.id || '');
-        const p = checked(await db.from('sipadu_penyedia').update({
+        const p = checked(await db.from('barjas_penyedia').update({
           cp_file_id: d.legacy_file_id || null,
           cp_legacy_file_id: d.legacy_file_id || null,
           cp_storage_path: null, cp_url: d.url || '',

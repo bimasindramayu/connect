@@ -1,4 +1,4 @@
-/* SIPADU - inti: DOM, transport, cache, sesi, router, komponen UI.
+/* BARJAS - inti: DOM, transport, cache, sesi, router, komponen UI.
    Tanpa framework, tanpa dependensi luar. */
 (function (w) {
   'use strict';
@@ -156,7 +156,7 @@
     call: function (action, data, opt) {
       opt = opt || {};
       API._tick(1);
-      return SIPADU_SB.auth.getSession().then(function (r) {
+      return BARJAS_SB.auth.getSession().then(function (r) {
         var session = r && r.data && r.data.session;
         if (!session) { var e = new Error('Sesi CONNECT berakhir. Silakan masuk kembali.'); e.code = 'AUTH'; throw e; }
         return fetch(C.EDGE_URL, {
@@ -171,7 +171,7 @@
       }).then(function (response) {
         return response.json().then(function (payload) {
           if (!response.ok || !payload || payload.ok !== true) {
-            var error = new Error(payload && payload.error ? payload.error : 'Permintaan SIPADU ditolak.');
+            var error = new Error(payload && payload.error ? payload.error : 'Permintaan BARJAS ditolak.');
             error.code = payload && payload.code ? payload.code : (response.status === 401 ? 'AUTH' : 'ERROR');
             throw error;
           }
@@ -194,7 +194,7 @@
       if (!folder) return Promise.reject(new Error('Paket atau penyedia berkas tidak ditentukan.'));
       var path = folder + '/' + crypto.randomUUID() + '-' + name;
       if (onProg) onProg(0.15);
-      return SIPADU_SB.storage.from('sipadu-files').upload(path, file, {
+      return BARJAS_SB.storage.from('barjas-files').upload(path, file, {
         upsert: false, contentType: file.type || meta.mime || 'application/octet-stream'
       }).then(function (upload) {
         if (upload.error) throw new Error(upload.error.message);
@@ -208,7 +208,7 @@
           if (onProg) onProg(1);
           return row;
         }).catch(function (error) {
-          SIPADU_SB.storage.from('sipadu-files').remove([path]).catch(function () {});
+          BARJAS_SB.storage.from('barjas-files').remove([path]).catch(function () {});
           throw error;
         });
       });
@@ -221,19 +221,19 @@
   var Store = {
     get: function (key, maxAge) {
       try {
-        var raw = sessionStorage.getItem('sipadu.' + key); if (!raw) return null;
+        var raw = sessionStorage.getItem('barjas.' + key); if (!raw) return null;
         var o = JSON.parse(raw);
         if (maxAge && Date.now() - o.t > maxAge) return null;
         return o.v;
       } catch (e) { return null; }
     },
     set: function (key, val) {
-      try { sessionStorage.setItem('sipadu.' + key, JSON.stringify({ t: Date.now(), v: val })); } catch (e) { }
+      try { sessionStorage.setItem('barjas.' + key, JSON.stringify({ t: Date.now(), v: val })); } catch (e) { }
       return val;
     },
-    drop: function (key) { sessionStorage.removeItem('sipadu.' + key); },
+    drop: function (key) { sessionStorage.removeItem('barjas.' + key); },
     dropAll: function () {
-      Object.keys(sessionStorage).forEach(function (k) { if (k.indexOf('sipadu.') === 0) sessionStorage.removeItem(k); });
+      Object.keys(sessionStorage).forEach(function (k) { if (k.indexOf('barjas.') === 0) sessionStorage.removeItem(k); });
     },
     /* baca cache dulu, perbarui di belakang layar */
     swr: function (key, loader, onFresh) {
