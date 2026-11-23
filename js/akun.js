@@ -29,8 +29,8 @@ const sandiAcak = () => {   // 12 karakter tanpa huruf/angka yang mudah tertukar
 const apiJson = (action, body) => api({ action }, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 // Urutan peran di daftar dan pilihan. Daftar yang sama: core.js (PERAN), bop.sql, supabase/functions/bop/index.ts.
-const AKUN_PERAN = ['admin', 'operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr'];
-const BADGE_PERAN = { admin: 'danger', operator: 'primary', bendahara_bop: 'success', verifikator_bop: 'info', bast_nr: 'warning', kemasjidan: 'secondary', pnbp_nr: 'dark' };
+const AKUN_PERAN = ['admin', 'operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr', 'pengadaan'];
+const BADGE_PERAN = { admin: 'danger', operator: 'primary', bendahara_bop: 'success', verifikator_bop: 'info', bast_nr: 'warning', kemasjidan: 'secondary', pnbp_nr: 'dark', pengadaan: 'info' };
 let akun = { data: [], kua: [], peran: '', q: '', ep: 0 };   // keadaan daftar akun (admin): data akun, daftar KUA aktif, filter peran dan pencarian
 
 function openReset(r) {

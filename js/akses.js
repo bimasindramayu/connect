@@ -6,7 +6,7 @@
    Hak ini dibaca tiga tempat: tampilan (sidebar dan router), database (RLS/trigger lewat can_menu), Apps Script dan Edge Function.
    ===================================================================================== */
 
-const AKSES_PERAN = ['operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr'];   // peran yang hak aksesnya dapat diubah (Admin selalu semua menu)
+const AKSES_PERAN = ['operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr', 'pengadaan'];   // peran yang hak aksesnya dapat diubah (Admin selalu semua menu)
 const AKSES_ADMIN = ['akses', 'impor'];                                                                      // khusus Admin, tidak dapat diberikan
 const AKSES_TAK_OPERATOR = ['anggaran', 'verifikasi', 'metode', 'sakti', 'config'];                          // Operator KUA hanya boleh mengakses data KUA-nya sendiri
 const AKSES_HANYA_OPERATOR = { realisasi: 'Khusus Operator KUA (mengisi Realisasi KUA sendiri)', dashboard: 'Khusus Operator KUA (ringkasan KUA-nya sendiri)' };   // menu yang hanya dapat diberikan ke Operator KUA
@@ -16,7 +16,8 @@ const AKSES_BAWAAN = {   // isi awal di bop.sql (tombol "Kembalikan ke bawaan" h
   verifikator_bop: ['bop', 'rpd', 'verifikasi', 'laporan'],
   bast_nr: ['bast', 'bast-buat', 'bast-pegawai', 'bast-setting'],
   kemasjidan: ['sert-masjid', 'sert-kiblat', 'sert-pengaturan'],
-  pnbp_nr: ['jaspro']
+  pnbp_nr: ['jaspro'],
+  pengadaan: ['sipadu']
 };
 // [kunci, nama menu, keterangan]
 const MENU_DEF = [
@@ -45,20 +46,25 @@ const MENU_DEF = [
     ['sert-masjid', 'Masjid / Musala', 'Data masjid/musala dan cetak sertifikat.'],
     ['sert-kiblat', 'Arah Kiblat', 'Data kalibrasi arah kiblat dan cetak sertifikat.'],
     ['sert-pengaturan', 'Pengaturan Sertifikat', 'Nama penanda tangan dan tanda tangan petugas ukur.']]],
+  ['Pengadaan', [
+    ['sipadu', 'SIPADU · Pengadaan', 'Pengelolaan paket pengadaan, dokumen pengadaan, HPS/RAB, penugasan, penyedia, pejabat, dan monitoring-evaluasi. Khusus Pengelola Pengadaan.']]],
   ['Lainnya', [
     ['jaspro', 'Jaspro Transport', 'Menghitung Jaspro dan Transport dari data presensi dan membuat laporannya.'],
-    ['akses', 'Hak Akses Menu', 'Halaman ini. Khusus Admin.']]]
+    ['akses', 'Hak Akses Menu', 'Halaman ini. Khusus Admin.']]
 ];
 const MENU_INFO = Object.fromEntries(MENU_DEF.flatMap(([, ms]) => ms).map(([k, n, d]) => [k, { nama: n, ket: d }]));
 
 // Boleh diberikan ke peran ini? (sama dengan set_hak_akses di database)
 const aksesBoleh = (peran, menu) => {
   if (AKSES_ADMIN.includes(menu)) return false;
+  if (peran === 'pengadaan' && menu !== 'sipadu') return false;
+  if (peran !== 'pengadaan' && menu === 'sipadu') return false;
   if (peran === 'operator' && AKSES_TAK_OPERATOR.includes(menu)) return false;
   if (peran !== 'operator' && menu in AKSES_HANYA_OPERATOR) return false;
   return true;
 };
 const aksesAlasan = (peran, menu) => AKSES_ADMIN.includes(menu) ? 'Khusus Admin'
+  : peran === 'pengadaan' || menu === 'sipadu' ? 'Menu SIPADU hanya untuk Pengelola Pengadaan'
   : peran === 'operator' ? 'Operator KUA hanya mengakses data KUA-nya sendiri' : AKSES_HANYA_OPERATOR[menu];
 
 async function pageAkses() {
