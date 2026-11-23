@@ -577,7 +577,9 @@
 
       /* dokumentasi foto: berkas #13 bertipe gambar yang diunggah lewat tab Monev / Berkas */
       var fotoTag = function (f) {
-        return '<img src="https://drive.google.com/thumbnail?id=' + E(f.file_id) + '&sz=w900" alt="' + E(f.nama_file || 'Foto dokumentasi') + '">';
+        return f.render_src
+          ? '<img src="' + E(f.render_src) + '" alt="' + E(f.nama_file || 'Foto dokumentasi') + '">'
+          : '<span class="kecil">Foto tidak dapat dimuat: ' + E(f.nama_file || 'dokumentasi') + '</span>';
       };
       var semuaFoto = (c.dokumen || []).filter(function (x) { return String(x.kode) === '13' && /^image\//i.test(x.mime || ''); });
       var fotoTampil = semuaFoto.slice(-6);

@@ -520,12 +520,19 @@
           clear(fotoWrap);
           dok.filter(function (x) { return String(x.kode) === '13' && /^image\//i.test(x.mime || ''); })
             .forEach(function (b) {
+              var img = el('img', {
+                alt: b.nama_file || 'foto dokumentasi', title: 'Lihat pratinjau',
+                onclick: function () { UI.drivePreview(b); }
+              });
+              API.call('fileGet', { file_id: b.file_id }, { jsonp: false }).then(function (r) {
+                if (r.data) img.src = 'data:' + (r.mime || b.mime || 'image/jpeg') + ';base64,' + r.data;
+                else if (r.url) img.src = r.url;
+                else img.alt = (b.nama_file || 'Foto') + ' — pratinjau tidak tersedia';
+              }).catch(function () {
+                img.alt = (b.nama_file || 'Foto') + ' — gagal memuat pratinjau';
+              });
               fotoWrap.appendChild(el('div.foto-mini', null, [
-                el('img', {
-                  src: 'https://drive.google.com/thumbnail?id=' + b.file_id + '&sz=w300',
-                  alt: b.nama_file || 'foto dokumentasi', title: 'Lihat pratinjau',
-                  onclick: function () { UI.drivePreview(b); }
-                }),
+                img,
                 el('button.hapus', {
                   type: 'button', title: 'Hapus foto', html: '&times;',
                   onclick: function () {
@@ -605,15 +612,39 @@
           no_bap: m.no_bap, tgl_bap: m.tgl_bap, no_bayar: m.no_bayar, tgl_bayar: m.tgl_bayar
         };
       }
+      function siapkanFotoDokumen(ctx) {
+        var foto = (ctx.dokumen || []).filter(function (x) {
+          return String(x.kode) === '13' && /^image\//i.test(x.mime || '') && !x.render_src;
+        });
+        return Promise.all(foto.map(function (x) {
+          return API.call('fileGet', { file_id: x.file_id }, { jsonp: false }).then(function (r) {
+            if (r.data) x.render_src = 'data:' + (r.mime || x.mime || 'image/jpeg') + ';base64,' + r.data;
+            else if (r.url) x.render_src = r.url;
+          }).catch(function (e) {
+            x.render_error = e.message || String(e);
+          });
+        })).then(function () {
+          var gagal = foto.filter(function (x) { return !x.render_src; });
+          if (gagal.length) UI.toast(gagal.length + ' foto Monev tidak dapat dimuat ke dokumen.', 'bad');
+          return ctx;
+        });
+      }
+
       function cetakDok(id) {
         var gen = C.GENERATOR.filter(function (g) { return g.id === id; })[0] || { id: id, field: 'no_' + id };
-        Doc.pratinjau(id, konteks(gen), {
-          simpanKeBerkas: gen.kode ? function () { simpanKeBerkas(gen); } : null
+        var ctx = konteks(gen);
+        siapkanFotoDokumen(ctx).then(function () {
+          return Doc.pratinjau(id, ctx, {
+            simpanKeBerkas: gen.kode ? function () { simpanKeBerkas(gen); } : null
+          });
         }).catch(UI.err);
       }
 
       function simpanKeBerkas(g) {
-        Doc.berkas(g.id, konteks(g)).then(function (r) {
+        siapkanFotoDokumen(konteks(g)).then(function (ctx) {
+          return Doc.berkas(g.id, ctx);
+        }).then(function (r) {
+
           var file = new File([r.blob], r.nama, { type: 'application/msword' });
           UI.toast('Mengunggah ' + r.nama + '…');
           return Unggah.kirim(file, { paket_id: p.id, kode: g.kode, keterangan: 'dibuat otomatis' });
