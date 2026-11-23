@@ -367,6 +367,7 @@
       x = cx - (cx - x) * f; y = cy - (cy - y) * f; s = n;
     };
     d.onclick = e => {
+      if (e.target === d) { d.close(); return; }
       const b = e.target.closest('[data-v]'); if (!b) return;
       if (!W) return;
       const k = b.dataset.v, c = [vp.clientWidth / 2, vp.clientHeight / 2];
@@ -522,7 +523,7 @@
     if ($('vwf')) $('vwf').onchange = () => show(+$('vwf').value);
     $('vwx').onclick = () => d.close();
     d.addEventListener('close', function () { gen++; clean(); ro.disconnect(); d.onclick = null; }, { once: true });
-    d.addEventListener('click', function (e) { if (e.target === d) d.close(); });
+
     show(idx);
   }
 
@@ -1014,11 +1015,8 @@
       });
     },
 
-    /* pratinjau berkas Google Drive: isi berkas diambil lewat backend (aksi
-       "fileGet"), yang memakai API key tersimpan di Script Properties Apps
-       Script -- key itu tidak pernah dikirim ke atau tersimpan di peramban.
-       Ditampilkan di panggung geser/perbesar/putar yang sama untuk gambar
-       maupun pdf, mendukung mouse, trackpad, dan sentuh di semua perangkat. */
+    /* Pratinjau berkas BARJAS: data diambil melalui Edge Function Supabase,
+       lalu ditampilkan memakai penampil dokumen bersama BIMASATU. */
     drivePreview: function (file) {
       if (!file) return;
       var fid = file.file_id || file.id;
