@@ -161,5 +161,22 @@ window.dokNo = function (kode) {
 window.dokByKode = function (kode) {
   return window.CONFIG.DOKUMEN.filter(function (d) { return String(d.kode) === String(kode); })[0] || null;
 };
-// Menggunakan proyek dan sesi Supabase yang sama dengan BIMASATU induk.
-const SIPADU_SB = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_KEY);
+// Pakai penyimpanan sesi yang SAMA dengan BIMASATU (localStorage bila "Ingat saya",
+// sessionStorage bila tidak). Nama storageKey Supabase otomatis sama karena proyeknya sama.
+const SIPADU_AUTH_STORE = {
+  getItem: function (key) { return localStorage.getItem(key) || sessionStorage.getItem(key); },
+  setItem: function (key, value) {
+    var ingat = localStorage.getItem('bop.remember') === '1';
+    var utama = ingat ? localStorage : sessionStorage;
+    var cadangan = ingat ? sessionStorage : localStorage;
+    cadangan.removeItem(key);
+    utama.setItem(key, value);
+  },
+  removeItem: function (key) {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  }
+};
+const SIPADU_SB = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_KEY, {
+  auth: { storage: SIPADU_AUTH_STORE }
+});
