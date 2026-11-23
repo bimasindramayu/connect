@@ -50,7 +50,7 @@ const MENU_DEF = [
     ['barjas', 'BARJAS · Pengadaan', 'Pengelolaan paket pengadaan, dokumen pengadaan, HPS/RAB, penugasan, penyedia, pejabat, dan monitoring-evaluasi. Khusus Pengelola Pengadaan.']]],
   ['Lainnya', [
     ['jaspro', 'Jaspro Transport', 'Menghitung Jaspro dan Transport dari data presensi dan membuat laporannya.'],
-    ['akses', 'Hak Akses Menu', 'Halaman ini. Khusus Admin.']]
+    ['akses', 'Hak Akses Menu', 'Halaman ini. Khusus Admin.']]]
 ];
 const MENU_INFO = Object.fromEntries(MENU_DEF.flatMap(([, ms]) => ms).map(([k, n, d]) => [k, { nama: n, ket: d }]));
 
