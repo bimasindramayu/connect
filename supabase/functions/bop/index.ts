@@ -62,7 +62,7 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-// Peran akun. Daftar yang sama ada di bop.sql (check profiles.role, handle_new_user, set_hak_akses) dan js/akses.js.
+// Peran yang dapat ditetapkan untuk akun baru. Database tetap mengenali role pengadaan untuk kompatibilitas akun lama.
 const PERAN = ['admin', 'operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr'];
 
 const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
