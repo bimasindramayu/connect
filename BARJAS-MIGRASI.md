@@ -24,7 +24,7 @@ Edge Function BARJAS memakai environment bawaan Supabase: \`SUPABASE_URL\`, \`SU
 
 ## Akun dan hak akses
 
-- Admin CONNECT otomatis dapat membuka menu BARJAS.
+- Admin BIMASATU otomatis dapat membuka menu BARJAS.
 - Untuk pengelola, buka **Manajemen Pengguna**, buat akun dengan peran **Pengelola Pengadaan**, dan gunakan email akun yang valid.
 - Peran **Pengelola Pengadaan** hanya dapat diberi menu BARJAS. Hak ini disediakan otomatis oleh \`barjas.sql\`.
 - Pengelola Pengadaan tidak terikat pada KUA CONNECT. Satker yang dapat dibuka di BARJAS ditentukan oleh tabel \`barjas_penugasan\` per tahun.
@@ -33,9 +33,9 @@ Edge Function BARJAS memakai environment bawaan Supabase: \`SUPABASE_URL\`, \`SU
 ## Migrasi data dari SIPADU lama
 
 1. Masuk ke CONNECT sebagai Admin.
-2. Buka menu **BARJAS · Pengadaan**, lalu pilih **Migrasi Data** di sidebar BARJAS.
+2. Buka menu **BARJAS → Migrasi Data** pada sidebar BIMASATU.
 3. Masukkan URL Web App Apps Script lama (akhiri dengan \`/exec\`) dan kredensial Admin lama.
-4. Setelah data lama terbaca, cocokkan masing-masing pengguna SIPADU lama dengan akun Supabase CONNECT. Akun lama tidak membawa password/hash lama; pengguna memakai password akun CONNECT yang dibuat Admin.
+4. Setelah data lama terbaca, cocokkan masing-masing pengguna SIPADU lama dengan akun BIMASATU yang sudah ada. Password/hash SIPADU lama tidak dipindahkan; pengguna tetap memakai password BIMASATU.
 5. Jalankan migrasi. Data master, penugasan, paket semua tahun, HPS, Monev, metadata dokumen, dan company profile diproses.
 6. Periksa jumlah data dan buka beberapa dokumen dari paket yang berbeda sebelum beralih sepenuhnya.
 
@@ -45,8 +45,9 @@ Migrasi dapat dijalankan ulang. ID lama digunakan sebagai kunci sehingga master/
 
 ## Pengujian setelah deploy
 
-- Login sebagai Admin CONNECT dan buka BARJAS.
-- Buat akun Pengelola Pengadaan, berikan menu BARJAS, lalu pastikan akun tersebut tidak melihat menu CONNECT lain.
+- Login ke BIMASATU sebagai Admin dan buka BARJAS dari sidebar utama.
+- Berikan izin BARJAS melalui Hak Akses Menu kepada salah satu peran yang dipilih, lalu pastikan pengguna tersebut dapat membuka BARJAS tanpa login ulang.
+- Pastikan pengguna tanpa izin BARJAS ditolak oleh router, Edge Function, dan RLS.
 - Buat satker/penugasan, paket baru, HPS/RAB, dan Monev.
 - Unggah PDF/gambar, pratinjau file, hapus file, dan cek bucket privat \`barjas-files\`.
 - Jalankan migrasi ke data uji, cocokkan jumlah paket dan berkas, lalu jalankan ulang untuk memastikan tidak ada data ganda.
@@ -56,3 +57,8 @@ Migrasi dapat dijalankan ulang. ID lama digunakan sebagai kunci sehingga master/
 - Password dan salt dari tabel Users lama tidak diimpor. Otentikasi baru sepenuhnya melalui Supabase Auth.
 - Penugasan untuk pengguna yang tidak dipetakan akan tersimpan tanpa \`user_id\`; Admin dapat memperbaikinya setelah migrasi melalui menu Penugasan & Pagu.
 - Company profile dan dokumen yang belum bisa diunduh tetap memiliki metadata/URL sumber sebagai referensi.
+
+
+## Integrasi BIMASATU
+
+BARJAS dimuat dari `index.html` dan memakai sesi Supabase yang sama dengan BIMASATU. Hash halaman menggunakan pola `#barjas/<halaman>` sehingga subhalaman tetap berada di router utama. CSS dan elemen DOM BARJAS dibatasi pada `#barjas-root` agar tidak memengaruhi tampilan menu lain. Halaman standalone `barjas/app.html` dan manajemen pengguna BARJAS dihapus.
