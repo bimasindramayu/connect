@@ -407,13 +407,12 @@ grant select, insert, update, delete on public.barjas_monev to authenticated;
 grant select, insert on public.barjas_log to authenticated;
 grant usage, select on sequence public.barjas_log_id_seq to authenticated;
 
--- Hak bawaan: akun baru Pengelola Pengadaan langsung mendapat menu BARJAS saja.
+-- Kompatibilitas akun lama: peran legacy pengadaan tetap mendapat menu BARJAS. Peran lain diatur dari Hak Akses Menu BIMASATU.
 insert into public.hak_akses (role, menu)
 values ('pengadaan', 'barjas')
 on conflict (role, menu) do nothing;
 
--- Hapus hak akses BARJAS yang mungkin pernah dicentang untuk peran selain Pengadaan.
--- Admin selalu boleh; akses role lain tetap dapat diatur sesuai kebijakan admin, sehingga tidak dihapus.
+-- Tidak ada penghapusan hak akses BARJAS untuk peran lain; Admin dapat mengatur izin tersebut melalui Hak Akses Menu BIMASATU.
 
 -- 5. Penyimpanan berkas privat. File lama yang belum berhasil disalin tetap disimpan sebagai URL referensi.
 insert into storage.buckets (id, name, public, file_size_limit)
@@ -482,7 +481,7 @@ revoke all on public.barjas_config, public.barjas_user_map, public.barjas_pejaba
   public.barjas_dokumen, public.barjas_hps, public.barjas_monev, public.barjas_log from anon;
 
 
--- Hak menu: role Pengelola Pengadaan hanya boleh memiliki menu BARJAS.
+-- Hak menu BARJAS mengikuti tabel hak_akses BIMASATU; tidak dikunci pada peran legacy pengadaan.
 create or replace function public.set_hak_akses(p_data jsonb) returns void
 language plpgsql security definer set search_path = public as $$
 declare r text; m text; menus text[];
@@ -502,7 +501,7 @@ begin
         raise exception 'Menu % tidak dapat diberikan ke Operator KUA: operator hanya boleh mengakses data KUA-nya sendiri.', m; end if;
       if r <> 'operator' and m in ('realisasi','dashboard') then
         raise exception 'Menu % hanya untuk Operator KUA.', m; end if;
-remove role lock in barjas.sql    end loop;
+    end loop;
     delete from public.hak_akses where role = r;
     insert into public.hak_akses (role, menu, updated_by) select r, x, auth.uid() from unnest(menus) x;
   end loop;
