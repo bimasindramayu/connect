@@ -706,3 +706,26 @@
 #barjas-root .tab button:not(.aktif) {
   color: #65748a;
 }
+
+
+/* Semantic status chips keep their own palettes, independent of Sneat .badge defaults. */
+#barjas-root .badge.ok {
+  color: #2d6b12 !important;
+  background-color: #e8f8dc !important;
+  border-color: #cce8bb !important;
+}
+#barjas-root .badge.warn {
+  color: #8a5f10 !important;
+  background-color: #fdf3e2 !important;
+  border-color: #ecd9ae !important;
+}
+#barjas-root .badge.bad {
+  color: #c62828 !important;
+  background-color: #ffe5e0 !important;
+  border-color: #e9cdc6 !important;
+}
+#barjas-root .badge.info {
+  color: #00718e !important;
+  background-color: #e7f8fc !important;
+  border-color: #b8eaf3 !important;
+}
