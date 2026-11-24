@@ -14,6 +14,7 @@
 <link href="css/app.css?v=2026.11.19.15.45" rel="stylesheet">
 <link href="css/sertifikat.css?v=2026.11.09.03.58" rel="stylesheet">
 <link href="css/bmn.css?v=2026.11.11.17" rel="stylesheet">
+<link href="barjas/assets/css/app.css?v=2026.11.24.08" rel="stylesheet">
 </head>
 <body>
 
@@ -61,7 +62,17 @@
         <a class="nav-link sub d-none" href="#impor" data-menu="impor"><i class="bx bx-import"></i>Impor Data Lama</a>
         <a class="nav-link sub d-none" href="#laporan" data-menu="laporan"><i class="bx bx-file"></i>Laporan</a>
       </details>
-      <a class="nav-link d-none" href="barjas/app.html" data-menu="barjas"><i class="bx bx-shopping-bag"></i>BARJAS · Pengadaan</a>
+      <details class="d-none" data-grup="barjas">
+        <summary class="nav-link" data-menu="barjas"><i class="bx bx-shopping-bag"></i>BARJAS<i class="bx bx-chevron-down ms-auto"></i></summary>
+        <a class="nav-link sub" href="#barjas/beranda" data-menu="barjas"><i class="bx bx-home-circle"></i>Beranda</a>
+        <a class="nav-link sub" href="#barjas/paket" data-menu="barjas"><i class="bx bx-package"></i>Paket Pengadaan</a>
+        <a class="nav-link sub" href="#barjas/satker" data-menu="barjas"><i class="bx bx-buildings"></i>Satuan Kerja</a>
+        <a class="nav-link sub" href="#barjas/penugasan" data-menu="barjas"><i class="bx bx-task"></i>Penugasan &amp; Pagu</a>
+        <a class="nav-link sub" href="#barjas/penyedia" data-menu="barjas"><i class="bx bx-store"></i>Penyedia</a>
+        <a class="nav-link sub" href="#barjas/pejabat" data-menu="barjas"><i class="bx bx-user-check"></i>Pejabat</a>
+        <a class="nav-link sub" href="#barjas/migrasi" data-menu="barjas"><i class="bx bx-transfer"></i>Migrasi Data</a>
+        <a class="nav-link sub" href="#barjas/pengaturan" data-menu="barjas"><i class="bx bx-slider"></i>Pengaturan BARJAS</a>
+      </details>
       <details class="d-none">
         <summary class="nav-link"><i class="bx bx-file-blank"></i>BAST NR<i class="bx bx-chevron-down ms-auto"></i></summary>
         <a class="nav-link sub d-none" href="#bast" data-menu="bast"><i class="bx bx-history"></i>Riwayat</a>
@@ -103,6 +114,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js?v=2026.11.11.20.30"></script>
 <script src="js/core.js?v=2026.11.19.15.45"></script>
+<!-- Pustaka dokumen BARJAS dimuat satu kali di dalam BIMASATU. -->
+<script src="barjas/assets/js/lib/jspdf.umd.min.js"></script>
+<script src="barjas/assets/js/lib/html2canvas.min.js"></script>
+<script src="barjas/assets/js/lib/pdf.min.js"></script>
+<script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'barjas/assets/js/lib/pdf.worker.min.js';</script>
+<script src="barjas/assets/js/config.js?v=2026.11.24.08"></script>
+<script src="barjas/assets/js/core.js?v=2026.11.24.08"></script>
 <script src="js/bop.js?v=2026.11.09.03.58"></script>
 <script src="js/akun.js?v=2026.11.12.11.00"></script>
 <script src="js/akses.js?v=2026.11.11.03"></script>
@@ -113,6 +131,12 @@
 <script src="js/bast.js?v=2026.11.23.15.00"></script>
 <script src="js/bmn.js?v=2026.11.18.03.00"></script>
 <script src="js/sertifikat.js?v=2026.11.11.20.30"></script>
+<script src="barjas/assets/js/hps.js?v=2026.11.24.08"></script>
+<script src="barjas/assets/js/docgen.js?v=2026.11.24.08"></script>
+<script src="barjas/assets/js/pages.js?v=2026.11.24.08"></script>
+<script src="barjas/assets/js/paket.js?v=2026.11.24.08"></script>
+<script src="barjas/assets/js/migrasi.js?v=2026.11.24.08"></script>
+<script src="barjas/assets/js/app.js?v=2026.11.24.08"></script>
 <script src="js/app.js?v=2026.11.15.08.30"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=tsReady&render=explicit" async defer></script>
 </body>
