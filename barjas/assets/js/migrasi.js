@@ -5,7 +5,7 @@
   var $ = w.$, esc = w.esc || function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
   }); };
-  var state = { url: '', token: '', master: null, details: [], sourceUsers: [], targetUsers: [] };
+  var state = { url: '', token: '', master: null, details: [], sourceUsers: [], targetUsers: [], ready: false, running: false };
 
   function gasCall(action, data, token) {
     return fetch(state.url, {
@@ -90,15 +90,25 @@
     if (!/\/exec$/.test(url)) throw new Error('URL Web App lama harus diakhiri /exec.');
     if (!username || !password) throw new Error('Isi username dan password Admin SIPADU lama.');
     state.url = url;
+    state.ready = false;
+    state.master = null;
+    state.details = [];
+    state.sourceUsers = [];
     $('#sm-connect').disabled = true;
     try {
       var login = await gasCall('login', { username: username, password: password }, '');
       state.token = login.token;
-      state.master = await gasCall('bootstrap', { tahun: App.state.tahun }, state.token);
-      state.sourceUsers = state.master.users || [];
+      var master = await gasCall('bootstrap', { tahun: App.state.tahun }, state.token);
+      if (!master || typeof master !== 'object' || Array.isArray(master)) {
+        throw new Error('Server SIPADU lama tidak mengembalikan data master. Periksa URL Web App dan respons bootstrap, lalu coba hubungkan kembali.');
+      }
+      state.master = master;
+      state.sourceUsers = Array.isArray(master.users) ? master.users : [];
       state.targetUsers = (App.state.master && App.state.master.users) || [];
       await loadPackageDetails();
       drawMapping();
+      state.ready = true;
+      $('#sm-run').disabled = false;
       $('#sm-result').classList.remove('d-none');
       $('#sm-stats').innerHTML = [
         ['Satuan kerja', (state.master.satker || []).length],
@@ -124,20 +134,19 @@
     }).filter(function (x) { return x.auth_user_id; });
   }
 
-  async function migrateMaster(userMap) {
+  async function migrateMaster(userMap, master, details) {
     var payload = {
-      config: state.master.config || {},
-      satker: state.master.satker || [],
-      pejabat: state.master.pejabat || [],
-      penyedia: state.master.penyedia || [],
-      penugasan: state.master.penugasan || [],
+      config: master.config || {},
+      satker: master.satker || [],
+      pejabat: master.pejabat || [],
+      penyedia: master.penyedia || [],
+      penugasan: master.penugasan || [],
       user_map: userMap,
       paket: [], hps: [], monev: [],
     };
     var result = await API.call('importBatch', payload, { jsonp: false });
     log('Master diimpor: ' + result.satker + ' satker, ' + result.pejabat + ' pejabat, ' + result.penyedia + ' penyedia, ' + result.penugasan + ' penugasan.', 'ok');
 
-    var details = state.details;
     var blocks = chunks(details, 20);
     for (var b = 0; b < blocks.length; b++) {
       var packetRows = [], hpsRows = [], monevRows = [];
@@ -160,13 +169,13 @@
     }
   }
 
-  async function migrateDocuments() {
+  async function migrateDocuments(master, details) {
     var stateNow = await API.call('importState', {}, { jsonp: false });
     var stored = new Set((stateNow.dokumen || []).filter(function (x) { return x.storage_path; }).map(function (x) { return x.id; }));
     var storedProviders = new Set((stateNow.penyedia || []).filter(function (x) { return x.cp_storage_path; }).map(function (x) { return x.id; }));
     var documents = [];
-    state.details.forEach(function (detail) { (detail.dokumen || []).forEach(function (doc) { documents.push(doc); }); });
-    var total = documents.length + (state.master.penyedia || []).filter(function (p) { return p.cp_file_id; }).length;
+    details.forEach(function (detail) { (detail.dokumen || []).forEach(function (doc) { documents.push(doc); }); });
+    var total = documents.length + (master.penyedia || []).filter(function (p) { return p.cp_file_id; }).length;
     var done = 0, moved = 0, linked = 0, failed = 0;
 
     for (var i = 0; i < documents.length; i++) {
@@ -196,7 +205,7 @@
       done++; setProgress(done, total, 'Memindahkan berkas ' + done + ' / ' + total);
     }
 
-    var providers = (state.master.penyedia || []).filter(function (p) { return p.cp_file_id; });
+    var providers = (master.penyedia || []).filter(function (p) { return p.cp_file_id; });
     for (var j = 0; j < providers.length; j++) {
       var provider = providers[j];
       if (storedProviders.has(String(provider.id))) { done++; setProgress(done, total, 'Berkas ' + done + ' / ' + total); continue; }
@@ -226,23 +235,33 @@
   }
 
   async function runMigration() {
+    var master = state.master;
+    var details = state.details.slice();
+    if (!state.ready || !master || typeof master !== 'object' || Array.isArray(master)) {
+      throw new Error('Data master sumber belum tersedia. Klik "Hubungkan & baca data" dan tunggu sampai pratinjau data tampil sebelum memulai migrasi.');
+    }
+    if (!state.token) throw new Error('Sesi sumber SIPADU lama sudah tidak aktif. Hubungkan kembali sebelum memulai migrasi.');
     var userMap = getUserMap();
     if (state.sourceUsers.length && !userMap.some(function (x) { return state.sourceUsers.some(function (u) { return String(u.id) === x.legacy_id && u.role === 'admin'; }); })) {
       throw new Error('Hubungkan setidaknya akun Admin SIPADU lama ke akun Admin CONNECT.');
     }
+    state.running = true;
     $('#sm-run').disabled = true;
+    $('#sm-clear').disabled = true;
     try {
       $('#sm-progress-wrap').classList.remove('d-none');
       setProgress(0, 1, 'Mengimpor data master…');
-      await migrateMaster(userMap);
+      await migrateMaster(userMap, master, details);
       setProgress(0, 1, 'Memindahkan berkas…');
-      var files = await migrateDocuments();
+      var files = await migrateDocuments(master, details);
       setProgress(1, 1, 'Migrasi selesai.');
       log('Selesai. Berkas dipindahkan ke Supabase Storage: ' + files.moved + ', metadata/link lama: ' + files.linked + ', gagal total: ' + files.failed + '.', files.failed ? 'bad' : 'ok');
       log('Migrasi dapat dijalankan ulang. ID lama dipertahankan dan data yang sudah tersalin tidak digandakan.', 'ok');
       if (files.linked) log('Sebagian berkas tetap berupa tautan lama karena endpoint fileGet/Google Drive tidak dapat membacanya. Periksa URL pada riwayat dokumen.', 'info');
     } finally {
-      $('#sm-run').disabled = false;
+      state.running = false;
+      $('#sm-run').disabled = !state.ready;
+      $('#sm-clear').disabled = false;
     }
   }
 
@@ -281,7 +300,10 @@
       runMigration().catch(function (e) { log('Migrasi berhenti: ' + e.message, 'bad'); });
     };
     $('#sm-clear').onclick = function () {
+      if (state.running) return;
+      state.ready = false;
       state.token = ''; state.master = null; state.details = []; state.sourceUsers = [];
+      $('#sm-run').disabled = true;
       $('#sm-result').classList.add('d-none'); $('#sm-password').value = '';
       log('Sesi sumber dihapus dari halaman ini.', 'ok');
     };
