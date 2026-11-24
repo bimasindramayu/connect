@@ -65,7 +65,7 @@ create or replace function public.peran_label(p_role text) returns text language
     when 'pnbp_nr' then 'PNBP NR' when 'pengadaan' then 'Pengelola Pengadaan (akun lama)' else p_role end;
 $$;
 
--- Trigger ini mengganti versi pada bop.sql agar akun Pengelola Pengadaan dibuat tanpa ikatan KUA.
+-- Trigger ini membatasi akun baru ke peran BIMASATU standar; role pengadaan hanya kompatibilitas akun lama.
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare
