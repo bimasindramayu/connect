@@ -24,11 +24,10 @@ Edge Function BARJAS memakai environment bawaan Supabase: \`SUPABASE_URL\`, \`SU
 
 ## Akun dan hak akses
 
-- Admin BIMASATU otomatis dapat membuka menu BARJAS.
-- Untuk pengelola, buka **Manajemen Pengguna**, buat akun dengan peran **Pengelola Pengadaan**, dan gunakan email akun yang valid.
-- Peran **Pengelola Pengadaan** hanya dapat diberi menu BARJAS. Hak ini disediakan otomatis oleh \`barjas.sql\`.
-- Pengelola Pengadaan tidak terikat pada KUA CONNECT. Satker yang dapat dibuka di BARJAS ditentukan oleh tabel \`barjas_penugasan\` per tahun.
-- Buat/aktifkan akun baru terlebih dahulu sebelum menghubungkan pengguna lama pada halaman migrasi.
+- Login, profil, sesi Supabase, dan logout sepenuhnya menggunakan BIMASATU. Tidak ada akun atau menu **Pengguna** khusus BARJAS.
+- Admin BIMASATU otomatis dapat membuka semua menu, termasuk BARJAS.
+- Untuk peran lain, Admin membuka **Hak Akses Menu** di BIMASATU lalu mencentang **BARJAS** pada peran yang dikehendaki. Akses BARJAS tidak lagi dibatasi pada peran khusus Pengelola Pengadaan.
+- Pengguna BARJAS memakai akun dan identitas BIMASATU yang sama. Satker yang dapat dikelola tetap ditentukan oleh tabel `barjas_penugasan` per tahun.
 
 ## Migrasi data dari SIPADU lama
 
@@ -62,3 +61,8 @@ Migrasi dapat dijalankan ulang. ID lama digunakan sebagai kunci sehingga master/
 ## Integrasi BIMASATU
 
 BARJAS dimuat dari `index.html` dan memakai sesi Supabase yang sama dengan BIMASATU. Hash halaman menggunakan pola `#barjas/<halaman>` sehingga subhalaman tetap berada di router utama. CSS dan elemen DOM BARJAS dibatasi pada `#barjas-root` agar tidak memengaruhi tampilan menu lain. Halaman standalone `barjas/app.html` dan manajemen pengguna BARJAS dihapus.
+
+
+## Integrasi BIMASATU
+
+BARJAS dimuat melalui `index.html`, memakai sesi Supabase yang sama dengan BIMASATU, dan mengikuti sub-rute `#barjas/<halaman>` di router utama. CSS dan elemen DOM BARJAS dibatasi pada `#barjas-root` agar tidak memengaruhi halaman lain. Halaman standalone `barjas/app.html` dan manajemen pengguna khusus BARJAS dihapus.
