@@ -314,8 +314,8 @@
 
   function page(host) {
     App.setJudul('Migrasi Data BARJAS', 'Pindahkan data lama ke database dan penyimpanan Supabase');
-    if (!Auth.isAdmin()) {
-      host.innerHTML = '<div class="kartu"><p class="tegas">Khusus Admin</p><p class="mini">Hanya Admin BIMASATU yang dapat menjalankan migrasi data.</p></div>';
+    if (!App.canManage()) {
+      host.innerHTML = '<div class="kartu"><p class="tegas">Akses BARJAS diperlukan</p><p class="mini">Akun ini belum memiliki izin untuk mengelola modul BARJAS.</p></div>';
       return;
     }
     host.innerHTML = '<div class="kartu mb-3"><header><h2>Sumber data lama</h2></header><div class="badan">' +
