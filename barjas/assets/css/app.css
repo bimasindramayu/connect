@@ -677,3 +677,17 @@
   #barjas-root .modal-bg { padding: 10px; }
   #barjas-root .modal { max-height: calc(100vh - 20px); }
 }
+
+
+/* Force visual contract for BARJAS native tables; legacy selectors stay as fallback. */
+#barjas-root table.tabel > thead > tr > th {
+  color: #65748a !important;
+  background-color: #f8f9fc !important;
+}
+#barjas-root table.tabel > tbody > tr > td {
+  color: #566a7f;
+  background-color: #fff;
+}
+#barjas-root table.tabel > tbody > tr:hover > td {
+  background-color: #f5f5ff;
+}
