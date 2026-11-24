@@ -5,8 +5,19 @@
   var C = w.CONFIG;
 
   /* ---------- DOM ---------- */
-  function $(sel, root) { return (root || document).querySelector(sel); }
-  function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function $(sel, root) {
+    if (root) return root.querySelector(sel);
+    var scope = document.getElementById('barjas-root');
+    if (scope) {
+      if (sel === '#barjas-root') return scope;
+      var found = scope.querySelector(sel);
+      if (found) return found;
+    }
+    return document.querySelector(sel);
+  }
+  function $$(sel, root) {
+    return Array.prototype.slice.call((root || document.getElementById('barjas-root') || document).querySelectorAll(sel));
+  }
 
   function el(tag, attrs, kids) {
     var parts = tag.split(/([.#])/), node = document.createElement(parts[0] || 'div');
@@ -150,7 +161,7 @@
     _bar: null,
     _tick: function (delta) {
       API.busy = Math.max(0, API.busy + delta);
-      if (!API._bar) API._bar = $('#bar');
+      if (!API._bar) API._bar = $('#barjas-bar');
       if (API._bar) API._bar.classList.toggle('on', API.busy > 0);
     },
     call: function (action, data, opt) {
@@ -248,24 +259,19 @@
   /* ---------- sesi ---------- */
   var Auth = {
     session: null,
-    load: function () {
-      if (Auth.session) return Auth.session;
-      try { Auth.session = JSON.parse(localStorage.getItem(C.SESSION_KEY) || 'null'); }
-      catch (e) { Auth.session = null; }
-      return Auth.session;
-    },
-    save: function (s) { Auth.session = s; localStorage.setItem(C.SESSION_KEY, JSON.stringify(s)); },
+    load: function () { return Auth.session; },
+    save: function (s) { Auth.session = s; },
     token: function () { var s = Auth.load(); return s ? s.token : ''; },
     user: function () { var s = Auth.load(); return s ? s.user : null; },
     isAdmin: function () { var u = Auth.user(); return !!u && u.role === 'admin'; },
-    clear: function () { Auth.session = null; localStorage.removeItem(C.SESSION_KEY); Store.dropAll(); },
+    clear: function () { Auth.session = null; Store.dropAll(); },
     expire: function () {
       Auth.clear();
-      location.href = '../index.html?s=habis';
+      BARJAS_SB.auth.signOut().catch(function () {});
     },
     guard: function () {
       var s = Auth.load();
-      if (!s || !s.token || (s.exp && Date.now() > s.exp)) { Auth.expire(); return false; }
+      if (!s || !s.user) { Auth.expire(); return false; }
       return true;
     }
   };
@@ -273,7 +279,7 @@
   /* ---------- komponen UI ---------- */
   async function openViewer(files, idx, load) {
     const V_GAP = 8, V_ZOOM = 10, V_MAXPX = 16e6, V_MAXSIDE = 8192;
-    const d = $('#vdlg'), btn = (k, label, title) => `<button type="button" class="vw-btn" data-v="${k}" aria-label="${title}" title="${title}">${label}</button>`;
+    const d = $('#barjas-vdlg'), btn = (k, label, title) => `<button type="button" class="vw-btn" data-v="${k}" aria-label="${title}" title="${title}">${label}</button>`;
     d.className = 'wide';
     d.innerHTML = `<div class="vw-shell">
       <header class="vw-head">
@@ -531,7 +537,7 @@
 
   var UI = {
     toast: function (msg, kind) {
-      var box = $('#toast') || document.body.appendChild(el('div#toast'));
+      var box = $('#barjas-toast') || (document.getElementById('barjas-root') || document.body).appendChild(el('div#barjas-toast'));
       var t = el('div.toast' + (kind ? '.' + kind : ''), { text: msg });
       box.appendChild(t);
       setTimeout(function () { t.classList.add('out'); setTimeout(function () { t.remove(); }, 250); }, kind === 'bad' ? 5200 : 3000);
@@ -560,7 +566,7 @@
       function close() { wrap.classList.add('out'); setTimeout(function () { wrap.remove(); }, 160); document.removeEventListener('keydown', key); }
       function key(e) { if (e.key === 'Escape' && opt.dismiss !== false) close(); }
       document.addEventListener('keydown', key);
-      document.body.appendChild(wrap);
+      (document.getElementById('barjas-root') || document.body).appendChild(wrap);
       var f = wrap.querySelector('input,select,textarea,button.primary'); if (f) f.focus();
       return { close: close, node: wrap };
     },
@@ -1058,31 +1064,38 @@
   var Router = {
     routes: {},
     add: function (path, fn) { Router.routes[path] = fn; return Router; },
-    go: function (path) { location.hash = '#' + path; },
-    current: function () { return (location.hash || '#/').slice(1); },
-    start: function (fallback) {
-      function run() {
-        var raw = Router.current(), q = raw.split('?'), path = q[0] || '/';
-        var params = {};
-        if (q[1]) q[1].split('&').forEach(function (kv) {
-          var p = kv.split('='); params[decodeURIComponent(p[0])] = decodeURIComponent(p[1] || '');
+    go: function (path) {
+      path = String(path || '/');
+      if (path.charAt(0) !== '/') path = '/' + path;
+      var target = '#barjas' + path;
+      if (location.hash === target) Router.run();
+      else location.hash = target;
+    },
+    current: function () {
+      var hash = (location.hash || '#barjas/beranda').slice(1);
+      return hash.indexOf('barjas') === 0 ? (hash.slice(6) || '/beranda') : '';
+    },
+    run: function (fallback) {
+      var raw = Router.current();
+      if (!raw) return;
+      var q = raw.split('?'), path = q[0] || '/';
+      var params = {};
+      if (q[1]) q[1].split('&').forEach(function (kv) {
+        var p = kv.split('='); params[decodeURIComponent(p[0])] = decodeURIComponent(p[1] || '');
+      });
+      var seg = path.split('/').filter(Boolean), name = seg[0] || 'beranda';
+      var fn = Router.routes[name] || fallback || w.Pages.beranda;
+      var host = $('#barjas-view');
+      if (!host) return;
+      clear(host).appendChild(UI.loading());
+      Promise.resolve()
+        .then(function () { return fn(host, { seg: seg, id: seg[1], params: params }); })
+        .catch(function (e) {
+          clear(host).appendChild(UI.empty('Halaman gagal dimuat', e.message || String(e),
+            el('button.btn.primary', { onclick: function () { Router.run(fallback); } }, 'Coba lagi')));
         });
-        var seg = path.split('/').filter(Boolean), name = seg[0] || 'beranda';
-        var fn = Router.routes[name] || fallback;
-        $$('.nav a').forEach(function (a) { a.classList.toggle('aktif', a.getAttribute('href') === '#/' + name); });
-        var host = $('#view');
-        clear(host).appendChild(UI.loading());
-        Promise.resolve()
-          .then(function () { return fn(host, { seg: seg, id: seg[1], params: params }); })
-          .catch(function (e) {
-            clear(host).appendChild(UI.empty('Halaman gagal dimuat', e.message || String(e),
-              el('button.btn.primary', { onclick: run }, 'Coba lagi')));
-          });
-        if (w.innerWidth < 880) document.body.classList.remove('nav-buka');
-      }
-      w.addEventListener('hashchange', run);
-      run();
-    }
+    },
+    start: function (fallback) { Router.run(fallback); }
   };
 
   w.$ = $; w.$$ = $$; w.el = el; w.clear = clear; w.esc = esc;
