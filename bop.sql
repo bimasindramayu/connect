@@ -213,7 +213,7 @@ create table if not exists public.hak_akses (
 alter table public.hak_akses enable row level security;
 
 -- (database lama) izinkan peran Pengelola Pengadaan pada hak_akses. Aman diulang.
-do $
+do $$
 declare c record; sudah boolean := false;
 begin
   for c in select conname, pg_get_constraintdef(oid) as def from pg_constraint
@@ -225,7 +225,7 @@ begin
     alter table public.hak_akses add constraint hak_akses_role_check
       check (role in ('operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan'));
   end if;
-end $;
+end $$;
 
 drop policy if exists ha_read on public.hak_akses;
 create policy ha_read on public.hak_akses for select to authenticated using (true);   -- bukan rahasia; tulis hanya lewat set_hak_akses()
