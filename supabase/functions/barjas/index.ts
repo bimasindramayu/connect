@@ -192,14 +192,6 @@ Deno.serve(async (req) => {
         return json({ ok: true, data: true });
       }
 
-      case 'resetPassword': {
-        adminOnly();
-        if (String(d.password || '').length < 8) throw new Error('Kata sandi minimal 8 karakter.');
-        checked(await admin.auth.admin.updateUserById(d.id, { password: d.password }), 'Atur ulang sandi');
-        await log('reset-sandi', String(d.id));
-        return json({ ok: true, data: true });
-      }
-
       case 'saveConfig': {
         adminOnly();
         const rows = Object.keys(d || {}).map((key) => ({ key, value: d[key], updated_at: now() }));
