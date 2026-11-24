@@ -1054,9 +1054,9 @@
       opsi = opsi || {};
       return siapkan(id, ctx).then(function (d) {
         var frame = el('iframe', {
-          style: 'width:100%;height:68vh;border:1px solid var(--garis);border-radius:6px;background:#fff'
+          style: 'display:block;width:100%;height:100%;min-height:0;border:0;background:#fff'
         });
-        var box = el('div', null, [frame]);
+        var box = el('div.pratinjau-dokumen', null, [frame]);
         var aksi = [
           { label: 'Tutup' },
           { label: 'Unduh .doc', onclick: function () { Doc.unduh(id, ctx); return false; }, close: false },
@@ -1072,7 +1072,7 @@
         if (opsi.simpanKeBerkas) {
           aksi.push({ label: 'Simpan ke berkas', kind: 'primary', onclick: function () { opsi.simpanKeBerkas(); return false; }, close: false });
         }
-        UI.modal({ title: d.judul, body: box, actions: aksi });
+        UI.modal({ title: d.judul, body: box, kelas: 'penuh', actions: aksi });
         var doc = frame.contentDocument;
         doc.open(); doc.write(bungkus(d)); doc.close();
         return d;
