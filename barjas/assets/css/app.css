@@ -13,7 +13,7 @@
   --primer-hover: #4f50c5;
   --primer-soft: #e7e7ff;
   --emas: #ffab00;
-  --merah: #ff3e1d;
+  --merah: #c62828;
   --merah-muda: #ffe5e0;
   --biru: #03c3ec;
   --garis: #e6e6f0;
@@ -542,7 +542,7 @@
 #barjas-root .vw-select { min-height: 40px; }
 #barjas-root .field textarea { min-height: 84px; resize: vertical; }
 #barjas-root input::placeholder,
-#barjas-root textarea::placeholder { color: #7a8797; opacity: 1; }
+#barjas-root textarea::placeholder { color: #65748a; opacity: 1; }
 #barjas-root option { color: #566a7f; background: #fff; }
 #barjas-root .field input:focus,
 #barjas-root .field select:focus,
