@@ -21,14 +21,14 @@
     });
   }
   function log(text, type) {
-    var box = $('sm-log'); if (!box) return;
+    var box = $('#sm-log'); if (!box) return;
     var p = document.createElement('div');
     p.className = 'small py-1' + (type === 'bad' ? ' text-danger' : type === 'ok' ? ' text-success' : ' text-body-secondary');
     p.textContent = new Date().toLocaleTimeString('id-ID') + ' · ' + text;
     box.prepend(p);
   }
   function setProgress(done, total, label) {
-    var bar = $('sm-progress'), txt = $('sm-progress-text');
+    var bar = $('#sm-progress'), txt = $('#sm-progress-text');
     if (bar) bar.style.width = (total ? Math.round(done / total * 100) : 0) + '%';
     if (txt) txt.textContent = label || (done + ' / ' + total);
   }
@@ -71,7 +71,7 @@
     var opts = '<option value="">Lewati (tanpa penugasan)</option>' + target.map(function (u) {
       return '<option value="' + esc(u.id) + '">' + esc(u.nama) + ' · ' + esc(u.username || u.email || u.id) + ' · ' + esc(u.role === 'admin' ? 'Admin' : 'Pengelola Pengadaan') + '</option>';
     }).join('');
-    $('sm-users').innerHTML = source.length ? '<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Akun SIPADU lama</th><th>Hubungkan ke akun CONNECT</th></tr></thead><tbody>' +
+    $('#sm-users').innerHTML = source.length ? '<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Akun SIPADU lama</th><th>Hubungkan ke akun CONNECT</th></tr></thead><tbody>' +
       source.map(function (u, i) {
         var match = target.find(function (t) {
           return String(t.username || '').toLowerCase() === String(u.username || '').toLowerCase()
@@ -84,13 +84,13 @@
   }
 
   async function connectOld() {
-    var url = $('sm-url').value.trim();
-    var username = $('sm-username').value.trim();
-    var password = $('sm-password').value;
+    var url = $('#sm-url').value.trim();
+    var username = $('#sm-username').value.trim();
+    var password = $('#sm-password').value;
     if (!/\/exec$/.test(url)) throw new Error('URL Web App lama harus diakhiri /exec.');
     if (!username || !password) throw new Error('Isi username dan password Admin SIPADU lama.');
     state.url = url;
-    $('sm-connect').disabled = true;
+    $('#sm-connect').disabled = true;
     try {
       var login = await gasCall('login', { username: username, password: password }, '');
       state.token = login.token;
@@ -99,8 +99,8 @@
       state.targetUsers = (App.state.master && App.state.master.users) || [];
       await loadPackageDetails();
       drawMapping();
-      $('sm-result').classList.remove('d-none');
-      $('sm-stats').innerHTML = [
+      $('#sm-result').classList.remove('d-none');
+      $('#sm-stats').innerHTML = [
         ['Satuan kerja', (state.master.satker || []).length],
         ['Pejabat', (state.master.pejabat || []).length],
         ['Penyedia', (state.master.penyedia || []).length],
@@ -113,13 +113,13 @@
       log('Koneksi SIPADU lama berhasil. Master dan detail paket sudah dibaca.', 'ok');
       log('Cocokkan akun lama dengan akun CONNECT. Password lama tidak dipindahkan; akun Supabase memakai password baru.', 'info');
     } finally {
-      $('sm-connect').disabled = false;
+      $('#sm-connect').disabled = false;
     }
   }
 
   function getUserMap() {
     return state.sourceUsers.map(function (u, i) {
-      var sel = $('sm-users').querySelector('[data-sm-user="' + i + '"]');
+      var sel = $('#sm-users').querySelector('[data-sm-user="' + i + '"]');
       return { legacy_id: String(u.id), auth_user_id: sel && sel.value || '', legacy_username: u.username || '' };
     }).filter(function (x) { return x.auth_user_id; });
   }
@@ -230,9 +230,9 @@
     if (state.sourceUsers.length && !userMap.some(function (x) { return state.sourceUsers.some(function (u) { return String(u.id) === x.legacy_id && u.role === 'admin'; }); })) {
       throw new Error('Hubungkan setidaknya akun Admin SIPADU lama ke akun Admin CONNECT.');
     }
-    $('sm-run').disabled = true;
+    $('#sm-run').disabled = true;
     try {
-      $('sm-progress-wrap').classList.remove('d-none');
+      $('#sm-progress-wrap').classList.remove('d-none');
       setProgress(0, 1, 'Mengimpor data master…');
       await migrateMaster(userMap);
       setProgress(0, 1, 'Memindahkan berkas…');
@@ -242,7 +242,7 @@
       log('Migrasi dapat dijalankan ulang. ID lama dipertahankan dan data yang sudah tersalin tidak digandakan.', 'ok');
       if (files.linked) log('Sebagian berkas tetap berupa tautan lama karena endpoint fileGet/Google Drive tidak dapat membacanya. Periksa URL pada riwayat dokumen.', 'info');
     } finally {
-      $('sm-run').disabled = false;
+      $('#sm-run').disabled = false;
     }
   }
 
@@ -272,17 +272,17 @@
       '<li>Jangan hapus Spreadsheet, Apps Script, atau folder Drive lama sampai jumlah data dan sampel dokumen sudah diverifikasi.</li>' +
       '</ul></div></div>';
 
-    $('sm-connect').onclick = function () {
-      $('sm-log').innerHTML = '';
+    $('#sm-connect').onclick = function () {
+      $('#sm-log').innerHTML = '';
       connectOld().catch(function (e) { log(e.message, 'bad'); });
     };
-    $('sm-run').onclick = function () {
+    $('#sm-run').onclick = function () {
       if (!confirm('Jalankan migrasi data BARJAS ke Supabase? Data lama tidak akan dihapus.')) return;
       runMigration().catch(function (e) { log('Migrasi berhenti: ' + e.message, 'bad'); });
     };
-    $('sm-clear').onclick = function () {
+    $('#sm-clear').onclick = function () {
       state.token = ''; state.master = null; state.details = []; state.sourceUsers = [];
-      $('sm-result').classList.add('d-none'); $('sm-password').value = '';
+      $('#sm-result').classList.add('d-none'); $('#sm-password').value = '';
       log('Sesi sumber dihapus dari halaman ini.', 'ok');
     };
   }
