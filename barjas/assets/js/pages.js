@@ -1,6 +1,8 @@
 /* BARJAS - halaman data master dan ringkasan. */
 (function (w) {
   'use strict';
+  // Jangan memakai binding global `$` BIMASATU (getElementById); BARJAS memakai selector CSS yang di-scope ke root modul.
+  var $ = w.$, $$ = w.$$;
   var C = w.CONFIG;
 
   /* ---------- unggahan berkas (dipakai dokumen paket & company profile) ---------- */
