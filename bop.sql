@@ -121,7 +121,7 @@ grant execute on function public.profile_update_nama(text) to authenticated;
 -- Peran tidak dikenal = operator. PENTING: pendaftaran mandiri Supabase harus dimatikan, karena trigger ini memercayai metadata.
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare r text := case when new.raw_user_meta_data->>'role' in ('admin','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan')
+declare r text := case when new.raw_user_meta_data->>'role' in ('admin','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr')
                        then new.raw_user_meta_data->>'role' else 'operator' end;
 begin
   insert into public.profiles (id, nama, kua, kua_id, role)
@@ -201,7 +201,7 @@ $$;
 create or replace function public.peran_label(p_role text) returns text language sql immutable as $$
   select case p_role when 'admin' then 'Admin' when 'operator' then 'Operator KUA' when 'bendahara_bop' then 'Bendahara BOP'
     when 'verifikator_bop' then 'Verifikator BOP' when 'bast_nr' then 'BAST NR' when 'kemasjidan' then 'Kemasjidan'
-    when 'pnbp_nr' then 'PNBP NR' when 'pengadaan' then 'Pengelola Pengadaan' else p_role end;
+    when 'pnbp_nr' then 'PNBP NR' when 'pengadaan' then 'Pengelola Pengadaan (akun lama)' else p_role end;
 $$;
 
 create table if not exists public.hak_akses (
@@ -395,7 +395,7 @@ begin
       ('verifikator_bop','bop'),('verifikator_bop','rpd'),('verifikator_bop','verifikasi'),('verifikator_bop','laporan'),
       ('bast_nr','bast'),('bast_nr','bast-buat'),('bast_nr','bast-pegawai'),('bast_nr','bast-setting'),
       ('kemasjidan','sert-masjid'),('kemasjidan','sert-kiblat'),('kemasjidan','sert-pengaturan'),
-      ('pnbp_nr','jaspro'),('operator','bmn'),('pengadaan','barjas')
+      ('pnbp_nr','jaspro'),('operator','bmn')
     on conflict do nothing;
     insert into public.config (key, value) values ('hak_akses_awal', 'true') on conflict (key) do nothing;
   end if;
