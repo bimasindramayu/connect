@@ -212,7 +212,7 @@ create table if not exists public.hak_akses (
 );
 alter table public.hak_akses enable row level security;
 
--- (database lama) izinkan peran Pengelola Pengadaan pada hak_akses. Aman diulang.
+-- Pertahankan peran pengadaan lama agar akun dan data yang sudah ada tetap kompatibel.
 do $$
 declare c record; sudah boolean := false;
 begin
@@ -280,11 +280,7 @@ begin
         raise exception 'Menu realisasi hanya untuk Operator KUA (mengisi Realisasi KUA sendiri).'; end if;
       if r <> 'operator' and m = 'dashboard' then
         raise exception 'Menu dashboard hanya untuk Operator KUA (ringkasan KUA-nya sendiri).'; end if;
-      if r = 'pengadaan' and m <> 'barjas' then
-        raise exception 'Peran Pengelola Pengadaan hanya dapat diberi menu BARJAS.'; end if;
-      if r <> 'pengadaan' and m = 'barjas' then
-        raise exception 'Menu BARJAS hanya dapat diberikan kepada peran Pengelola Pengadaan.'; end if;
-    end loop;
+remove role lock in bop.sql    end loop;
     delete from public.hak_akses where role = r;
     insert into public.hak_akses (role, menu, updated_by) select r, x, auth.uid() from unnest(menus) x;
   end loop;
