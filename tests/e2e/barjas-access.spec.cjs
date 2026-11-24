@@ -15,9 +15,12 @@ test('BARJAS menu permission is passed into the module and grants all satker', (
 
 test('BARJAS screens do not block menu-authorized users with an Admin-only role check', () => {
   const pages = read('barjas/assets/js/pages.js');
+  const migration = read('barjas/assets/js/migrasi.js');
   expect(pages).not.toContain('Auth.isAdmin()');
   expect(pages).not.toContain('Khusus admin');
   expect((pages.match(/App\.canManage\(\)/g) || []).length).toBe(7);
+  expect(migration).not.toContain('Auth.isAdmin()');
+  expect(migration).toContain('if (!App.canManage())');
 });
 
 test('BARJAS Edge Function has no Admin-only action gate after menu authorization', () => {
