@@ -166,7 +166,7 @@
 
   /* ---------- data paket (dipakai beranda & halaman paket) ---------- */
   function muatPaket(paksa) {
-    var kunci = 'paket.' + App.state.tahun;
+    var kunci = 'paket.v2.' + App.state.user.id + '.' + App.state.tahun;
     var cache = paksa ? null : Store.get(kunci, C.CACHE_TTL);
     if (cache) return Promise.resolve(cache);
     return API.call('paketList', { tahun: App.state.tahun }).then(function (r) { return Store.set(kunci, r); });
