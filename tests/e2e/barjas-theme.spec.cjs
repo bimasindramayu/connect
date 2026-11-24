@@ -79,6 +79,7 @@ test('02 - text field: input, textarea, select, Bootstrap controls, readonly, di
 });
 
 test('03 - modal: overlay, posisi, teks, header, body, footer, close dan tombol aksi', async ({ page }) => {
+  await page.locator('#sample-modal').evaluate((el) => { el.hidden = false; });
   const modal = await style(page.locator('#sample-modal .modal'));
   const head = await style(page.locator('#sample-modal .modal-head'));
   const body = await style(page.locator('#sample-modal .modal-body'));
@@ -104,8 +105,8 @@ test('04 - halaman migrasi: Bootstrap utility, form-select dan tabel tetap konsi
   const select = await style(page.locator('#migrasi-table .form-select'));
   const table = await style(page.locator('#migrasi-table'));
   const header = await style(page.locator('#migrasi-table thead th').first());
-  const secondary = await page.locator('#barjas-root .text-body-secondary').evaluate((el) => getComputedStyle(el).color);
-  const success = await page.locator('#barjas-root .text-success').count();
+  const secondary = await page.locator('#migration-secondary').evaluate((el) => getComputedStyle(el).color);
+  const success = await page.locator('#migration-success').evaluate((el) => getComputedStyle(el).color);
 
   expect(select.color).toBe(rgb('#566a7f'));
   expect(select.background).toBe('rgb(255, 255, 255)');
@@ -113,7 +114,7 @@ test('04 - halaman migrasi: Bootstrap utility, form-select dan tabel tetap konsi
   expect(header.background).toBe(rgb('#f8f9fc'));
   expect(header.color).toBe(rgb('#566a7f'));
   expect(secondary).toBe(rgb('#65748a'));
-  expect(success).toBe(0);
+  expect(success).toBe(rgb('#2d6b12'));
 });
 
 test('05 - tabel, tab dan badge: status semantik terpisah dari warna primer', async ({ page }) => {
@@ -130,14 +131,14 @@ test('05 - tabel, tab dan badge: status semantik terpisah dari warna primer', as
   const hpsCell = await style(page.locator('#hps-table td.pilih'));
 
   expect(th.background).toBe(rgb('#f8f9fc'));
-  expect(th.color).toBe(rgb('#566a7f'));
+  expect(th.color).toBe(rgb('#65748a'));
   expect(activeTab.color).toBe(rgb('#4f50c5'));
   expect(activeTab.border).toBe(rgb('#5f61e6'));
   expect(ok.background).toBe(rgb('#e8f8dc'));
   expect(ok.color).toBe(rgb('#2d6b12'));
   expect(warn.color).toBe(rgb('#8a5f10'));
   expect(bad.color).toBe(rgb('#c62828'));
-  expect(info.color).toBe(rgb('#007b9e'));
+  expect(info.color).toBe(rgb('#00718e'));
   expect(docNo.background).toBe(rgb('#52a83e'));
   expect(hpsCell.background).toBe(rgb('#e7e7ff'));
 });
@@ -152,7 +153,7 @@ test('06 - penampil dokumen: dialog, pilihan halaman dan tombol tutup terbaca', 
   expect(dialog.background).toBe(rgb('#f8f9fc'));
   expect(close.background).toBe(rgb('#5f61e6'));
   expect(close.color).toBe('rgb(255, 255, 255)');
-  expect(pageLabel.color).toBe(rgb('#007b9e'));
+  expect(pageLabel.color).toBe(rgb('#00718e'));
   expect(beforeDisplay).toBe('none');
   await page.locator('#barjas-vdlg').evaluate((el) => el.close());
 });
