@@ -62,7 +62,7 @@ create or replace function public.peran_label(p_role text) returns text language
   select case p_role when 'admin' then 'Admin' when 'operator' then 'Operator KUA'
     when 'bendahara_bop' then 'Bendahara BOP' when 'verifikator_bop' then 'Verifikator BOP'
     when 'bast_nr' then 'BAST NR' when 'kemasjidan' then 'Kemasjidan'
-    when 'pnbp_nr' then 'PNBP NR' when 'pengadaan' then 'Pengelola Pengadaan' else p_role end;
+    when 'pnbp_nr' then 'PNBP NR' when 'pengadaan' then 'Pengelola Pengadaan (akun lama)' else p_role end;
 $$;
 
 -- Trigger ini mengganti versi pada bop.sql agar akun Pengelola Pengadaan dibuat tanpa ikatan KUA.
@@ -70,7 +70,7 @@ create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare
   r text := case when new.raw_user_meta_data->>'role' in
-    ('admin','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan')
+    ('admin','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr')
     then new.raw_user_meta_data->>'role' else 'operator' end;
   k text := case when r = 'operator' then new.raw_user_meta_data->>'kua' end;
 begin
@@ -248,17 +248,10 @@ create index if not exists barjas_dokumen_legacy_file_idx on public.barjas_dokum
 -- 3. Otorisasi per satker/tahun untuk RLS.
 create or replace function public.barjas_can_satker(p_satker_id text, p_tahun integer default null)
 returns boolean
-language sql security definer stable set search_path = public as $$
-  select public.can_menu('barjas') and (
-    public.is_admin()
-    or exists (
-      select 1 from public.barjas_penugasan t
-      where t.user_id = auth.uid()
-        and t.satker_id = p_satker_id
-        and (p_tahun is null or t.tahun = p_tahun)
-    )
-  );
-$$;
+language sql security definer stable set search_path = public as $
+  -- Izin modul berlaku untuk seluruh satker dan seluruh tahun; penugasan hanya metadata.
+  select public.can_menu('barjas');
+$;
 revoke all on function public.barjas_can_satker(text, integer) from public, anon;
 grant execute on function public.barjas_can_satker(text, integer) to authenticated;
 
@@ -315,11 +308,11 @@ create policy barjas_config_read on public.barjas_config for select to authentic
   using (public.can_menu('barjas'));
 drop policy if exists barjas_config_admin on public.barjas_config;
 create policy barjas_config_admin on public.barjas_config for all to authenticated
-  using (public.is_admin()) with check (public.is_admin());
+  using (public.can_menu('barjas')) with check (public.can_menu('barjas'));
 
 drop policy if exists barjas_user_map_admin on public.barjas_user_map;
 create policy barjas_user_map_admin on public.barjas_user_map for all to authenticated
-  using (public.is_admin()) with check (public.is_admin());
+  using (public.can_menu('barjas')) with check (public.can_menu('barjas'));
 
 drop policy if exists barjas_pejabat_access on public.barjas_pejabat;
 create policy barjas_pejabat_access on public.barjas_pejabat for all to authenticated
@@ -333,17 +326,17 @@ create policy barjas_satker_update on public.barjas_satker for update to authent
   using (public.barjas_can_satker(id, null)) with check (public.barjas_can_satker(id, null));
 drop policy if exists barjas_satker_insert on public.barjas_satker;
 create policy barjas_satker_insert on public.barjas_satker for insert to authenticated
-  with check (public.is_admin());
+  with check (public.can_menu('barjas'));
 drop policy if exists barjas_satker_delete on public.barjas_satker;
 create policy barjas_satker_delete on public.barjas_satker for delete to authenticated
-  using (public.is_admin());
+  using (public.can_menu('barjas'));
 
 drop policy if exists barjas_penugasan_read on public.barjas_penugasan;
 create policy barjas_penugasan_read on public.barjas_penugasan for select to authenticated
-  using (public.can_menu('barjas') and (public.is_admin() or user_id = auth.uid()));
+  using (public.can_menu('barjas'));
 drop policy if exists barjas_penugasan_admin on public.barjas_penugasan;
 create policy barjas_penugasan_admin on public.barjas_penugasan for all to authenticated
-  using (public.is_admin()) with check (public.is_admin());
+  using (public.can_menu('barjas')) with check (public.can_menu('barjas'));
 
 drop policy if exists barjas_penyedia_access on public.barjas_penyedia;
 create policy barjas_penyedia_access on public.barjas_penyedia for all to authenticated
@@ -389,7 +382,7 @@ create policy barjas_monev_access on public.barjas_monev for all to authenticate
 
 drop policy if exists barjas_log_read on public.barjas_log;
 create policy barjas_log_read on public.barjas_log for select to authenticated
-  using (public.is_admin());
+  using (public.can_menu('barjas'));
 drop policy if exists barjas_log_insert on public.barjas_log;
 create policy barjas_log_insert on public.barjas_log for insert to authenticated
   with check (public.can_menu('barjas') and (user_id is null or user_id = auth.uid()));
@@ -407,10 +400,8 @@ grant select, insert, update, delete on public.barjas_monev to authenticated;
 grant select, insert on public.barjas_log to authenticated;
 grant usage, select on sequence public.barjas_log_id_seq to authenticated;
 
--- Kompatibilitas akun lama: peran legacy pengadaan tetap mendapat menu BARJAS. Peran lain diatur dari Hak Akses Menu BIMASATU.
-insert into public.hak_akses (role, menu)
-values ('pengadaan', 'barjas')
-on conflict (role, menu) do nothing;
+-- Tidak ada peran khusus BARJAS. Berikan menu BARJAS kepada peran BIMASATU melalui Hak Akses Menu.
+-- Hak menu legacy yang sudah ada tidak dihapus agar akun lama tetap kompatibel.
 
 -- Tidak ada penghapusan hak akses BARJAS untuk peran lain; Admin dapat mengatur izin tersebut melalui Hak Akses Menu BIMASATU.
 
@@ -421,59 +412,20 @@ on conflict (id) do update set public = false, file_size_limit = excluded.file_s
 
 drop policy if exists barjas_storage_read on storage.objects;
 create policy barjas_storage_read on storage.objects for select to authenticated
-using (
-  bucket_id = 'barjas-files'
-  and public.can_menu('barjas')
-  and (
-    public.is_admin()
-    or (storage.foldername(name))[1] = 'penyedia'
-    or exists (
-      select 1 from public.barjas_paket p
-      where p.id = (storage.foldername(name))[1]
-        and public.barjas_can_satker(p.satker_id, p.tahun)
-    )
-  )
-);
+using (bucket_id = 'barjas-files' and public.can_menu('barjas'));
 
 drop policy if exists barjas_storage_insert on storage.objects;
 create policy barjas_storage_insert on storage.objects for insert to authenticated
-with check (
-  bucket_id = 'barjas-files'
-  and public.can_menu('barjas')
-  and (
-    public.is_admin()
-    or (storage.foldername(name))[1] = 'penyedia'
-    or exists (
-      select 1 from public.barjas_paket p
-      where p.id = (storage.foldername(name))[1]
-        and public.barjas_can_satker(p.satker_id, p.tahun)
-    )
-  )
-);
+with check (bucket_id = 'barjas-files' and public.can_menu('barjas'));
 
 drop policy if exists barjas_storage_update on storage.objects;
 create policy barjas_storage_update on storage.objects for update to authenticated
-using (
-  bucket_id = 'barjas-files' and public.can_menu('barjas')
-  and (public.is_admin() or (storage.foldername(name))[1] = 'penyedia'
-    or exists (select 1 from public.barjas_paket p where p.id = (storage.foldername(name))[1]
-      and public.barjas_can_satker(p.satker_id, p.tahun)))
-)
-with check (
-  bucket_id = 'barjas-files' and public.can_menu('barjas')
-  and (public.is_admin() or (storage.foldername(name))[1] = 'penyedia'
-    or exists (select 1 from public.barjas_paket p where p.id = (storage.foldername(name))[1]
-      and public.barjas_can_satker(p.satker_id, p.tahun)))
-);
+using (bucket_id = 'barjas-files' and public.can_menu('barjas'))
+with check (bucket_id = 'barjas-files' and public.can_menu('barjas'));
 
 drop policy if exists barjas_storage_delete on storage.objects;
 create policy barjas_storage_delete on storage.objects for delete to authenticated
-using (
-  bucket_id = 'barjas-files' and public.can_menu('barjas')
-  and (public.is_admin() or (storage.foldername(name))[1] = 'penyedia'
-    or exists (select 1 from public.barjas_paket p where p.id = (storage.foldername(name))[1]
-      and public.barjas_can_satker(p.satker_id, p.tahun)))
-);
+using (bucket_id = 'barjas-files' and public.can_menu('barjas'));
 
 -- Akses tabel BARJAS hanya melalui peran yang sah; anon tidak diberi akses.
 revoke all on public.barjas_config, public.barjas_user_map, public.barjas_pejabat,
