@@ -3,12 +3,8 @@
    impor berkas .xlsx, atau pengetikan manual. */
 (function (w) {
   'use strict';
-  // Selector CSS dari core BARJAS, bukan binding `/* BARJAS - kisi HPS/RAB.
-   Menerima tempelan langsung dari Excel (lengkap dengan sel gabung),
-   impor berkas .xlsx, atau pengetikan manual. */
-(function (w) {
- milik BIMASATU.
-  var $ = w.$, $ = w.$;
+  // Selector CSS dari core BARJAS, bukan binding global BIMASATU.
+  var $ = w.$, $$ = w.$$;
 
   var KOLOM_PERAN = [
     { k: 'no', label: 'Nomor' },
