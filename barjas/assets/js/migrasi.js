@@ -263,7 +263,6 @@
     if (actualProviders < expectedProviders) problems.push('penyedia terbaca ' + actualProviders + ' dari sumber ' + expectedProviders);
     if (packages.length < expectedPackages) problems.push('paket TA ' + App.state.tahun + ' terbaca ' + packages.length + ' dari sumber ' + expectedPackages);
 
-    $('#peran').textContent = (Auth.isAdmin() ? 'Admin sistem' : 'Pengelola Pengadaan') + ' · TA ' + App.state.tahun;
 
     if (problems.length) {
       log('Peringatan verifikasi: data telah dikirim, tetapi hasil baca ulang belum sama: ' + problems.join('; ') + '. Periksa hak akses dan data tabel BARJAS di Supabase.', 'bad');
@@ -286,7 +285,7 @@
     if (!state.token) throw new Error('Sesi sumber SIPADU lama sudah tidak aktif. Hubungkan kembali sebelum memulai migrasi.');
     var userMap = getUserMap();
     if (state.sourceUsers.length && !userMap.some(function (x) { return state.sourceUsers.some(function (u) { return String(u.id) === x.legacy_id && u.role === 'admin'; }); })) {
-      throw new Error('Hubungkan setidaknya akun Admin SIPADU lama ke akun Admin CONNECT.');
+      throw new Error('Hubungkan setidaknya akun Admin SIPADU lama ke akun Admin BIMASATU.');
     }
     state.running = true;
     $('#sm-run').disabled = true;
@@ -316,7 +315,7 @@
   function page(host) {
     App.setJudul('Migrasi Data BARJAS', 'Pindahkan data lama ke database dan penyimpanan Supabase');
     if (!Auth.isAdmin()) {
-      host.innerHTML = '<div class="kartu"><p class="tegas">Khusus Admin</p><p class="mini">Hanya Admin CONNECT yang dapat menjalankan migrasi data.</p></div>';
+      host.innerHTML = '<div class="kartu"><p class="tegas">Khusus Admin</p><p class="mini">Hanya Admin BIMASATU yang dapat menjalankan migrasi data.</p></div>';
       return;
     }
     host.innerHTML = '<div class="kartu mb-3"><header><h2>Sumber data lama</h2></header><div class="badan">' +
@@ -327,7 +326,7 @@
       '<button class="btn primary" id="sm-connect" type="button">Hubungkan & baca data</button></div></div></div>' +
       '<div class="kartu mb-3 d-none" id="sm-result"><header><h2>Pratinjau data yang ditemukan</h2></header><div class="badan">' +
       '<div class="row g-2 mb-3" id="sm-stats"></div><h3 class="h6 mt-3">Pemetaan akun pengguna</h3>' +
-      '<p class="mini">Akun lama tidak disalin bersama hash password-nya. Buat akun Pengelola Pengadaan di menu Manajemen Pengguna lebih dulu, lalu hubungkan setiap akun lama ke akun Supabase yang sesuai. Penugasan yang tidak dipetakan akan diimpor tanpa penanggung jawab.</p>' +
+      '<p class="mini">Akun dan password lama tidak dibuat ulang atau disalin. Hubungkan setiap pengguna SIPADU ke akun BIMASATU yang sudah tersedia; pengguna tetap memakai password BIMASATU. Penugasan yang tidak dipetakan akan diimpor tanpa penanggung jawab.</p>' +
       '<div id="sm-users" class="mb-3"></div><div class="d-flex flex-wrap gap-2"><button class="btn primary" id="sm-run" type="button">Mulai migrasi data</button>' +
       '<button class="btn" id="sm-clear" type="button">Bersihkan sesi lama</button></div>' +
       '<div id="sm-progress-wrap" class="mt-3 d-none"><div class="d-flex justify-content-between small mb-1"><span>Progres</span><span id="sm-progress-text"></span></div><div class="meter"><i id="sm-progress" style="width:0%"></i></div></div>' +
