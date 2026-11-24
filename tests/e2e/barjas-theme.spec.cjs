@@ -55,7 +55,7 @@ test('01 - tombol: default, primary, danger, ghost, disabled, hover dan kontras'
 
   await page.locator('#btn-primary').hover();
   expect(await page.locator('#btn-primary').evaluate((el) => el.matches(':hover'))).toBeTruthy();
-  expect((await style(page.locator('#btn-primary'))).background).toBe(rgb('#4f50c5'));
+  await expect(page.locator('#btn-primary')).toHaveCSS('background-color', rgb('#4f50c5'));
 });
 
 test('02 - text field: input, textarea, select, Bootstrap controls, readonly, disabled dan focus', async ({ page }) => {
