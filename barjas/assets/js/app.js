@@ -38,8 +38,6 @@
     }});
     if (!Auth.guard()) return;
     var C = w.CONFIG;
-
-  var C = w.CONFIG;
   var App = {
     state: { user: Auth.user(), tahun: localStorage.getItem('barjas.tahun') || String(new Date().getFullYear()), master: null },
 
