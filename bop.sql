@@ -63,7 +63,7 @@ end $$;
 
 -- 1) PROFIL AKUN DAN PERAN -------------------------------------------------------------
 -- Peran: admin | operator (= Operator KUA, terikat ke satu KUA lewat kua_id) | bendahara_bop | verifikator_bop | bast_nr |
--- kemasjidan | pnbp_nr | pengadaan (Pengelola Pengadaan, hanya menu BARJAS; tidak terikat KUA). Daftar ini juga ada di handle_new_user(), set_hak_akses(),
+-- kemasjidan | pnbp_nr | pengadaan (peran legacy untuk kompatibilitas akun lama; menu BARJAS dapat diberikan melalui hak_akses ke peran mana pun). Daftar ini juga ada di handle_new_user(), set_hak_akses(),
 -- supabase/functions/bop/index.ts (PERAN) dan js/core.js (PERAN): ubah semuanya bersama.
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -280,7 +280,7 @@ begin
         raise exception 'Menu realisasi hanya untuk Operator KUA (mengisi Realisasi KUA sendiri).'; end if;
       if r <> 'operator' and m = 'dashboard' then
         raise exception 'Menu dashboard hanya untuk Operator KUA (ringkasan KUA-nya sendiri).'; end if;
-remove role lock in bop.sql    end loop;
+    end loop;
     delete from public.hak_akses where role = r;
     insert into public.hak_akses (role, menu, updated_by) select r, x, auth.uid() from unnest(menus) x;
   end loop;
