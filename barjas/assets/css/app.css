@@ -15,7 +15,7 @@
   --emas: #ffab00;
   --merah: #c62828;
   --merah-muda: #ffe5e0;
-  --biru: #03c3ec;
+  --biru: #00718e;
   --garis: #e6e6f0;
   --garis2: #f1f1f5;
   --r: 8px;
@@ -173,7 +173,7 @@
 #barjas-root .badge.ok{ background: var(--sukses-soft); color: var(--sukses); border-color: var(--sukses-border); }
 #barjas-root .badge.warn{ background: #fdf3e2; color: #8a5f10; border-color: #ecd9ae; }
 #barjas-root .badge.bad{ background: var(--merah-muda); color: var(--merah); border-color: #e9cdc6; }
-#barjas-root .badge.info{ background: #e7f8fc; color: #007b9e; border-color: #b8eaf3; }
+#barjas-root .badge.info{ background: #e7f8fc; color: #00718e; border-color: #b8eaf3; }
 
 #barjas-root /* ---------- tabel ---------- */
 .tabel-wrap{ overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -575,7 +575,7 @@
 #barjas-root .text-body-secondary { color: #65748a !important; }
 #barjas-root .text-success { color: #2d6b12 !important; }
 #barjas-root .text-danger { color: #c62828 !important; }
-#barjas-root .text-info { color: #007b9e !important; }
+#barjas-root .text-info { color: #00718e !important; }
 #barjas-root .table {
   --bs-table-color: #566a7f;
   --bs-table-bg: #fff;
@@ -671,7 +671,7 @@
   background: #4f50c5;
   border-color: #4f50c5;
 }
-#barjas-root #barjas-vdlg .vw-page { color: #007b9e; background: #e7f8fc; }
+#barjas-root #barjas-vdlg .vw-page { color: #00718e; background: #e7f8fc; }
 
 @media (max-width: 720px) {
   #barjas-root .modal-bg { padding: 10px; }
