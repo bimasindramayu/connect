@@ -10,6 +10,7 @@ test('BARJAS menu permission is passed into the module and grants all satker', (
   expect(app).toContain('menus: Array.isArray(current.menus) ? current.menus.slice() : []');
   expect(app).toContain("u.role === 'admin' || (Array.isArray(u.menus) && u.menus.indexOf('barjas') >= 0)");
   expect(app).toContain('if (App.canManage()) return m.satker || [];');
+  expect(app).toContain("var cacheKey = 'master.v2.' + App.state.user.id + '.' + App.state.tahun;");
   expect(app).not.toContain('if (Auth.isAdmin()) return m.satker || [];');
 });
 
