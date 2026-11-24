@@ -70,17 +70,15 @@ Deno.serve(async (req) => {
 
     const access = checked(await db.rpc('akses_saya'), 'Hak akses');
     if (!access) return fail('Profil akun tidak ditemukan.', 'AUTH', 401);
-    const isAdmin = access.role === 'admin';
-    const canBarjas = isAdmin || (Array.isArray(access.menus) && access.menus.includes('barjas'));
+    const canBarjas = access.role === 'admin' || (Array.isArray(access.menus) && access.menus.includes('barjas'));
     if (!canBarjas) return fail('Akun ini tidak memiliki hak akses BARJAS.', 'FORBIDDEN', 403);
 
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || '');
     const d = body.data || {};
-    const adminOnly = () => { if (!isAdmin) throw new Error('Hanya Admin yang dapat melakukan tindakan ini.'); };
     const getPackage = async (id: string) => {
       const row = checked(await db.from('barjas_paket').select('*').eq('id', id).maybeSingle(), 'Paket');
-      if (!row) throw new Error('Paket tidak ditemukan atau Anda tidak ditugaskan pada satker ini.');
+      if (!row) throw new Error('Paket tidak ditemukan.');
       return row;
     };
     const log = async (aksi: string, detail = '') => {
@@ -111,7 +109,7 @@ Deno.serve(async (req) => {
         configRows.forEach((r: any) => { config[r.key] = r.value; });
 
         let users: any[] = [];
-        if (isAdmin) {
+        if (canBarjas) {
           const all: any[] = [];
           let page = 1;
           while (page <= 20) {
@@ -152,7 +150,6 @@ Deno.serve(async (req) => {
       case 'save': {
         const entity = String(d.entity || '');
         const row = d.row || {};
-        if (entity === 'Penugasan') adminOnly();
         const tableMap: Record<string, string> = {
           Pejabat: 'barjas_pejabat', Satker: 'barjas_satker', Penugasan: 'barjas_penugasan',
           Penyedia: 'barjas_penyedia',
@@ -175,15 +172,10 @@ Deno.serve(async (req) => {
           const prefix: Record<string, string> = { Satker: 'S', Pejabat: 'J', Penyedia: 'V' };
           payload.id = uid(prefix[entity] || 'S');
         }
-        if (entity === 'Satker' && !isAdmin) {
-          if (!payload.id) throw new Error('Pengelola satker tidak dapat menambah satuan kerja.');
-          return json({ ok: true, data: checked(await db.from(table).update(payload).eq('id', payload.id).select().single(), 'Simpan ' + entity) });
-        }
         return json({ ok: true, data: checked(await db.from(table).upsert(payload).select().single(), 'Simpan ' + entity) });
       }
 
       case 'remove': {
-        adminOnly();
         const tableMap: Record<string, string> = { Pejabat: 'barjas_pejabat', Satker: 'barjas_satker', Penyedia: 'barjas_penyedia' };
         const table = tableMap[String(d.entity || '')];
         if (!table) throw new Error('Entitas tidak dikenal atau tidak dapat dihapus.');
@@ -193,7 +185,6 @@ Deno.serve(async (req) => {
       }
 
       case 'saveConfig': {
-        adminOnly();
         const rows = Object.keys(d || {}).map((key) => ({ key, value: d[key], updated_at: now() }));
         await upsertMany(db, 'barjas_config', rows, 'key');
         await log('ubah-pengaturan', 'Config BARJAS');
@@ -377,7 +368,6 @@ Deno.serve(async (req) => {
       }
 
       case 'importState': {
-        adminOnly();
         const [docs, providers] = await Promise.all([
           admin.from('barjas_dokumen').select('id,legacy_file_id,storage_path'),
           admin.from('barjas_penyedia').select('id,cp_legacy_file_id,cp_storage_path'),
@@ -389,7 +379,6 @@ Deno.serve(async (req) => {
       }
 
       case 'importBatch': {
-        adminOnly();
         const configRows = Object.entries(d.config || {}).map(([key, value]) => ({ key, value, updated_at: now() }));
         await upsertMany(db, 'barjas_config', configRows, 'key');
 
@@ -460,7 +449,6 @@ Deno.serve(async (req) => {
       }
 
       case 'importDocLink': {
-        adminOnly();
         const doc = d.doc || {};
         const row = {
           id: String(d.legacy_id || doc.id || uid('D')),
@@ -482,7 +470,6 @@ Deno.serve(async (req) => {
       }
 
       case 'importProviderLink': {
-        adminOnly();
         const id = String(d.id || '');
         const p = checked(await db.from('barjas_penyedia').update({
           cp_file_id: d.legacy_file_id || null,
