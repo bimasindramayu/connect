@@ -1,61 +1,45 @@
-/* BARJAS - boot aplikasi. */
-(async function (w) {
+/* BARJAS - modul yang ditanam di dalam BIMASATU. */
+(function (w) {
   'use strict';
-  var authState = await BARJAS_SB.auth.getSession();
-  var sharedSession = authState && authState.data && authState.data.session;
-  if (!sharedSession) { location.href = '../index.html'; return; }
-  var accessResult = await BARJAS_SB.rpc('akses_saya');
-  var access = accessResult && accessResult.data;
-  if (accessResult.error || !access || (access.role !== 'admin' && !(access.menus || []).includes('barjas'))) {
-    document.body.innerHTML = '<main style="max-width:620px;margin:12vh auto;padding:24px;font:16px/1.5 Arial,sans-serif"><h2>Akses BARJAS tidak diberikan</h2><p>Akun ini tidak memiliki hak menu BARJAS. Hubungi Admin CONNECT untuk mengatur hak akses.</p><a href="../index.html">Kembali ke BIMASATU</a></main>';
-    return;
+
+  function shell() {
+    return '<section id="barjas-root" class="barjas-module">' +
+      '<div id="barjas-bar"></div>' +
+      '<header class="atas"><div class="barjas-heading"><h1 id="barjas-judul">BARJAS</h1></div>' +
+      '<div id="barjas-alat-atas" class="baris"></div></header>' +
+      '<div id="barjas-view"></div>' +
+      '<div id="barjas-toast" aria-live="polite"></div>' +
+      '<dialog id="barjas-vdlg" aria-label="Pratinjau dokumen"></dialog>' +
+      '</section>';
   }
-  var authUserResult = await BARJAS_SB.auth.getUser();
-  var authUser = authUserResult && authUserResult.data && authUserResult.data.user;
-  Auth.save({
-    token: sharedSession.access_token,
-    exp: sharedSession.expires_at ? sharedSession.expires_at * 1000 : Date.now() + 3600000,
-    user: {
-      id: access.id, nama: access.nama || (authUser && authUser.email) || '',
-      username: authUser && authUser.email ? authUser.email.split('@')[0] : '',
-      email: authUser && authUser.email ? authUser.email : '',
-      role: access.role === 'admin' ? 'admin' : 'operator'
+
+  function pageBarjas() {
+    var view = document.getElementById('view');
+    if (!view) return;
+    var root = document.getElementById('barjas-root');
+    if (!root) {
+      view.innerHTML = shell();
+      mount();
+    } else if (w.Router && typeof w.Router.run === 'function') {
+      w.Router.run();
     }
-  });
-  if (!Auth.guard()) return;
-  var C = w.CONFIG;
-
-  var ICON = {
-    beranda: 'M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5',
-    satker: 'M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5',
-    penugasan: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
-    paket: 'M4 7h16v13H4zM4 7l2-3h12l2 3M9 12h6',
-    penyedia: 'M3 20h18M6 20V9l6-4 6 4v11M10 20v-4h4v4',
-    pejabat: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1',
-    pengguna: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87',
-    pengaturan: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.5 19l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 7.5l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.7-1.1V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z'
-  };
-  function ikon(n) {
-    return el('span', {
-      html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
-        'stroke-linecap="round" stroke-linejoin="round"><path d="' + (ICON[n] || '') + '"/></svg>'
-    });
   }
 
-  var MENU = [
-    { grup: 'Pekerjaan' },
-    { id: 'beranda', label: 'Beranda' },
-    { id: 'paket', label: 'Paket pengadaan' },
-    { id: 'satker', label: 'Satuan kerja' },
-    { id: 'penugasan', label: 'Penugasan & pagu' },
-    { grup: 'Basis data' },
-    { id: 'penyedia', label: 'Penyedia' },
-    { id: 'pejabat', label: 'Pejabat' },
-    { id: 'pengguna', label: 'Pengguna', admin: true },
-    { id: 'migrasi', label: 'Migrasi Data', admin: true },
-    { id: 'pengaturan', label: 'Pengaturan', admin: true }
-  ];
+  function mount() {
+    var current = w.BIMASATU && w.BIMASATU.currentUser();
+    if (!current || !(current.role === 'admin' || (current.menus || []).includes('barjas'))) {
+      var host = document.getElementById('barjas-view');
+      if (host) host.textContent = 'Akun ini tidak memiliki hak akses BARJAS.';
+      return;
+    }
+    Auth.save({ token: 'shared-bimasatu-session', user: {
+      id: current.id, nama: current.nama || current.email || '',
+      username: current.username || '', email: current.email || '', role: current.role
+    }});
+    if (!Auth.guard()) return;
+    var C = w.CONFIG;
 
+  var C = w.CONFIG;
   var App = {
     state: { user: Auth.user(), tahun: localStorage.getItem('barjas.tahun') || String(new Date().getFullYear()), master: null },
 
@@ -73,13 +57,13 @@
     },
 
     setJudul: function (t, sub) {
-      clear($('#judul'));
-      $('#judul').appendChild(document.createTextNode(t));
-      if (sub) $('#judul').appendChild(el('span.sub', { text: sub }));
-      document.title = t + ' — BARJAS';
+      clear($('#barjas-judul'));
+      $('#barjas-judul').appendChild(document.createTextNode(t));
+      if (sub) $('#barjas-judul').appendChild(el('span.sub', { text: sub }));
+      document.title = t + ' · BIMASATU';
     },
     alat: function (nodes) {
-      var box = clear($('#alat-atas'));
+      var box = clear($('#barjas-alat-atas'));
       (nodes || []).forEach(function (n) { if (n) box.appendChild(n); });
     },
 
@@ -129,24 +113,7 @@
   };
   w.App = App;
 
-  /* ---------- kerangka ---------- */
-  function railMenu() {
-    var nav = clear($('#nav'));
-    MENU.forEach(function (m) {
-      if (m.grup) return nav.appendChild(el('div.grup', { text: m.grup }));
-      if (m.admin && !Auth.isAdmin()) return;
-      nav.appendChild(el('a', { href: '#/' + m.id }, [ikon(m.id), m.label]));
-    });
-    var u = Auth.user();
-    $('#who').textContent = u.nama || u.username;
-    $('#peran').textContent = (u.role === 'admin' ? 'Admin sistem' : 'Pengelola Pengadaan') + ' · TA ' + App.state.tahun;
-  }
-  $('#burger').addEventListener('click', function () { document.body.classList.toggle('nav-buka'); });
-  $('#keluar').addEventListener('click', function () {
-    UI.confirm('Keluar dari BARJAS?', function () {
-      BARJAS_SB.auth.signOut().catch(function () { }).then(function () { Auth.clear(); location.href = '../index.html'; });
-    }, { yes: 'Keluar', kind: 'danger' });
-  });
+  /* Navigasi, identitas akun, dan logout disediakan oleh kerangka BIMASATU. */
 
   /* pemilih tahun anggaran, selalu tampil di kanan atas */
   w.pilihTahun = function () {
@@ -172,25 +139,24 @@
       .add('penugasan', P.penugasan)
       .add('penyedia', P.penyedia)
       .add('pejabat', P.pejabat)
-      .add('pengguna', P.pengguna)
       .add('pengaturan', P.pengaturan)
       .add('migrasi', w.BarjasMigrasi.page)
       .add('paket', function (host, ctx) { return ctx.id ? K.detail(host, ctx) : K.daftar(host, ctx); });
   }
 
-  railMenu();
   App.muat().then(function () {
-    railMenu();
+    if (!document.getElementById('barjas-root')) return;
     daftarkan();
     Router.start(w.Pages.beranda);
   }).catch(function (e) {
-    clear($('#view')).appendChild(UI.empty(
+    var host = $('#barjas-view');
+    if (host) clear(host).appendChild(UI.empty(
       'Tidak dapat menghubungi server',
       e.message + ' — periksa koneksi proyek Supabase dan pastikan Edge Function BARJAS sudah di-deploy.',
-      el('div.baris', { style: 'justify-content:center' }, [
-        el('button.btn.primary', { onclick: function () { location.reload(); } }, 'Muat ulang'),
-        el('button.btn', { onclick: function () { Auth.clear(); location.href = '../index.html'; } }, 'Kembali ke BIMASATU')
-      ])
+      el('button.btn.primary', { onclick: function () { App.muat(true).then(function () { Router.run(w.Pages.beranda); }).catch(UI.err); } }, 'Muat ulang')
     ));
   });
+  }
+  
+  w.pageBarjas = pageBarjas;
 })(window);
