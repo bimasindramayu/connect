@@ -71,10 +71,11 @@
     /* data master sekali muat, dipakai seluruh halaman */
     muat: function (paksa) {
       if (App.state.master && !paksa) return Promise.resolve(App.state.master);
-      var cache = paksa ? null : Store.get('master.' + App.state.tahun, C.CACHE_TTL);
+      var cacheKey = 'master.v2.' + App.state.user.id + '.' + App.state.tahun;
+      var cache = paksa ? null : Store.get(cacheKey, C.CACHE_TTL);
       var p = cache ? Promise.resolve(cache) : API.call('bootstrap', { tahun: App.state.tahun });
       return p.then(function (m) {
-        Store.set('master.' + App.state.tahun, m);
+        Store.set(cacheKey, m);
         App.state.master = m;
         App.peta = { satker: {}, pejabat: {}, penyedia: {}, users: {} };
         ['satker', 'pejabat', 'penyedia', 'users'].forEach(function (k) {
