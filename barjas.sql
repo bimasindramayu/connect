@@ -4,7 +4,7 @@
 
 begin;
 
--- 1. Peran khusus pengelola pengadaan. Peran ini terpisah dari Operator KUA.
+-- 1. Pertahankan daftar peran lama untuk kompatibilitas. BARJAS diberikan melalui hak_akses BIMASATU.
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles add constraint profiles_role_check
   check (role in ('admin','operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan'));
@@ -502,11 +502,7 @@ begin
         raise exception 'Menu % tidak dapat diberikan ke Operator KUA: operator hanya boleh mengakses data KUA-nya sendiri.', m; end if;
       if r <> 'operator' and m in ('realisasi','dashboard') then
         raise exception 'Menu % hanya untuk Operator KUA.', m; end if;
-      if r = 'pengadaan' and m <> 'barjas' then
-        raise exception 'Peran Pengelola Pengadaan hanya dapat diberi menu BARJAS.'; end if;
-      if r <> 'pengadaan' and m = 'barjas' then
-        raise exception 'Menu BARJAS hanya dapat diberikan kepada peran Pengelola Pengadaan.'; end if;
-    end loop;
+remove role lock in barjas.sql    end loop;
     delete from public.hak_akses where role = r;
     insert into public.hak_akses (role, menu, updated_by) select r, x, auth.uid() from unnest(menus) x;
   end loop;
