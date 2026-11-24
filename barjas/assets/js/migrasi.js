@@ -234,6 +234,49 @@
     return { total: total, moved: moved, linked: linked, failed: failed };
   }
 
+  async function refreshTargetAfterMigration(master, details) {
+    var years = details.map(function (x) {
+      return x && x.paket && x.paket.tahun != null ? String(x.paket.tahun) : '';
+    }).filter(function (y) { return /^\\d{4}$/.test(y); });
+    var currentYear = String(App.state.tahun);
+    if (years.length && years.indexOf(currentYear) < 0) {
+      years.sort(function (a, b) { return Number(b) - Number(a); });
+      App.state.tahun = years[0];
+      localStorage.setItem('barjas.tahun', App.state.tahun);
+    }
+
+    /* Hapus cache lama dan baca ulang langsung dari Supabase. */
+    Store.dropAll();
+    App.state.master = null;
+    var refreshed = await App.muat(true);
+    var packages = await w.muatPaket(true);
+    var expectedPackages = details.filter(function (x) {
+      return x && x.paket && String(x.paket.tahun) === String(App.state.tahun);
+    }).length;
+    var expectedSatker = (master.satker || []).length;
+    var actualSatker = (refreshed.satker || []).length;
+    var expectedProviders = (master.penyedia || []).length;
+    var actualProviders = (refreshed.penyedia || []).length;
+    var problems = [];
+
+    if (actualSatker < expectedSatker) problems.push('satker terbaca ' + actualSatker + ' dari sumber ' + expectedSatker);
+    if (actualProviders < expectedProviders) problems.push('penyedia terbaca ' + actualProviders + ' dari sumber ' + expectedProviders);
+    if (packages.length < expectedPackages) problems.push('paket TA ' + App.state.tahun + ' terbaca ' + packages.length + ' dari sumber ' + expectedPackages);
+
+    $('#peran').textContent = (Auth.isAdmin() ? 'Admin sistem' : 'Pengelola Pengadaan') + ' · TA ' + App.state.tahun;
+
+    if (problems.length) {
+      log('Peringatan verifikasi: data telah dikirim, tetapi hasil baca ulang belum sama: ' + problems.join('; ') + '. Periksa hak akses dan data tabel BARJAS di Supabase.', 'bad');
+      return false;
+    }
+
+    log('Verifikasi Supabase berhasil: ' + actualSatker + ' satker, ' + actualProviders + ' penyedia, ' +
+      (refreshed.pejabat || []).length + ' pejabat, ' + packages.length + ' paket untuk TA ' + App.state.tahun + '.', 'ok');
+    UI.toast('Data BARJAS sudah dimuat ulang dari Supabase.', 'ok');
+    Router.go(packages.length ? '/paket' : '/satker');
+    return true;
+  }
+
   async function runMigration() {
     var master = state.master;
     var details = state.details.slice();
@@ -258,6 +301,11 @@
       log('Selesai. Berkas dipindahkan ke Supabase Storage: ' + files.moved + ', metadata/link lama: ' + files.linked + ', gagal total: ' + files.failed + '.', files.failed ? 'bad' : 'ok');
       log('Migrasi dapat dijalankan ulang. ID lama dipertahankan dan data yang sudah tersalin tidak digandakan.', 'ok');
       if (files.linked) log('Sebagian berkas tetap berupa tautan lama karena endpoint fileGet/Google Drive tidak dapat membacanya. Periksa URL pada riwayat dokumen.', 'info');
+      try {
+        await refreshTargetAfterMigration(master, details);
+      } catch (refreshError) {
+        log('Data telah selesai diimpor, tetapi pemuatan ulang/verifikasi tampilan gagal: ' + refreshError.message, 'bad');
+      }
     } finally {
       state.running = false;
       $('#sm-run').disabled = !state.ready;
