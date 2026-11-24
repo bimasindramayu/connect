@@ -144,7 +144,39 @@ test('05 - tabel, tab dan badge: status semantik terpisah dari warna primer', as
   expect(hpsCell.background).toBe(rgb('#e7e7ff'));
 });
 
-test('06 - penampil dokumen: dialog, pilihan halaman dan tombol tutup terbaca', async ({ page }) => {
+test('06 - modal preview dokumen dari tombol Buat: lebar dan tinggi besar', async ({ page }) => {
+  const fixtureModal = page.locator('#preview-modal-fixture');
+  await fixtureModal.evaluate((el) => { el.hidden = false; });
+
+  const modal = page.locator('#preview-modal-fixture .modal');
+  const body = page.locator('#preview-modal-fixture .modal-body');
+  const iframe = page.locator('#preview-modal-fixture iframe');
+  const box = await modal.boundingBox();
+  const bodyBox = await body.boundingBox();
+  const frameBox = await iframe.boundingBox();
+
+  expect(box.width).toBeGreaterThanOrEqual(1200);
+  expect(box.width).toBeLessThanOrEqual(1240);
+  expect(box.height).toBeGreaterThan(900);
+  expect(bodyBox.height).toBeGreaterThan(700);
+  expect(frameBox.height).toBeGreaterThan(650);
+  expect((await style(modal)).position).toBe('relative');
+});
+
+test('07 - modal preview dokumen tetap memenuhi layar pada perangkat kecil', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const fixtureModal = page.locator('#preview-modal-fixture');
+  await fixtureModal.evaluate((el) => { el.hidden = false; });
+  const modal = page.locator('#preview-modal-fixture .modal');
+  const box = await modal.boundingBox();
+
+  expect(box.width).toBeGreaterThanOrEqual(370);
+  expect(box.width).toBeLessThanOrEqual(390);
+  expect(box.height).toBeGreaterThanOrEqual(800);
+  expect(box.height).toBeLessThanOrEqual(844);
+});
+
+test('08 - penampil dokumen: dialog, pilihan halaman dan tombol tutup terbaca', async ({ page }) => {
   await page.locator('#barjas-vdlg').evaluate((el) => el.showModal());
   const dialog = await style(page.locator('#barjas-vdlg'));
   const close = await style(page.locator('#barjas-vdlg .vw-close'));
@@ -159,13 +191,13 @@ test('06 - penampil dokumen: dialog, pilihan halaman dan tombol tutup terbaca', 
   await page.locator('#barjas-vdlg').evaluate((el) => el.close());
 });
 
-test('07 - CSS BARJAS tidak mengubah tombol di luar modul BIMASATU', async ({ page }) => {
+test('09 - CSS BARJAS tidak mengubah tombol di luar modul BIMASATU', async ({ page }) => {
   const outside = await style(page.locator('#outside-btn'));
   expect(outside.background).toBe(rgb('#696cff'));
   expect(outside.color).toBe('rgb(255, 255, 255)');
 });
 
-test('framework Sneat yang sama dengan index BIMASATU berhasil dimuat', async ({ page }) => {
+test('10 - framework Sneat yang sama dengan index BIMASATU berhasil dimuat', async ({ page }) => {
   const loaded = await page.locator('#sneat-css').evaluate((el) => !!el.sheet);
   expect(loaded).toBeTruthy();
 });
