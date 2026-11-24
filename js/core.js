@@ -29,7 +29,7 @@ const live = ep => ep === EP;
    supabase/functions/bop/index.ts (PERAN): ubah semuanya bersama. Menu apa yang boleh dibuka tiap peran diatur admin di halaman
    "Hak Akses Menu" (tabel hak_akses) dan dibaca lewat akses_saya(). Tampilan hanya mengikuti; yang menentukan tetap server
    (RLS/trigger database, Apps Script, Edge Function), jadi menyembunyikan menu di sini bukan satu-satunya pengaman. */
-const PERAN = { admin: 'Admin', operator: 'Operator KUA', bendahara_bop: 'Bendahara BOP', verifikator_bop: 'Verifikator BOP', bast_nr: 'BAST NR', kemasjidan: 'Kemasjidan', pnbp_nr: 'PNBP NR', pengadaan: 'Pengelola Pengadaan' };
+const PERAN = { admin: 'Admin', operator: 'Operator KUA', bendahara_bop: 'Bendahara BOP', verifikator_bop: 'Verifikator BOP', bast_nr: 'BAST NR', kemasjidan: 'Kemasjidan', pnbp_nr: 'PNBP NR', pengadaan: 'Pengelola Pengadaan (akun lama)' };
 const peranLabel = r => PERAN[r] || r;
 const can = menu => !!me && Array.isArray(me.menus) && me.menus.includes(menu);   // menu = kunci menu (sama dengan hash halaman, mis. 'rpd', 'bast-buat')
 // Urutan mencari halaman awal bila alamat kosong atau menunya tidak boleh dibuka akun ini. Dashboard (khusus Operator KUA) menjadi halaman awal
