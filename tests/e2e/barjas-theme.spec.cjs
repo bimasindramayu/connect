@@ -54,6 +54,7 @@ test('01 - tombol: default, primary, danger, ghost, disabled, hover dan kontras'
   expect(contrast(primary.color, primary.background)).toBeGreaterThanOrEqual(4.5);
 
   await page.locator('#btn-primary').hover();
+  expect(await page.locator('#btn-primary').evaluate((el) => el.matches(':hover'))).toBeTruthy();
   expect((await style(page.locator('#btn-primary'))).background).toBe(rgb('#4f50c5'));
 });
 
