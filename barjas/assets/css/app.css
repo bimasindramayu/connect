@@ -729,3 +729,46 @@
   background-color: #e7f8fc !important;
   border-color: #b8eaf3 !important;
 }
+
+
+/* Generated document preview ("Buat" button): large, viewport-fitted modal. */
+#barjas-root .modal.penuh {
+  width: min(1240px, calc(100vw - 36px));
+  height: min(92vh, 1100px);
+  max-height: 92vh;
+  min-height: 0;
+}
+#barjas-root .modal.penuh .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  padding: 0;
+}
+#barjas-root .modal.penuh .pratinjau-dokumen {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #f8f9fc;
+}
+#barjas-root .modal.penuh .pratinjau-dokumen iframe {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: #fff;
+}
+@media (max-width: 720px) {
+  #barjas-root .modal.penuh {
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+}
