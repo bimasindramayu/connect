@@ -26,6 +26,8 @@
   }
 
   function mount() {
+    // BIMASATU memiliki binding global lexical `$` (getElementById). Pakai helper CSS BARJAS secara lokal.
+    var $ = w.$, $$ = w.$$, el = w.el, clear = w.clear;
     var current = w.BIMASATU && w.BIMASATU.currentUser();
     if (!current || !(current.role === 'admin' || (current.menus || []).includes('barjas'))) {
       var host = document.getElementById('barjas-view');
