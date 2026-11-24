@@ -1,0 +1,38 @@
+name: BARJAS theme regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'barjas/assets/css/**'
+      - 'css/app.css'
+      - 'tests/**'
+      - 'playwright.config.cjs'
+      - '.github/workflows/barjas-theme.yml'
+  push:
+    branches: [feat/migrasi-sipadu-supabase]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  theme-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright test runner
+        run: npm install --no-save --no-package-lock @playwright/test
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run BARJAS component visual regression tests
+        run: npx playwright test tests/e2e/barjas-theme.spec.cjs --reporter=line
+      - name: Upload screenshot and trace output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: barjas-theme-test-results
+          path: test-results/
+          if-no-files-found: ignore
