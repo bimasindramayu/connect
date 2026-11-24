@@ -32,7 +32,7 @@ test('BARJAS Edge Function has no Admin-only action gate after menu authorizatio
 test('BARJAS database policies scope all rows and storage by menu permission, not satker assignment', () => {
   const sql = read('barjas.sql');
   const helperStart = sql.indexOf('create or replace function public.barjas_can_satker');
-  const helperEnd = sql.indexOf('$$;', helperStart);
+  const helperEnd = sql.indexOf('$barjas$;', helperStart);
   expect(helperStart).toBeGreaterThanOrEqual(0);
   const helper = sql.slice(helperStart, helperEnd);
   expect(helper).toContain("select public.can_menu('barjas');");
