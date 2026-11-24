@@ -36,7 +36,8 @@
     }
     Auth.save({ token: 'shared-bimasatu-session', user: {
       id: current.id, nama: current.nama || current.email || '',
-      username: current.username || '', email: current.email || '', role: current.role
+      username: current.username || '', email: current.email || '', role: current.role,
+      menus: Array.isArray(current.menus) ? current.menus.slice() : []
     }});
     if (!Auth.guard()) return;
     var C = w.CONFIG;
@@ -95,11 +96,19 @@
       App.muat(true).then(function () { w.dispatchEvent(new Event('hashchange')); });
     },
 
-    /* satker yang boleh diakses pengguna pada tahun aktif */
+    /* Izin menu BARJAS berarti akses seluruh data dan fungsi di dalam modul ini.
+       Role BIMASATU tetap tidak berubah dan tidak memberi akses ke modul lain. */
+    canManage: function () {
+      var u = App.state.user || {};
+      return u.role === 'admin' || (Array.isArray(u.menus) && u.menus.indexOf('barjas') >= 0);
+    },
+
+    /* Semua pengguna yang diberi menu BARJAS dapat melihat seluruh satker;
+       penugasan hanya menjadi metadata pengelolaan, bukan filter visibilitas. */
     satkerSaya: function () {
       var m = App.state.master || {}, u = App.state.user;
       var tugas = (m.penugasan || []).filter(function (p) { return String(p.tahun) === App.state.tahun; });
-      if (Auth.isAdmin()) return m.satker || [];
+      if (App.canManage()) return m.satker || [];
       var ids = {};
       tugas.forEach(function (p) { if (p.user_id === u.id) ids[p.satker_id] = 1; });
       return (m.satker || []).filter(function (s) { return ids[s.id]; });
