@@ -37,7 +37,7 @@ async function upsertMany(db: any, table: string, rows: any[], conflict = 'id') 
 }
 
 function mapUser(user: any, profile: any) {
-  const role = profile?.role === 'admin' ? 'admin' : 'operator';
+  const role = profile?.role || 'operator';
   return {
     id: user.id,
     nama: profile?.nama || user.user_metadata?.nama || user.email || '',
@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
           const profiles = checked(await admin.from('profiles').select('id,nama,role,kua'), 'Profil pengguna') || [];
           const profileMap = new Map(profiles.map((p: any) => [p.id, p]));
           users = all
-            .filter((u: any) => ['admin', 'pengadaan'].includes((profileMap.get(u.id) as any)?.role))
+            .filter((u: any) => profileMap.has(u.id))
             .map((u: any) => mapUser(u, profileMap.get(u.id)));
         } else {
           users = [{
@@ -152,36 +152,7 @@ Deno.serve(async (req) => {
       case 'save': {
         const entity = String(d.entity || '');
         const row = d.row || {};
-        if (entity === 'Users') {
-          adminOnly();
-          const role = row.role === 'admin' ? 'admin' : 'pengadaan';
-          let email = String(row.email || '').trim().toLowerCase();
-          if (!email) {
-            const domain = Deno.env.get('BARJAS_EMAIL_DOMAIN') || '';
-            const username = String(row.username || '').trim().toLowerCase();
-            if (!domain || !username) throw new Error('Email wajib diisi untuk membuat akun Supabase. Atur BARJAS_EMAIL_DOMAIN atau isi kolom Email.');
-            email = username + '@' + domain;
-          }
-          let authResult: any;
-          if (row.id) {
-            const patch: any = { email, user_metadata: { nama: row.nama, nip: row.nip || '', username: row.username || String(email).split('@')[0], role } };
-            if (row.password) patch.password = row.password;
-            if (row.aktif === false) patch.ban_duration = '876000h';
-            else patch.ban_duration = 'none';
-            authResult = checked(await admin.auth.admin.updateUserById(row.id, patch), 'Ubah akun');
-            checked(await admin.from('profiles').update({ nama: row.nama, role, kua: null, kua_id: null }).eq('id', row.id), 'Perbarui profil');
-          } else {
-            if (String(row.password || '').length < 8) throw new Error('Kata sandi minimal 8 karakter.');
-            authResult = checked(await admin.auth.admin.createUser({
-              email, password: row.password, email_confirm: true,
-              user_metadata: { nama: row.nama, nip: row.nip || '', username: row.username || String(email).split('@')[0], role },
-            }), 'Buat akun');
-          }
-          await log(row.id ? 'ubah-pengguna' : 'tambah-pengguna', email);
-          return json({ ok: true, data: mapUser(authResult.user, { nama: row.nama, role }) });
-        }
-
-        if (entity === 'Penugasan' || entity === 'Users') adminOnly();
+        if (entity === 'Penugasan') adminOnly();
         const tableMap: Record<string, string> = {
           Pejabat: 'barjas_pejabat', Satker: 'barjas_satker', Penugasan: 'barjas_penugasan',
           Penyedia: 'barjas_penyedia',
