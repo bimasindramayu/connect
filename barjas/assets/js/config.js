@@ -1,7 +1,7 @@
 /* BARJAS - konfigurasi aplikasi.
    Satu-satunya berkas yang perlu diubah saat deploy. */
 window.CONFIG = {
-  APP_NAME: 'PROCIMY',
+  APP_NAME: 'BARJAS',
   APP_LONG: 'Procurement Indramayu',
   INSTANSI: 'Kantor Kementerian Agama Kabupaten Indramayu',
   VERSION: '1.0.0',
@@ -16,7 +16,7 @@ window.CONFIG = {
   CHUNK_SIZE: 512 * 1024,     // dipertahankan untuk kompatibilitas UI; file diunggah langsung ke Supabase Storage
   SESSION_KEY: 'barjas.session',
   API_KEY: 'barjas.api', // cadangan kompatibilitas; tidak dipakai untuk autentikasi Supabase
-  LOGO: '../assets/logo-kemenag.png', // ganti dengan logo resmi, .png transparan
+  LOGO: 'assets/logo-kemenag.png', // ganti dengan logo resmi, .png transparan
   LOGO_CM: 2.3,                        // sisi terpanjang logo pada kop dokumen (cm), rentang 1-5. Resolusi berkas bebas:
                                        // logo diperkecil otomatis dan proporsi aslinya dijaga (pratinjau, cetak, .pdf, .doc)
 
@@ -161,22 +161,5 @@ window.dokNo = function (kode) {
 window.dokByKode = function (kode) {
   return window.CONFIG.DOKUMEN.filter(function (d) { return String(d.kode) === String(kode); })[0] || null;
 };
-// Pakai penyimpanan sesi yang SAMA dengan BIMASATU (localStorage bila "Ingat saya",
-// sessionStorage bila tidak). Nama storageKey Supabase otomatis sama karena proyeknya sama.
-const BARJAS_AUTH_STORE = {
-  getItem: function (key) { return localStorage.getItem(key) || sessionStorage.getItem(key); },
-  setItem: function (key, value) {
-    var ingat = localStorage.getItem('bop.remember') === '1';
-    var utama = ingat ? localStorage : sessionStorage;
-    var cadangan = ingat ? sessionStorage : localStorage;
-    cadangan.removeItem(key);
-    utama.setItem(key, value);
-  },
-  removeItem: function (key) {
-    localStorage.removeItem(key);
-    sessionStorage.removeItem(key);
-  }
-};
-const BARJAS_SB = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_KEY, {
-  auth: { storage: BARJAS_AUTH_STORE }
-});
+// Gunakan klien Supabase dan sesi autentikasi yang sama persis dengan BIMASATU.
+const BARJAS_SB = sb;
