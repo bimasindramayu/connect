@@ -276,7 +276,7 @@
   /* ================= SATKER ================= */
   Pages.satker = function (host) {
     App.setJudul('Satuan kerja', 'Profil dipakai sebagai kop surat dokumen');
-    var bolehTambah = Auth.isAdmin();
+    var bolehTambah = App.canManage();
     App.alat([
       w.pilihTahun(),
       bolehTambah ? el('button.btn.primary.kecil', { onclick: function () { editSatker(null); } }, 'Tambah satker') : null
@@ -285,7 +285,7 @@
     var q = '', jenis = '';
     var isi = el('div');
     function gambar() {
-      var list = (Auth.isAdmin() ? App.state.master.satker : App.satkerSaya())
+      var list = (App.canManage() ? App.state.master.satker : App.satkerSaya())
         .filter(function (s) { return (!jenis || s.jenis === jenis) && cocok(s, q, ['nama', 'kode_satker', 'singkatan', 'kecamatan']); })
         .sort(function (a, b) { return (a.jenis + a.nama).localeCompare(b.jenis + b.nama); });
       clear(isi).appendChild(list.length ? UI.table([
@@ -302,7 +302,7 @@
         { label: '', render: function (s) {
           return el('div.baris', null, [
             el('button.btn.kecil', { onclick: function (e) { e.stopPropagation(); editSatker(s); } }, 'Ubah profil'),
-            Auth.isAdmin() ? el('button.btn.kecil.danger', { onclick: function (e) { e.stopPropagation(); hapusEntitas('Satker', s.id, s.nama); } }, 'Hapus') : null
+            App.canManage() ? el('button.btn.kecil.danger', { onclick: function (e) { e.stopPropagation(); hapusEntitas('Satker', s.id, s.nama); } }, 'Hapus') : null
           ]);
         } }
       ], list) : UI.empty('Belum ada satker', 'Tambahkan satuan kerja, lalu lengkapi alamat dan kontaknya untuk kop surat.'));
@@ -343,8 +343,8 @@
   Pages.penugasan = function (host) {
     App.setJudul('Penugasan & pagu', 'Siapa memegang satker mana pada TA ' + App.state.tahun);
     App.alat([w.pilihTahun()]);
-    if (!Auth.isAdmin()) {
-      clear(host).appendChild(UI.empty('Khusus admin', 'Penugasan satker diatur oleh admin sistem.'));
+    if (!App.canManage()) {
+      clear(host).appendChild(UI.empty('Akses BARJAS diperlukan', 'Akun ini belum memiliki izin untuk mengelola modul BARJAS.'));
       return;
     }
     return muatPaket().then(function (paket) {
@@ -445,7 +445,7 @@
               Unggah.dialog('Company profile ' + p.nama, { penyedia_id: p.id, kode: 12 }, function () { App.segarkan(); });
             } }, p.cp_url ? 'Ganti berkas' : 'Unggah'),
             el('button.btn.kecil', { onclick: function () { edit(p); } }, 'Ubah'),
-            Auth.isAdmin() ? el('button.btn.kecil.danger', { onclick: function () { hapusEntitas('Penyedia', p.id, p.nama); } }, 'Hapus') : null
+            App.canManage() ? el('button.btn.kecil.danger', { onclick: function () { hapusEntitas('Penyedia', p.id, p.nama); } }, 'Hapus') : null
           ]);
         } }
       ], list) : UI.empty('Belum ada penyedia', 'Tambahkan penyedia sekali saja, lalu pakai ulang company profile-nya di paket mana pun.'));
@@ -496,7 +496,7 @@
         { label: '', render: function (p) {
           return el('div.baris', null, [
             el('button.btn.kecil', { onclick: function () { edit(p); } }, 'Ubah'),
-            Auth.isAdmin() ? el('button.btn.kecil.danger', { onclick: function () { hapusEntitas('Pejabat', p.id, p.nama); } }, 'Hapus') : null
+            App.canManage() ? el('button.btn.kecil.danger', { onclick: function () { hapusEntitas('Pejabat', p.id, p.nama); } }, 'Hapus') : null
           ]);
         } }
       ], list) : UI.empty('Belum ada pejabat', 'Masukkan nama, NIP, pangkat/golongan, dan jabatan agar bisa dipasang sebagai KPA, PPK, atau PP.'));
@@ -528,7 +528,7 @@
   Pages.pengaturan = function (host) {
     App.setJudul('Pengaturan', 'Koneksi server dan identitas kantor');
     App.alat([]);
-    if (!Auth.isAdmin()) { clear(host).appendChild(UI.empty('Khusus admin', 'Halaman ini hanya untuk admin sistem.')); return; }
+    if (!App.canManage()) { clear(host).appendChild(UI.empty('Akses BARJAS diperlukan', 'Akun ini belum memiliki izin untuk mengelola modul BARJAS.')); return; }
     var cfg = (App.state.master && App.state.master.config) || {};
 
     var form = el('form.grid2', { onsubmit: function (e) { e.preventDefault(); } });
