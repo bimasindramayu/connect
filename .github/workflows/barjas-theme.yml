@@ -4,7 +4,16 @@ on:
     branches: [main]
     paths:
       - 'barjas/assets/css/**'
+      - 'barjas/assets/js/**'
       - 'css/app.css'
+      - 'js/akun.js'
+      - 'js/akses.js'
+      - 'js/core.js'
+      - 'barjas.sql'
+      - 'bop.sql'
+      - 'supabase/functions/barjas/**'
+      - 'supabase/functions/bop/**'
+      - 'index.html'
       - 'tests/**'
       - 'playwright.config.cjs'
       - '.github/workflows/barjas-theme.yml'
@@ -28,7 +37,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run BARJAS component visual regression tests
-        run: npx playwright test tests/e2e/barjas-theme.spec.cjs --reporter=line
+        run: npx playwright test tests/e2e --reporter=line
       - name: Upload screenshot and trace output
         if: always()
         uses: actions/upload-artifact@v4
