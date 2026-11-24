@@ -1,6 +1,8 @@
 /* BARJAS - paket pengadaan: daftar, detail, berkas, dan cetak dokumen. */
 (function (w) {
   'use strict';
+  // Jangan memakai binding global `$` BIMASATU (getElementById); BARJAS memakai selector CSS yang di-scope ke root modul.
+  var $ = w.$, $$ = w.$$;
   var C = w.CONFIG, B = w.Bantu;
   /* fallback bila config.js di server belum diperbarui (belum punya METODE_PENGADAAN) —
      supaya halaman tetap bisa dibuka, bukan malah gagal total karena .indexOf/.map
