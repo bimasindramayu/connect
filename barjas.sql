@@ -248,10 +248,10 @@ create index if not exists barjas_dokumen_legacy_file_idx on public.barjas_dokum
 -- 3. Otorisasi per satker/tahun untuk RLS.
 create or replace function public.barjas_can_satker(p_satker_id text, p_tahun integer default null)
 returns boolean
-language sql security definer stable set search_path = public as $
+language sql security definer stable set search_path = public as $barjas$
   -- Izin modul berlaku untuk seluruh satker dan seluruh tahun; penugasan hanya metadata.
   select public.can_menu('barjas');
-$;
+$barjas$;
 revoke all on function public.barjas_can_satker(text, integer) from public, anon;
 grant execute on function public.barjas_can_satker(text, integer) to authenticated;
 
