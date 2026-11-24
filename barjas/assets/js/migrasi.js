@@ -69,7 +69,7 @@
   function drawMapping() {
     var target = state.targetUsers || [], source = state.sourceUsers || [];
     var opts = '<option value="">Lewati (tanpa penugasan)</option>' + target.map(function (u) {
-      return '<option value="' + esc(u.id) + '">' + esc(u.nama) + ' · ' + esc(u.username || u.email || u.id) + ' · ' + esc(u.role === 'admin' ? 'Admin' : 'Pengelola Pengadaan') + '</option>';
+      return '<option value="' + esc(u.id) + '">' + esc(u.nama) + ' · ' + esc(u.username || u.email || u.id) + ' · ' + esc(u.role || 'Pengguna BIMASATU') + '</option>';
     }).join('');
     $('#sm-users').innerHTML = source.length ? '<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Akun SIPADU lama</th><th>Hubungkan ke akun CONNECT</th></tr></thead><tbody>' +
       source.map(function (u, i) {
