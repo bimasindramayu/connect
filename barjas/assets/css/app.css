@@ -455,7 +455,6 @@
 #barjas-root input,
 #barjas-root select,
 #barjas-root textarea { font-family: var(--sans); }
-#barjas-root button { color: inherit; }
 
 /* Buttons: do not inherit the host application's Bootstrap button variants accidentally. */
 #barjas-root .btn {
@@ -690,4 +689,20 @@
 }
 #barjas-root table.tabel > tbody > tr:hover > td {
   background-color: #f5f5ff;
+}
+
+
+/* Explicit interactive states after the Sneat compatibility layer. */
+#barjas-root .btn.primary:not(:disabled):hover {
+  color: #fff !important;
+  background-color: #4f50c5 !important;
+  background-image: none !important;
+  border-color: #4f50c5 !important;
+}
+#barjas-root .tab button.aktif {
+  color: #4f50c5;
+  border-bottom-color: #5f61e6;
+}
+#barjas-root .tab button:not(.aktif) {
+  color: #65748a;
 }
