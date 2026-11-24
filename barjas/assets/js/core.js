@@ -218,20 +218,22 @@
   function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
   /* ---------- cache lokal ---------- */
+  /* Namespace versi baru agar cache kosong/lama sebelum migrasi tidak menutupi data Supabase. */
+  var CACHE_PREFIX = 'barjas.cache.v2.';
   var Store = {
     get: function (key, maxAge) {
       try {
-        var raw = sessionStorage.getItem('barjas.' + key); if (!raw) return null;
+        var raw = sessionStorage.getItem(CACHE_PREFIX + key); if (!raw) return null;
         var o = JSON.parse(raw);
         if (maxAge && Date.now() - o.t > maxAge) return null;
         return o.v;
       } catch (e) { return null; }
     },
     set: function (key, val) {
-      try { sessionStorage.setItem('barjas.' + key, JSON.stringify({ t: Date.now(), v: val })); } catch (e) { }
+      try { sessionStorage.setItem(CACHE_PREFIX + key, JSON.stringify({ t: Date.now(), v: val })); } catch (e) { }
       return val;
     },
-    drop: function (key) { sessionStorage.removeItem('barjas.' + key); },
+    drop: function (key) { sessionStorage.removeItem(CACHE_PREFIX + key); },
     dropAll: function () {
       Object.keys(sessionStorage).forEach(function (k) { if (k.indexOf('barjas.') === 0) sessionStorage.removeItem(k); });
     },
