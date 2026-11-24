@@ -273,7 +273,7 @@
   /* ---------- komponen UI ---------- */
   async function openViewer(files, idx, load) {
     const V_GAP = 8, V_ZOOM = 10, V_MAXPX = 16e6, V_MAXSIDE = 8192;
-    const d = $('vdlg'), btn = (k, label, title) => `<button type="button" class="vw-btn" data-v="${k}" aria-label="${title}" title="${title}">${label}</button>`;
+    const d = $('#vdlg'), btn = (k, label, title) => `<button type="button" class="vw-btn" data-v="${k}" aria-label="${title}" title="${title}">${label}</button>`;
     d.className = 'wide';
     d.innerHTML = `<div class="vw-shell">
       <header class="vw-head">
@@ -295,7 +295,7 @@
       <footer class="vw-hint">Geser dengan klik-tahan atau scroll. Ctrl + scroll, pinch, atau dua kali klik untuk zoom.</footer>
     </div>`;
     d.showModal();
-    const vp = $('vwp'), st = $('vws'), inn = $('vwi'), P = new Map();
+    const vp = $('#vwp'), st = $('#vws'), inn = $('#vwi'), P = new Map();
     // Ruang dokumen: lebar halaman = W. Tiap halaman punya "kotak" (ukuran asli W x h, diputar dengan transform) di dalam "slot" (ukuran
     // halaman SETELAH diputar, ditaruh di tumpukan). hl[k] = { h, doc (halaman pdf.js, null untuk gambar), slot, box, sc (satuan dokumen per titik PDF),
     // l, t, w, hh (letak dan ukuran slot), tile (kanvas tajam yang sudah jadi), task dan pend (render tajam yang sedang jalan dan cakupannya) }.
@@ -324,7 +324,7 @@
       return [Math.max(0.9 * Math.min(vw / LW, vh / LH), 0.15 * vw / LW), Math.max(V_ZOOM * vw / W, 3 * NW / W)];
     };
     const pageInd = () => {   // halaman yang paling banyak terlihat; halaman selalu tersusun ke bawah, jadi cukup dihitung di sumbu tegak
-      const el = $('vwg');
+      const el = $('#vwg');
       if (!el) return;
       if (!pdf || !W) { el.classList.add('d-none'); cur = -1; return; }
       const a = -y / s, b = (vp.clientHeight - y) / s;
@@ -470,7 +470,7 @@
       io = pdf = url = null; inn.replaceChildren(); W = SW = SH = LW = LH = NW = 0; rot = 0; hl = []; pageInd();
     };
     const show = async i => {
-      const my = ++gen; clean(); $('vwm').textContent = 'Memuat dokumen…';
+      const my = ++gen; clean(); $('#vwm').textContent = 'Memuat dokumen…';
       try {
         const blob = await (await load(files[i])).blob();
         if (my !== gen) return;
@@ -511,10 +511,10 @@
         W = cw;
         LW = hl.reduce((m, p) => Math.max(m, p.h), W);   // tumpukan terlebar (halaman tertinggi diputar 90 derajat)
         LH = Math.max(hl.reduce((m, p) => m + p.h, 0), hl.length * W) + (hl.length - 1) * V_GAP;   // tumpukan tertinggi (tanpa atau dengan diputar)
-        layout(); $('vwm').textContent = ''; fit(0);
+        layout(); $('#vwm').textContent = ''; fit(0);
       } catch (e) {
         if (my === gen) {
-          const msg = $('vwm');
+          const msg = $('#vwm');
           clear(msg);
           msg.appendChild(el('div.vw-error', { text: e.message || String(e) }));
           const link = files[i] && files[i].url;
@@ -522,8 +522,8 @@
         }
       }
     };
-    if ($('vwf')) $('vwf').onchange = () => show(+$('vwf').value);
-    $('vwx').onclick = () => d.close();
+    if ($('#vwf')) $('#vwf').onchange = () => show(+$('#vwf').value);
+    $('#vwx').onclick = () => d.close();
     d.addEventListener('close', function () { gen++; clean(); ro.disconnect(); d.onclick = null; }, { once: true });
 
     show(idx);
