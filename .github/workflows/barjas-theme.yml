@@ -9,6 +9,8 @@ on:
       - 'js/akun.js'
       - 'js/akses.js'
       - 'js/core.js'
+      - 'js/bmn.js'
+      - 'apps-script/BMN.gs'
       - 'barjas.sql'
       - 'bop.sql'
       - 'supabase/functions/barjas/**'
