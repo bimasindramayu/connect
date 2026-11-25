@@ -70,7 +70,7 @@ create table if not exists public.profiles (
   nama text not null,
   kua text,
   role text not null default 'operator'
-    check (role in ('admin','operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan')),
+    check (role in ('admin','operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan','bmn_barjas')),
   created_at timestamptz not null default now()
 );
 alter table public.profiles enable row level security;
@@ -81,12 +81,12 @@ declare c record; sudah boolean := false;
 begin
   for c in select conname, pg_get_constraintdef(oid) as def from pg_constraint
             where conrelid = 'public.profiles'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%role%' loop
-    if c.def like '%pnbp_nr%' and c.def like '%pengadaan%' then sudah := true;
+    if c.def like '%pnbp_nr%' and c.def like '%pengadaan%' and c.def like '%bmn_barjas%' then sudah := true;
     else execute format('alter table public.profiles drop constraint %I', c.conname); end if;
   end loop;
   if not sudah then
     alter table public.profiles add constraint profiles_role_check
-      check (role in ('admin','operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan'));
+      check (role in ('admin','operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan','bmn_barjas'));
   end if;
 end $$;
 
@@ -121,7 +121,7 @@ grant execute on function public.profile_update_nama(text) to authenticated;
 -- Peran tidak dikenal = operator. PENTING: pendaftaran mandiri Supabase harus dimatikan, karena trigger ini memercayai metadata.
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare r text := case when new.raw_user_meta_data->>'role' in ('admin','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr')
+declare r text := case when new.raw_user_meta_data->>'role' in ('admin','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','bmn_barjas')
                        then new.raw_user_meta_data->>'role' else 'operator' end;
 begin
   insert into public.profiles (id, nama, kua, kua_id, role)
@@ -205,7 +205,7 @@ create or replace function public.peran_label(p_role text) returns text language
 $$;
 
 create table if not exists public.hak_akses (
-  role text not null check (role in ('operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan')),
+  role text not null check (role in ('operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan','bmn_barjas')),
   menu text not null,
   updated_by uuid references auth.users(id), updated_at timestamptz not null default now(),
   primary key (role, menu)
@@ -218,12 +218,12 @@ declare c record; sudah boolean := false;
 begin
   for c in select conname, pg_get_constraintdef(oid) as def from pg_constraint
     where conrelid = 'public.hak_akses'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%role%' loop
-    if c.def like '%pengadaan%' then sudah := true;
+    if c.def like '%pengadaan%' and c.def like '%bmn_barjas%' then sudah := true;
     else execute format('alter table public.hak_akses drop constraint %I', c.conname); end if;
   end loop;
   if not sudah then
     alter table public.hak_akses add constraint hak_akses_role_check
-      check (role in ('operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan'));
+      check (role in ('operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan','bmn_barjas'));
   end if;
 end $$;
 
@@ -266,7 +266,7 @@ begin
   if not public.is_admin() then raise exception 'Hanya admin yang dapat mengatur hak akses menu.'; end if;
   if p_data is null or jsonb_typeof(p_data) <> 'object' then raise exception 'Format hak akses tidak valid.'; end if;
   for r in select key from jsonb_each(p_data) loop
-    if r not in ('operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan') then
+    if r not in ('operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan','bmn_barjas') then
       raise exception 'Peran % tidak dikenal atau tidak dapat diubah (Admin selalu memiliki semua menu).', r; end if;
     if jsonb_typeof(p_data -> r) <> 'array' then raise exception 'Daftar menu untuk % tidak valid.', peran_label(r); end if;
     select coalesce(array_agg(distinct x), '{}'::text[]) into menus from jsonb_array_elements_text(p_data -> r) x;
@@ -402,6 +402,9 @@ begin
 end $$;
 -- Bersihkan hak untuk menu yang sudah dihapus dari aplikasi (mis. "Status Apps Script" = sert-status): baris yang kuncinya tidak ada lagi
 -- di menu_keys() tidak berguna dan tidak dapat diberikan lagi. Aman diulang.
+insert into public.hak_akses (role, menu) values ('bmn_barjas','bmn'),('bmn_barjas','barjas')
+on conflict (role, menu) do nothing;
+
 delete from public.hak_akses where not (menu = any (public.menu_keys()));
 
 -- 6) ANGGARAN TAHUNAN: 1 baris = 1 TAHUN ----------------------------------------------------------
