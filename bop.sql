@@ -201,7 +201,7 @@ $$;
 create or replace function public.peran_label(p_role text) returns text language sql immutable as $$
   select case p_role when 'admin' then 'Admin' when 'operator' then 'Operator KUA' when 'bendahara_bop' then 'Bendahara BOP'
     when 'verifikator_bop' then 'Verifikator BOP' when 'bast_nr' then 'BAST NR' when 'kemasjidan' then 'Kemasjidan'
-    when 'pnbp_nr' then 'PNBP NR' when 'pengadaan' then 'Pengelola Pengadaan (akun lama)' else p_role end;
+    when 'pnbp_nr' then 'PNBP NR' when 'bmn_barjas' then 'BMN/Barjas' when 'pengadaan' then 'Pengelola Pengadaan (akun lama)' else p_role end;
 $$;
 
 create table if not exists public.hak_akses (
