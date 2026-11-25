@@ -57,7 +57,7 @@ function ensureBMNSchemas_(ss) {
   bmnEnsureHeaders_(setting, BMN_SETTING_HEADERS_);
   if (sh.getFrozenRows() < 1) sh.setFrozenRows(1);
   if (setting.getFrozenRows() < 1) setting.setFrozenRows(1);
-  bmnSetDefaultSetting_(setting, 'allowDataEntry', 'true', 'Mengizinkan Operator KUA menambah dan mengubah data BMN.');
+  bmnSetDefaultSetting_(setting, 'allowDataEntry', 'true', 'Input BMN untuk Operator KUA; role BMN/Barjas selalu dapat mengelola lintas satker.');
 }
 
 function bmnEnsureHeaders_(sh, desired) {
@@ -132,7 +132,7 @@ function bmnSaveSetting_(key, value, user) {
   var sh = bmnSettingSheet_(), rows = sh.getDataRange().getValues(), rowNo = -1;
   for (var i = 1; i < rows.length; i++) if (String(rows[i][0]) === key) { rowNo = i + 1; break; }
   var val = value === true || String(value).toLowerCase() === 'true' ? 'true' : 'false';
-  var data = [key, val, 'Mengizinkan Operator KUA menambah dan mengubah data BMN.', user.nama || 'Admin', new Date()];
+  var data = [key, val, 'Input BMN untuk Operator KUA; role BMN/Barjas selalu dapat mengelola lintas satker.', user.nama || 'Admin', new Date()];
   if (rowNo > 0) sh.getRange(rowNo, 1, 1, data.length).setValues([data]); else sh.appendRow(data);
   return { success: true, data: { key: key, value: val === 'true' } };
 }
@@ -153,7 +153,8 @@ function bmnOwnSatker_(user) {
 
 // Satu aturan izin dipakai bersama oleh menu, penyimpanan, penghapusan, dan unggah lampiran.
 function bmnCanWrite_(user) {
-  if (user && String(user.role || '').toLowerCase() === 'admin') {
+  var role = String(user && user.role || '').toLowerCase();
+  if (role === 'admin' || role === 'bmn_barjas') {
     return { allowed: true, message: '' };
   }
   if (!bmnIsOperator_(user)) {
