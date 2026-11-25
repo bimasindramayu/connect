@@ -84,5 +84,5 @@ test('new accounts can receive BMN/Barjas role; old Pengelola Pengadaan role sta
   expect(bmnGas).toContain("role === 'admin' || role === 'bmn_barjas'");
   expect(bopEdge).toContain("me.role === 'admin' || me.role === 'bmn_barjas'");
   expect(bopEdge).toContain("role === 'pengadaan' && target.role === 'pengadaan'");
-  expect(barjasSql).toContain("'pengadaan'))");
+  expect(barjasSql).toContain("'pengadaan','bmn_barjas'))");
 });
