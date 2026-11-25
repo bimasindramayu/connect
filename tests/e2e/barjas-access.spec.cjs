@@ -50,12 +50,15 @@ test('BARJAS database policies scope all rows and storage by menu permission, no
   expect(sql).not.toContain("values ('pengadaan', 'barjas')");
 });
 
-test('new accounts cannot receive a dedicated Pengelola Pengadaan role; existing role stays compatible', () => {
+test('new accounts can receive BMN/Barjas role; old Pengelola Pengadaan role stays legacy-only', () => {
   const accounts = read('js/akun.js');
   const access = read('js/akses.js');
   const bopEdge = read('supabase/functions/bop/index.ts');
   const bopSql = read('bop.sql');
   const barjasSql = read('barjas.sql');
+  const core = read('js/core.js');
+  const bmnUi = read('js/bmn.js');
+  const bmnGas = read('apps-script/BMN.gs');
 
   const accountRoles = accounts.match(/const AKUN_PERAN = \[([^\]]+)\]/);
   const accessRoles = access.match(/const AKSES_PERAN = \[([^\]]+)\]/);
@@ -63,6 +66,10 @@ test('new accounts cannot receive a dedicated Pengelola Pengadaan role; existing
   expect(accountRoles?.[1] || '').not.toContain('pengadaan');
   expect(accessRoles?.[1] || '').not.toContain('pengadaan');
   expect(edgeRoles?.[1] || '').not.toContain('pengadaan');
+  expect(accountRoles?.[1] || '').toContain('bmn_barjas');
+  expect(accessRoles?.[1] || '').toContain('bmn_barjas');
+  expect(edgeRoles?.[1] || '').toContain('bmn_barjas');
+  expect(core).toContain("bmn_barjas: 'BMN/Barjas'");
 
   for (const sql of [bopSql, barjasSql]) {
     const start = sql.indexOf('create or replace function public.handle_new_user()');
@@ -71,6 +78,11 @@ test('new accounts cannot receive a dedicated Pengelola Pengadaan role; existing
     expect(sql.slice(start, end)).not.toContain("'pengadaan'");
   }
   expect(accounts).toContain('Pengelola Pengadaan (akun lama)');
+  expect(bopSql).toContain("values ('bmn_barjas','bmn'),('bmn_barjas','barjas')");
+  expect(barjasSql).toContain("values ('bmn_barjas','bmn'),('bmn_barjas','barjas')");
+  expect(bmnUi).toContain("me.role === 'bmn_barjas'");
+  expect(bmnGas).toContain("role === 'admin' || role === 'bmn_barjas'");
+  expect(bopEdge).toContain("me.role === 'admin' || me.role === 'bmn_barjas'");
   expect(bopEdge).toContain("role === 'pengadaan' && target.role === 'pengadaan'");
   expect(barjasSql).toContain("'pengadaan'))");
 });
