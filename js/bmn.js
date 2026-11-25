@@ -23,8 +23,9 @@ const BMN_KUA_NAMES = [
   'Kedokan Bunder','Kertasemaya','Krangkeng','Kroya','Lelea','Lohbener','Losarang',
   'Pasekan','Patrol','Sindang','Sliyeg','Sukagumiwang','Sukra','Terisi','Tukdana','Widasari'
 ];
+const bmnCanManageAll = () => !!me && (me.role === 'admin' || me.role === 'bmn_barjas');
 const bmnCanWrite = () => !!me && (
-  me.role === 'admin' || (me.role === 'operator' && BMN_UI.settings.allowDataEntry !== false)
+  bmnCanManageAll() || (me.role === 'operator' && BMN_UI.settings.allowDataEntry !== false)
 );
 const bmnIsAdmin = () => !!me && me.role === 'admin';
 const bmnSatkerDefault = () => me && me.role === 'operator' ? (me.kua || '') : '';
@@ -333,7 +334,7 @@ function bmnSatkerLabel(value) {
 
 function bmnRenderSatkerFilter() {
   const select = $('bmnFilterSatker');
-  if (!select || !bmnIsAdmin()) return;
+  if (!select || !bmnCanManageAll()) return;
   const selected = select.value;
   const options = BMN_KUA_NAMES.map(name => ({ key: bmnNormalizeSatker(name), label: 'KUA ' + name }))
     .sort((a, b) => a.label.localeCompare(b.label, 'id'));
