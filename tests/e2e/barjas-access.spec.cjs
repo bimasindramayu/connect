@@ -95,4 +95,5 @@ test('BMN and Barjas are separate account roles; old Pengelola Pengadaan stays l
   expect(bopEdge).toContain("me.role === 'admin' || me.role === 'bmn'");
   expect(bopEdge).not.toContain("me.role === 'barjas'");
   expect(barjasSql).toContain("'pengadaan','bmn','barjas'))");
+  expect(bopSql).toContain("c.def like '%''bmn''%' and c.def like '%''barjas''%'");
 });
