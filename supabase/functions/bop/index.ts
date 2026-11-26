@@ -63,7 +63,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
 // Peran yang dapat ditetapkan untuk akun baru. Database tetap mengenali role pengadaan untuk kompatibilitas akun lama.
-const PERAN = ['admin', 'operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr', 'bmn_barjas'];
+const PERAN = ['admin', 'operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr', 'bmn', 'barjas'];
 
 const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 const EXT: Record<string, string> = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' };
@@ -445,7 +445,7 @@ async function bmnSatkerUser(db: any, me: Me): Promise<string | null> {
 }
 
 async function bmnMayWrite(db: any, me: Me, satker: string): Promise<boolean> {
-  if (me.role === 'admin' || me.role === 'bmn_barjas') return true;
+  if (me.role === 'admin' || me.role === 'bmn') return true;
   if (me.role !== 'operator') return false;
   const own = await bmnSatkerUser(db, me);
   return !!own && bmnNorm(own) === bmnNorm(satker);
