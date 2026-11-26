@@ -62,8 +62,8 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-// Peran akun. Daftar yang sama ada di bop.sql (check profiles.role, handle_new_user, set_hak_akses) dan js/akses.js.
-const PERAN = ['admin', 'operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr'];
+// Peran yang dapat ditetapkan untuk akun baru. Database tetap mengenali role pengadaan untuk kompatibilitas akun lama.
+const PERAN = ['admin', 'operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr', 'bmn', 'barjas'];
 
 const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 const EXT: Record<string, string> = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' };
@@ -256,9 +256,10 @@ async function ubahAkun(db: any, me: Me, req: Request) {
   if (me.role !== 'admin') return json({ error: 'Hanya admin yang boleh mengubah akun.' }, 403);
   const b = await bacaJson<{ user_id?: unknown; nama?: unknown; role?: unknown; kua_id?: unknown }>(req);
   const id = String(b.user_id ?? ''), nama = String(b.nama ?? '').trim(), role = String(b.role ?? '');
-  if (!id || !nama || nama.length > 100 || !PERAN.includes(role)) return json({ error: 'Data tidak valid: nama dan peran wajib diisi.' }, 400);
+  if (!id || !nama || nama.length > 100) return json({ error: 'Data tidak valid: nama dan peran wajib diisi.' }, 400);
   const { data: target } = await db.from('profiles').select('role').eq('id', id).maybeSingle();
   if (!target) return json({ error: 'Akun tidak ditemukan.' }, 404);
+  if (!PERAN.includes(role) && !(role === 'pengadaan' && target.role === 'pengadaan')) return json({ error: 'Peran tidak dikenal.' }, 400);
   if (id === me.id && role !== target.role) return json({ error: 'Peran akun Anda sendiri tidak dapat diubah.' }, 400);
   const kua = role === 'operator' ? await kuaOperator(db, b.kua_id) : null;
   if (role === 'operator' && !kua) return json({ error: 'Pilih KUA yang aktif untuk akun Operator KUA.' }, 400);
@@ -444,7 +445,7 @@ async function bmnSatkerUser(db: any, me: Me): Promise<string | null> {
 }
 
 async function bmnMayWrite(db: any, me: Me, satker: string): Promise<boolean> {
-  if (me.role === 'admin') return true;
+  if (me.role === 'admin' || me.role === 'bmn') return true;
   if (me.role !== 'operator') return false;
   const own = await bmnSatkerUser(db, me);
   return !!own && bmnNorm(own) === bmnNorm(satker);

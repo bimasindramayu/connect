@@ -29,13 +29,13 @@ const live = ep => ep === EP;
    supabase/functions/bop/index.ts (PERAN): ubah semuanya bersama. Menu apa yang boleh dibuka tiap peran diatur admin di halaman
    "Hak Akses Menu" (tabel hak_akses) dan dibaca lewat akses_saya(). Tampilan hanya mengikuti; yang menentukan tetap server
    (RLS/trigger database, Apps Script, Edge Function), jadi menyembunyikan menu di sini bukan satu-satunya pengaman. */
-const PERAN = { admin: 'Admin', operator: 'Operator KUA', bendahara_bop: 'Bendahara BOP', verifikator_bop: 'Verifikator BOP', bast_nr: 'BAST NR', kemasjidan: 'Kemasjidan', pnbp_nr: 'PNBP NR' };
+const PERAN = { admin: 'Admin', operator: 'Operator KUA', bendahara_bop: 'Bendahara BOP', verifikator_bop: 'Verifikator BOP', bast_nr: 'BAST NR', kemasjidan: 'Kemasjidan', pnbp_nr: 'PNBP NR', bmn: 'BMN', barjas: 'Barjas', pengadaan: 'Pengelola Pengadaan (akun lama)' };
 const peranLabel = r => PERAN[r] || r;
 const can = menu => !!me && Array.isArray(me.menus) && me.menus.includes(menu);   // menu = kunci menu (sama dengan hash halaman, mis. 'rpd', 'bast-buat')
 // Urutan mencari halaman awal bila alamat kosong atau menunya tidak boleh dibuka akun ini. Dashboard (khusus Operator KUA) menjadi halaman awal
 // operator; Pegawai KUA paling akhir supaya halaman awal peran lain tidak berubah.
 const HOME_ORDER = ['dashboard', 'bop', 'rpd', 'realisasi', 'verifikasi', 'sakti', 'metode', 'anggaran', 'laporan', 'config', 'impor',
-  'bast', 'bast-buat', 'bast-pegawai', 'bast-setting', 'bmn', 'sert-masjid', 'sert-kiblat', 'sert-pengaturan', 'jaspro', 'akses', 'pegawai'];
+  'bast', 'bast-buat', 'bast-pegawai', 'bast-setting', 'bmn', 'sert-masjid', 'sert-kiblat', 'sert-pengaturan', 'jaspro', 'barjas', 'akses', 'pegawai'];
 const homeMenu = () => HOME_ORDER.find(can) || 'profil';
 // Hanya dipakai bila database belum diperbarui (fungsi akses_saya belum ada): perilaku lama, admin semua menu dan operator 4 menu.
 // Dashboard dan Pegawai KUA butuh tabel baru di bop.sql, jadi tidak ikut.
@@ -140,21 +140,27 @@ const syncSide = () => {
 const pages = {};
 function route() {
   if (!me) return;
-  const h = location.hash.slice(1);
+  const rawHash = location.hash.slice(1);
+  const h = rawHash.split('/')[0].split('?')[0]; // Sub-rute BARJAS tetap berada di satu menu BIMASATU.
   let k = h in pages ? h : homeMenu();
   if (k === 'pengaturan' && me.role !== 'admin') { k = 'profil'; if (location.hash !== '#profil') history.replaceState(null, '', '#profil'); }
   if (k !== 'pengaturan' && k !== 'profil' && !can(k)) {   // menu ini tidak diberikan ke peran akun ini: ke halaman awal. Server tetap menolak bila diakali lewat alamat.
     k = homeMenu();
     if (h && location.hash !== '#' + k) history.replaceState(null, '', '#' + k);
   }
-  document.querySelectorAll('#side .nav-link').forEach(a => a.classList.toggle('active', a.hash === '#' + k));
+  const routeHash = rawHash.split('?')[0];
+  document.querySelectorAll('#side .nav-link').forEach(a => {
+    const href = a.getAttribute('href');
+    a.classList.toggle('active', !!href && href.slice(1) === routeHash);
+  });
   $('side').classList.remove('open');
   const grp = $('side').querySelector('a.active')?.closest('details') || (k === 'bop' ? $('side').querySelector('details[data-grup="bop"]') : null);
   if (grp) grp.open = true;
+  if (k === 'barjas') $('side').querySelector('details[data-grup="barjas"]')?.setAttribute('open', '');
   EP++;
   const sv = k === 'sert-masjid' || k === 'sert-kiblat' || k === 'sert-pengaturan';   // modul Sertifikat punya wadah sendiri (#sertView), tidak ditimpa innerHTML #view
   $('view').classList.toggle('d-none', sv); $('sertView').classList.toggle('d-none', !sv);
-  $('view').classList.toggle('bop', !/^(jaspro|bast|bmn|sert-)/.test(k));   // pewarnaan khusus halaman BOP dan akun (css/app.css)
+  $('view').classList.toggle('bop', !/^(jaspro|bast|bmn|sert-|barjas$)/.test(k));   // pewarnaan khusus halaman BOP dan akun (css/app.css)
   $('view').classList.toggle('bmn', k === 'bmn'); // namespace CSS khusus halaman BMN (css/bmn.css)
   // BMN sudah memiliki tombol Muat Ulang di toolbar halamannya sendiri.
   $('pageRefresh')?.classList.toggle('d-none', k === 'bmn');
@@ -762,3 +768,11 @@ const jpAsk = (title, msg, label, ok, danger) => jpDlg(
     };
   });
 const jpCard = (ic, c, v, l) => `<div class="col-6 col-lg"><div class="card h-100"><div class="card-body d-flex align-items-center gap-3 py-3"><div class="avatar rounded bg-label-${c}"><i class="bx ${ic} fs-4"></i></div><div class="lh-sm"><div class="fw-semibold fs-5">${v}</div><small>${l}</small></div></div></div></div>`;
+
+
+// Konteks identitas BIMASATU untuk modul yang ditanam di dalam aplikasi utama.
+window.BIMASATU = {
+  currentUser: () => me,
+  hasMenu: menu => can(menu),
+  signOut: () => sb.auth.signOut()
+};

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BARJAS Theme Regression Fixture</title>
+  <style>#sample-modal[hidden] { display: none !important; }</style>
+  <link id="sneat-css" href="https://cdn.jsdelivr.net/gh/themeselection/sneat-bootstrap-html-admin-template-free@de094c2bf89e602054b7c14f46c9a3a5b9f6cac9/assets/vendor/css/core.css" rel="stylesheet">
+  <link href="../../css/app.css" rel="stylesheet">
+  <link href="../../barjas/assets/css/app.css" rel="stylesheet">
+</head>
+<body>
+  <div id="outside-host">
+    <button id="outside-btn" class="btn btn-primary" type="button">Tombol BIMASATU</button>
+  </div>
+
+  <main id="view">
+    <section id="barjas-root" class="barjas-module">
+      <header class="atas">
+        <div><h1>BARJAS Theme Check</h1><span class="sub">Uji komponen antarmuka</span></div>
+        <button class="btn" type="button">Refresh</button>
+      </header>
+
+      <section class="kartu" id="button-section">
+        <header><h2>Tombol</h2></header>
+        <div class="badan baris">
+          <button id="btn-default" class="btn" type="button">Default</button>
+          <button id="btn-primary" class="btn primary" type="button">Primary</button>
+          <button id="btn-danger" class="btn danger" type="button">Danger</button>
+          <button id="btn-ghost" class="btn ghost" type="button">Ghost</button>
+          <button id="btn-disabled" class="btn primary" type="button" disabled>Disabled</button>
+        </div>
+      </section>
+
+      <section class="kartu" id="field-section">
+        <header><h2>Text field</h2></header>
+        <div class="badan grid2">
+          <label class="field"><span class="lbl">Input BARJAS</span><input id="field-native" placeholder="Masukkan teks"></label>
+          <label class="field"><span class="lbl">Textarea BARJAS</span><textarea id="field-textarea" placeholder="Keterangan"></textarea></label>
+          <label class="field"><span class="lbl">Select BARJAS</span><select id="field-inp" class="inp"><option>Pilihan pertama</option><option>Pilihan kedua</option></select></label>
+          <label class="field"><span class="lbl">Form control Bootstrap</span><input id="field-bs" class="form-control" placeholder="Ketik sesuatu"></label>
+          <label class="field"><span class="lbl">Form select Bootstrap</span><select id="field-bs-select" class="form-select"><option>Pilihan pertama</option><option>Pilihan kedua</option></select></label>
+          <label class="field"><span class="lbl">Read only</span><input id="field-readonly" readonly value="Tidak dapat diubah"></label>
+          <label class="field"><span class="lbl">Disabled</span><input id="field-disabled" disabled value="Nonaktif"></label>
+        </div>
+      </section>
+
+      <section class="kartu" id="data-section">
+        <header><h2>Tabel, tab, dan status</h2></header>
+        <div class="badan rapi">
+          <div class="tab" id="sample-tabs">
+            <button class="aktif" type="button">Data paket</button>
+            <button type="button">HPS / RAB</button>
+            <button type="button">Berkas</button>
+          </div>
+          <div class="baris" id="sample-badges">
+            <span class="badge ok">Lengkap</span>
+            <span class="badge warn">Perlu perhatian</span>
+            <span class="badge bad">Gagal</span>
+            <span class="badge info">Informasi</span>
+          </div>
+          <div class="tabel-wrap">
+            <table class="tabel" id="barjas-table">
+              <thead><tr><th>Nama paket</th><th>Status</th></tr></thead>
+              <tbody><tr><td>Belanja ATK</td><td><span class="badge ok">Lengkap</span></td></tr></tbody>
+            </table>
+          </div>
+          <div class="small text-body-secondary" id="migration-secondary">Pilih akun CONNECT yang sesuai.</div><span class="small text-success" id="migration-success">Pemetaan valid.</span>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle" id="migrasi-table">
+              <thead><tr><th>Akun SIPADU</th><th>Hubungkan ke BIMASATU</th></tr></thead>
+              <tbody><tr><td>Operator Lama</td><td><select class="form-select form-select-sm"><option>Operator Induk</option></select></td></tr></tbody>
+            </table>
+          </div>
+          <div class="dok-item ada" id="document-item">
+            <span class="dok-no">1</span><div><div class="dok-nama">SK PPK</div><div class="dok-file">Dokumen sudah diunggah</div></div>
+            <span class="badge ok">Ada</span>
+          </div>
+          <table class="kisi" id="hps-table"><tbody><tr><td>Uraian</td><td class="pilih">10.000</td></tr></tbody></table>
+        </div>
+      </section>
+
+      
+      <div class="modal-bg" id="preview-modal-fixture" hidden>
+        <div class="modal penuh" role="dialog" aria-modal="true">
+          <header class="modal-head"><h2>Pratinjau dokumen</h2></header>
+          <div class="modal-body">
+            <div class="pratinjau-dokumen"><iframe title="Pratinjau dokumen" srcdoc="<p>Dokumen contoh</p>"></iframe></div>
+          </div>
+          <footer class="modal-foot"><button class="btn" type="button">Tutup</button></footer>
+        </div>
+      </div>
+
+      <div class="modal-bg" id="sample-modal" hidden>
+        <div class="modal" role="dialog" aria-modal="true">
+          <header class="modal-head"><h2>Modal pengujian</h2><button id="modal-close" class="icon" type="button">×</button></header>
+          <div class="modal-body">
+            <p id="modal-copy">Isi modal harus memakai warna teks yang konsisten dan mudah dibaca.</p>
+            <label class="field"><span class="lbl">Nama</span><input id="modal-input" placeholder="Nama pegawai"></label>
+          </div>
+          <footer class="modal-foot">
+            <button id="modal-cancel" class="btn ghost" type="button">Batal</button>
+            <button id="modal-save" class="btn primary" type="button">Simpan</button>
+          </footer>
+        </div>
+      </div>
+
+      <dialog id="barjas-vdlg" class="wide">
+        <div class="vw-shell">
+          <header class="vw-head">
+            <div class="vw-title">Pratinjau dokumen</div>
+            <span class="vw-page">1 / 1</span>
+            <div class="vw-controls"><button class="vw-btn" type="button">+</button><button class="vw-close" type="button">Tutup</button></div>
+          </header>
+          <div class="vw-stage-wrap"><div id="vwp"><div id="vwm">Pratinjau dokumen</div></div></div>
+          <footer class="vw-hint">Kontrol pratinjau dokumen</footer>
+        </div>
+      </dialog>
+    </section>
+  </main>
+</body>
+</html>

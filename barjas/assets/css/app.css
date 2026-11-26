@@ -1,0 +1,774 @@
+#barjas-root /* BARJAS - satu berkas gaya untuk seluruh aplikasi. Tanpa font eksternal. */
+#barjas-root{
+  --kertas: #f1f2f6;
+  --putih: #fff;
+  --papan: #f8f9fc;
+  --tinta: #566a7f;
+  --tinta2: #65748a;
+  --tinta3: #65748a;
+  --primer: #5f61e6;
+  --sukses: #2d6b12;
+  --sukses-soft: #e8f8dc;
+  --sukses-border: #cce8bb;
+  --primer-hover: #4f50c5;
+  --primer-soft: #e7e7ff;
+  --emas: #ffab00;
+  --merah: #c62828;
+  --merah-muda: #ffe5e0;
+  --biru: #00718e;
+  --garis: #e6e6f0;
+  --garis2: #f1f1f5;
+  --r: 8px;
+  --rail: 236px;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  --bayang: 0 2px 6px 0 rgba(67, 89, 113, .14);
+}
+
+#barjas-root, #barjas-root *{ box-sizing: border-box; }
+#barjas-root, #barjas-root{ height: 100%; }
+#barjas-root{
+  margin: 0; background: var(--kertas); color: var(--tinta);
+  font: 15px/1.5 var(--sans); font-variant-numeric: tabular-nums;
+  -webkit-text-size-adjust: 100%;
+}
+#barjas-root h1, #barjas-root h2, #barjas-root h3, #barjas-root h4{ margin: 0; font-weight: 640; letter-spacing: -.012em; line-height: 1.25; }
+#barjas-root h1{ font-size: 21px; }
+#barjas-root h2{ font-size: 17px; }
+#barjas-root h3{ font-size: 15px; }
+#barjas-root p{ margin: 0 0 .6em; }
+#barjas-root a{ color: var(--primer); }
+#barjas-root small{ font-size: 12.5px; }
+#barjas-root :focus-visible{ outline: 2px solid var(--primer); outline-offset: 2px; border-radius: 3px; }
+
+#barjas-root /* ---------- masuk ---------- */
+.masuk{
+  min-height: 100%; display: grid; grid-template-columns: 1.1fr .9fr;
+  background: var(--putih);
+}
+#barjas-root .masuk-kiri{
+  background: linear-gradient(170deg, #696cff, #5658c7 60%, #4143a8);
+  color: #e8f2ea; padding: 48px 44px; display: flex; flex-direction: column; justify-content: space-between;
+}
+#barjas-root .masuk-kiri h1{ font-size: 34px; letter-spacing: -.02em; color: #fff; }
+#barjas-root .masuk-kiri .lead{ max-width: 34ch; color: #bcd6c4; margin-top: 14px; }
+#barjas-root .masuk-logo{ display: flex; align-items: center; gap: 12px; }
+#barjas-root .masuk-logo img{ width: 46px; height: 46px; object-fit: contain; }
+#barjas-root .masuk-logo span{ font-size: 13px; color: #a9c8b4; max-width: 22ch; line-height: 1.35; }
+#barjas-root .masuk-kiri ul{ list-style: none; padding: 0; margin: 26px 0 0; display: grid; gap: 9px; }
+#barjas-root .masuk-kiri li{ font-size: 13.5px; color: #b9d3c1; padding-left: 18px; position: relative; }
+#barjas-root .masuk-kiri li::before{ content: ""; position: absolute; left: 0; top: .55em; width: 7px; height: 7px; background: var(--emas); }
+#barjas-root .masuk-kanan{ display: flex; align-items: center; justify-content: center; padding: 40px 28px; }
+#barjas-root .masuk-form{ width: 100%; max-width: 340px; }
+#barjas-root .masuk-form h2{ font-size: 22px; margin-bottom: 4px; }
+#barjas-root .masuk-form .sub{ color: var(--tinta2); font-size: 13.5px; margin-bottom: 22px; }
+
+#barjas-root .capt{ display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
+#barjas-root .capt canvas{ border: 1px solid var(--garis); border-radius: var(--r); background: #f4f5ff; height: 46px; width: 132px; }
+#barjas-root .capt-btn{ border: 1px solid var(--garis); background: var(--putih); border-radius: var(--r); height: 46px; width: 42px; cursor: pointer; font-size: 17px; color: var(--tinta2); }
+#barjas-root .capt-btn:hover{ background: var(--primer-soft); }
+
+#barjas-root /* ---------- kerangka ---------- */
+.app{ min-height: 100%; }
+#barjas-root #barjas-bar{ position: fixed; top: 0; left: 0; height: 2px; width: 100%; background: transparent; z-index: 60; }
+#barjas-root #barjas-bar.on::after{
+  content: ""; display: block; height: 2px; width: 40%; background: var(--emas);
+  animation: geser 1.1s linear infinite;
+}
+@keyframes geser { from { transform: translateX(-100%); } to { transform: translateX(350%); } }
+
+#barjas-root .rail{
+  position: fixed; inset: 0 auto 0 0; width: var(--rail); background: #0b3f26; color: #cfe3d5;
+  display: flex; flex-direction: column; z-index: 40;
+}
+#barjas-root .rail-head{ padding: 18px 18px 14px; border-bottom: 1px solid rgba(255, 255, 255, .09); display: flex; gap: 11px; align-items: center; }
+#barjas-root .rail-head img{ width: 34px; height: 34px; object-fit: contain; }
+#barjas-root .rail-head b{ color: #fff; font-size: 16px; display: block; letter-spacing: .01em; }
+#barjas-root .rail-head small{ color: #8fb69d; font-size: 11px; }
+#barjas-root .nav{ padding: 10px 10px 18px; overflow-y: auto; flex: 1; }
+#barjas-root .nav a{
+  display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: var(--r);
+  color: #cfe3d5; text-decoration: none; font-size: 14px; margin-bottom: 2px;
+}
+#barjas-root .nav a:hover{ background: rgba(255, 255, 255, .08); color: #fff; }
+#barjas-root .nav a.aktif{ background: var(--primer); color: #fff; }
+#barjas-root .nav a svg{ width: 17px; height: 17px; flex: none; opacity: .85; }
+#barjas-root .nav .grup{ font-size: 11px; color: #7ba98b; padding: 14px 11px 6px; letter-spacing: .04em; }
+#barjas-root .rail-foot{ padding: 12px 14px; border-top: 1px solid rgba(255, 255, 255, .09); font-size: 12.5px; }
+#barjas-root .rail-foot .who{ color: #fff; }
+#barjas-root .rail-foot .peran{ color: #8fb69d; }
+#barjas-root .rail-foot button{ margin-top: 8px; width: 100%; }
+
+#barjas-root .isi{ margin-left: var(--rail); padding: 0 26px 60px; }
+#barjas-root .atas{
+  position: sticky; top: 0; z-index: 30; background: rgba(241, 242, 246, .96);
+  backdrop-filter: blur(6px); border-bottom: 1px solid var(--garis);
+  display: flex; align-items: center; gap: 14px; padding: 14px 0; margin-bottom: 22px;
+}
+#barjas-root .atas h1{ flex: 1; min-width: 0; }
+#barjas-root .atas .sub{ color: var(--tinta2); font-size: 13px; font-weight: 400; display: block; margin-top: 2px; }
+#barjas-root .burger{ display: none; }
+
+#barjas-root /* ---------- komponen dasar ---------- */
+.btn{
+  font: inherit; font-size: 13.5px; font-weight: 550; padding: 8px 14px; border-radius: var(--r);
+  border: 1px solid var(--garis); background: var(--putih); color: var(--tinta); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px; line-height: 1.3;
+}
+#barjas-root .btn:hover{ border-color: #c9cbff; background: #f8f8ff; }
+#barjas-root .btn.primary{ background: var(--primer); border-color: var(--primer); color: #fff; }
+#barjas-root .btn.primary:hover{ background: var(--primer-hover); border-color: var(--primer-hover); }
+#barjas-root .btn.danger{ color: var(--merah); border-color: #e4c5bd; }
+#barjas-root .btn.danger:hover{ background: var(--merah-muda); }
+#barjas-root .btn.kecil{ padding: 5px 9px; font-size: 12.5px; }
+#barjas-root .btn[disabled]{ opacity: .5; cursor: not-allowed; }
+#barjas-root .btn.blok{ width: 100%; justify-content: center; padding: 11px; font-size: 15px; }
+#barjas-root button.icon{ background: none; border: 0; font-size: 20px; line-height: 1; cursor: pointer; color: var(--tinta2); padding: 4px 8px; }
+
+#barjas-root .kartu{ background: var(--putih); border: 1px solid var(--garis); border-radius: 10px; box-shadow: 0 2px 6px 0 rgba(67, 89, 113, .12); }
+#barjas-root .kartu > header{ padding: 13px 16px; border-bottom: 1px solid var(--garis2); display: flex; align-items: center; gap: 10px; }
+#barjas-root .kartu > header h2{ flex: 1; }
+#barjas-root .kartu .badan{ padding: 16px; }
+#barjas-root .rapi{ display: grid; gap: 16px; }
+#barjas-root .baris{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#barjas-root .kanan{ margin-left: auto; }
+#barjas-root .tumpuk{ display: grid; gap: 4px; }
+
+#barjas-root .field{ display: grid; gap: 5px; }
+#barjas-root .field .lbl{ font-size: 12.5px; color: var(--tinta2); font-weight: 550; }
+#barjas-root .field input, #barjas-root .field select, #barjas-root .field textarea, #barjas-root .inp{
+  font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--garis);
+  border-radius: var(--r); background: var(--putih); color: var(--tinta); width: 100%;
+}
+#barjas-root .field input:focus, #barjas-root .field select:focus, #barjas-root .field textarea:focus{ border-color: var(--primer); outline: none; box-shadow: 0 0 0 3px rgba(105, 108, 255, .16); }
+#barjas-root .field input[readonly]{ background: var(--garis2); color: var(--tinta2); }
+#barjas-root .field .hint{ color: var(--tinta3); font-size: 11.5px; }
+#barjas-root .grid2{ display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+#barjas-root .grid3{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+#barjas-root .grid4{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+#barjas-root .field.wide{ grid-column: 1 / -1; }
+
+#barjas-root /* combobox (UI.combo): isian bebas + tombol ▾ + daftar pilihan */
+.combo{ position: relative; }
+#barjas-root .combo input{ padding-right: 34px; }
+#barjas-root .combo-btn{
+  position: absolute; top: 1px; right: 1px; bottom: 1px; width: 30px; border: 0; background: transparent;
+  color: var(--tinta2); font-size: 13px; cursor: pointer; border-radius: 0 calc(var(--r) - 1px) calc(var(--r) - 1px) 0;
+}
+#barjas-root .combo-btn:hover{ background: var(--garis2); color: var(--tinta); }
+#barjas-root .combo-daftar{
+  position: absolute; left: 0; right: 0; top: calc(100% + 3px); z-index: 30; margin: 0; padding: 4px; list-style: none;
+  background: var(--putih); border: 1px solid var(--garis); border-radius: var(--r);
+  box-shadow: 0 8px 24px rgba(67, 89, 113, .18); max-height: 232px; overflow-y: auto;
+}
+#barjas-root .combo-daftar[hidden]{ display: none; }
+#barjas-root .combo-daftar li{ padding: 7px 9px; border-radius: 4px; font-size: 14px; cursor: pointer; }
+#barjas-root .combo-daftar li:hover, #barjas-root .combo-daftar li.sorot{ background: var(--primer-soft); }
+#barjas-root .combo-daftar li.dipilih{ font-weight: 620; color: var(--primer-hover); }
+
+#barjas-root .badge{
+  display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 20px;
+  background: var(--garis2); color: var(--tinta2); border: 1px solid var(--garis);
+}
+#barjas-root .badge.ok{ background: var(--sukses-soft); color: var(--sukses); border-color: var(--sukses-border); }
+#barjas-root .badge.warn{ background: #fdf3e2; color: #8a5f10; border-color: #ecd9ae; }
+#barjas-root .badge.bad{ background: var(--merah-muda); color: var(--merah); border-color: #e9cdc6; }
+#barjas-root .badge.info{ background: #e7f8fc; color: #00718e; border-color: #b8eaf3; }
+
+#barjas-root /* ---------- tabel ---------- */
+.tabel-wrap{ overflow-x: auto; -webkit-overflow-scrolling: touch; }
+#barjas-root .tabel{ width: 100%; border-collapse: collapse; font-size: 13.5px; }
+#barjas-root .tabel th{
+  text-align: left; font-weight: 600; font-size: 12px; color: var(--tinta2);
+  padding: 9px 12px; border-bottom: 1px solid var(--garis); white-space: nowrap; background: var(--papan);
+}
+#barjas-root .tabel td{ padding: 10px 12px; border-bottom: 1px solid var(--garis2); vertical-align: middle; }
+#barjas-root .tabel tr:last-child td{ border-bottom: 0; }
+#barjas-root .tabel .num{ text-align: right; }
+#barjas-root .tabel tr.klik{ cursor: pointer; }
+#barjas-root .tabel tr.klik:hover td{ background: #f5f5ff; }
+#barjas-root .tabel .sub{ display: block; color: var(--tinta3); font-size: 12px; }
+
+#barjas-root /* pita kelengkapan: elemen penanda utama aplikasi */
+.pita{ display: inline-flex; gap: 2px; align-items: center; }
+#barjas-root .pita .seg{ width: 7px; height: 17px; background: #e3e8e3; border-radius: 1px; display: block; }   #barjas-root /* 7px: 19 segmen tetap muat di kolom 170px */
+.pita .seg.ok{ background: #52a83e; }
+#barjas-root .pita .seg.na{ background: repeating-linear-gradient(45deg, #eceeec, #eceeec 2px, #e0e4e0 2px, #e0e4e0 4px); }
+#barjas-root .pita.besar .seg{ width: 11px; height: 26px; }
+
+#barjas-root .meter{ height: 6px; background: var(--garis2); border-radius: 4px; overflow: hidden; min-width: 90px; }
+#barjas-root .meter i{ display: block; height: 100%; background: #52a83e; }
+#barjas-root .meter.penuh i{ background: var(--emas); }
+
+#barjas-root .stat{ padding: 16px; background: var(--putih); border: 1px solid var(--garis); border-radius: 10px; box-shadow: 0 2px 6px 0 rgba(67, 89, 113, .12); }
+#barjas-root .stat .k{ font-size: 12.5px; color: var(--tinta2); }
+#barjas-root .stat .v{ font-size: 25px; font-weight: 650; letter-spacing: -.02em; margin-top: 3px; }
+#barjas-root .stat .n{ font-size: 12px; color: var(--tinta3); }
+
+#barjas-root .empty{ text-align: center; padding: 46px 20px; color: var(--tinta2); }
+#barjas-root .empty-t{ font-weight: 620; color: var(--tinta); font-size: 15px; }
+#barjas-root .empty-p{ font-size: 13.5px; max-width: 46ch; margin: 4px auto 14px; }
+#barjas-root .loading{ padding: 40px; text-align: center; color: var(--tinta3); font-size: 13.5px; }
+
+#barjas-root /* ---------- modal & toast ---------- */
+.modal-bg{
+  position: fixed; inset: 0; background: rgba(43, 44, 84, .52); z-index: 80;
+  display: flex; align-items: center; justify-content: center; padding: 18px;
+  animation: masuk .14s ease-out;
+}
+#barjas-root .modal-bg.out{ opacity: 0; transition: opacity .15s; }
+#barjas-root .modal{
+  background: var(--putih); border-radius: 10px; box-shadow: var(--bayang);
+  width: min(720px, 100%); max-height: 92vh; display: flex; flex-direction: column;
+}
+#barjas-root .modal.lebar{ width: min(1080px, 100%); }
+#barjas-root .modal-head{ display: flex; align-items: center; gap: 10px; padding: 15px 18px; border-bottom: 1px solid var(--garis); }
+#barjas-root .modal-head h2{ flex: 1; }
+#barjas-root .modal-body{ padding: 18px; overflow: auto; }
+#barjas-root .modal-foot{ display: flex; justify-content: flex-end; gap: 9px; padding: 13px 18px; border-top: 1px solid var(--garis); background: var(--papan); border-radius: 0 0 10px 10px; }
+@keyframes masuk { from { opacity: 0; } to { opacity: 1; } }
+
+#barjas-root /* ---------- pratinjau berkas (modal penuh + panggung geser/perbesar) ---------- */
+.modal.penuh{ width: min(1240px, 100%); height: 92vh; }
+#barjas-root .modal.penuh .modal-body{ padding: 0; overflow: hidden; flex: 1; display: flex; }
+@media (max-width: 720px) { #barjas-root .modal.penuh{ width: 100%; height: 100%; max-height: 100%; border-radius: 0; } }
+
+#barjas-root .pv-panggung{
+  position: relative; flex: 1; overflow: hidden; background: #25263f;
+  touch-action: none; display: flex;
+}
+#barjas-root .pv-muat, #barjas-root .pv-panggung .empty{ margin: auto; color: #cfe3d6; }
+#barjas-root .pv-panggung .empty-t, #barjas-root .pv-panggung .empty-p{ color: #eaf3ec; }
+#barjas-root .pv-bungkus{
+  margin: auto; cursor: grab; transition: transform .04s linear;
+  display: flex; touch-action: none;
+}
+#barjas-root .pv-bungkus.menyeret{ cursor: grabbing; transition: none; }
+#barjas-root .pv-bungkus img, #barjas-root .pv-bungkus canvas{
+  display: block; max-width: none; background: #fff; user-select: none;
+  -webkit-user-drag: none; box-shadow: 0 6px 30px rgba(0,0,0,.4);
+}
+#barjas-root .pv-alat{
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 4px; background: rgba(35,37,68,.92);
+  backdrop-filter: blur(6px); padding: 6px; border-radius: 11px; z-index: 2;
+}
+#barjas-root .pv-alat button{
+  width: 36px; height: 36px; display: grid; place-items: center; border: 0;
+  border-radius: 8px; background: transparent; color: #eaf3ec; font-size: 17px;
+  cursor: pointer; line-height: 1;
+}
+#barjas-root .pv-alat button:hover{ background: rgba(255,255,255,.14); }
+#barjas-root .pv-alat button:active{ background: rgba(255,255,255,.22); }
+#barjas-root .pv-pisah{ width: 1px; align-self: stretch; background: rgba(255,255,255,.2); margin: 4px 2px; }
+#barjas-root .pv-hal{ color: #eaf3ec; font-size: 12.5px; min-width: 54px; text-align: center; padding: 0 2px; }
+
+#barjas-root #barjas-toast{ position: fixed; right: 18px; bottom: 18px; z-index: 90; display: grid; gap: 8px; max-width: 380px; }
+#barjas-root .toast{
+  background: #2b2c54; color: #f3f3ff; padding: 11px 15px; border-radius: var(--r);
+  font-size: 13.5px; box-shadow: var(--bayang);
+}
+#barjas-root .toast.bad{ background: #6d2214; }
+#barjas-root .toast.ok{ background: #2d6b12; }
+#barjas-root .toast.out{ opacity: 0; transition: opacity .25s; }
+
+#barjas-root /* ---------- daftar dokumen ---------- */
+.dok{ display: grid; gap: 8px; }
+#barjas-root .dok-item{
+  display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: start;
+  padding: 11px 13px; border: 1px solid var(--garis); border-radius: var(--r); background: var(--putih);
+}
+#barjas-root .dok-item.ada{ border-color: #bcdcc7; background: #fafdfb; }
+#barjas-root .dok-item.na{ opacity: .6; }
+#barjas-root .dok-no{ width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 650; background: var(--garis2); color: var(--tinta2); }
+#barjas-root .dok-item.ada .dok-no{ background: #52a83e; color: #fff; }
+#barjas-root .dok-nama{ font-weight: 560; font-size: 14px; }
+#barjas-root .dok-file{ font-size: 12.5px; color: var(--tinta2); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 3px; }
+#barjas-root .dok-file a{ text-decoration: none; }
+#barjas-root .dok-aksi{ display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+#barjas-root /* ---------- tab Menilai (Monev) ---------- */
+.monev-item{ border: 1px solid var(--garis); border-radius: var(--r); padding: 12px 14px; background: var(--papan); }
+#barjas-root .monev-item .judul-item{ font-weight: 600; font-size: 14px; }
+#barjas-root .monev-item .rencana-item{ font-size: 12.5px; color: var(--tinta2); margin-top: 1px; }
+#barjas-root .foto-grid{ display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+#barjas-root .foto-mini{ position: relative; width: 104px; height: 104px; border-radius: var(--r); overflow: hidden; border: 1px solid var(--garis); background: var(--garis2); }
+#barjas-root .foto-mini img{ width: 100%; height: 100%; object-fit: cover; display: block; cursor: pointer; }
+#barjas-root .foto-mini .hapus{
+  position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%;
+  background: rgba(43, 44, 84, .72); color: #fff; border: 0; font-size: 13px; line-height: 1;
+  display: grid; place-items: center; cursor: pointer; padding: 0;
+}
+#barjas-root .foto-tambah{
+  width: 104px; height: 104px; border-radius: var(--r); border: 1.5px dashed var(--garis);
+  display: grid; place-items: center; color: var(--tinta2); cursor: pointer; background: var(--putih);
+  font-size: 12px; text-align: center; gap: 4px; padding: 6px;
+}
+#barjas-root .foto-tambah:hover{ border-color: var(--primer); color: var(--primer); }
+
+#barjas-root /* ---------- kisi HPS ---------- */
+.hps-alat{ display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 10px 0; }
+#barjas-root .hps-wrap{ overflow: auto; max-height: 62vh; border: 1px solid var(--garis); border-radius: var(--r); background: var(--putih); }
+#barjas-root table.kisi{ border-collapse: collapse; font-size: 13px; min-width: 100%; }
+#barjas-root table.kisi td, #barjas-root table.kisi th{ border: 1px solid #dfe3eb; padding: 4px 7px; min-width: 96px; vertical-align: middle; }
+#barjas-root table.kisi th{ background: var(--papan); position: sticky; top: 0; z-index: 2; font-size: 11.5px; color: var(--tinta2); min-width: 0; }
+#barjas-root table.kisi td.pilih{ background: #e7e7ff; box-shadow: inset 0 0 0 1px var(--primer); }
+#barjas-root table.kisi td.tebal{ font-weight: 650; }
+#barjas-root table.kisi td[data-t="num"], #barjas-root table.kisi td[data-t="rp"]{ text-align: right; font-variant-numeric: tabular-nums; }
+#barjas-root table.kisi td:focus{ outline: 2px solid var(--primer); outline-offset: -2px; }
+#barjas-root .hps-total{ display: flex; gap: 22px; padding: 12px 2px; flex-wrap: wrap; font-size: 14px; }
+#barjas-root .hps-total b{ font-size: 17px; }
+#barjas-root .hps-saran{ display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 8px 12px; margin: 0 0 10px; background: #fff8e6; border: 1px solid #f0dcaa; border-radius: var(--r); font-size: 13px; color: var(--tinta); }
+#barjas-root .hps-saran[hidden]{ display: none; }
+
+#barjas-root /* indikator proses pada tombol simpan */
+.spin{
+  display: inline-block; width: 13px; height: 13px; vertical-align: -2px;
+  border: 2px solid transparent; border-top-color: currentColor; border-right-color: currentColor;
+  border-radius: 50%;
+  animation: putar .7s linear infinite;
+}
+#barjas-root .btn.proses{ opacity: .85; pointer-events: none; }
+@keyframes putar { to { transform: rotate(360deg); } }
+#barjas-root .drop{ border: 1.5px dashed var(--garis); border-radius: var(--r); padding: 20px; text-align: center; color: var(--tinta2); font-size: 13.5px; }
+#barjas-root .drop.aktif{ border-color: var(--primer); background: var(--primer-soft); }
+
+#barjas-root .tab{ display: flex; gap: 2px; border-bottom: 1px solid var(--garis); margin-bottom: 18px; overflow-x: auto; }
+#barjas-root .tab button{
+  font: inherit; font-size: 13.5px; font-weight: 550; background: none; border: 0; cursor: pointer;
+  padding: 10px 14px; color: var(--tinta2); border-bottom: 2px solid transparent; white-space: nowrap;
+}
+#barjas-root .tab button.aktif{ color: var(--primer-hover); border-bottom-color: var(--primer); }
+
+#barjas-root .filter{ display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-bottom: 16px; }
+#barjas-root .filter .field{ min-width: 150px; }
+#barjas-root .cari{ position: relative; flex: 1; min-width: 190px; }
+
+#barjas-root .pill{ display: inline-flex; align-items: center; gap: 6px; font-size: 12px; background: var(--garis2); padding: 3px 9px; border-radius: 20px; color: var(--tinta2); }
+#barjas-root .tegas{ font-weight: 600; }
+#barjas-root .diam{ color: var(--tinta2); }
+#barjas-root .mini{ font-size: 12.5px; color: var(--tinta2); }
+#barjas-root hr.pisah{ border: 0; border-top: 1px solid var(--garis2); margin: 16px 0; }
+
+#barjas-root /* ---------- responsif ---------- */
+@media (max-width: 1080px){ .grid4 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 880px) {
+  #barjas-root .rail{ transform: translateX(-100%); transition: transform .2s ease; box-shadow: var(--bayang); }
+  #barjas-root.nav-buka .rail{ transform: none; }
+  #barjas-root.nav-buka::after{ content: ""; position: fixed; inset: 0; background: rgba(9, 28, 18, .4); z-index: 35; }
+  #barjas-root .isi{ margin-left: 0; padding: 0 16px 80px; }
+  #barjas-root .burger{ display: inline-flex; }
+  #barjas-root .grid2, #barjas-root .grid3, #barjas-root .grid4{ grid-template-columns: 1fr; }
+  #barjas-root .masuk{ grid-template-columns: 1fr; }
+  #barjas-root .masuk-kiri{ padding: 28px 22px; }
+  #barjas-root .masuk-kiri h1{ font-size: 26px; }
+  #barjas-root .masuk-kiri ul{ display: none; }
+  #barjas-root .atas h1{ font-size: 18px; }
+  #barjas-root .modal-foot{ position: sticky; bottom: 0; }
+}
+@media (prefers-reduced-motion: reduce) { #barjas-root, #barjas-root *{ animation: none !important; transition: none !important; } }
+
+@media print {
+  #barjas-root .rail, #barjas-root .atas, #barjas-root .btn, #barjas-root #barjas-toast, #barjas-root #barjas-bar{ display: none !important; }
+  #barjas-root .isi{ margin: 0; padding: 0; }
+  #barjas-root{ background: #fff; }
+}
+
+#barjas-root /* ---------- Penampil dokumen BARJAS (diadaptasi dari penampil bersama BIMASATU) ---------- */
+#barjas-vdlg{
+  border: 0;
+  border-radius: 14px;
+  padding: 0;
+  width: min(1100px, calc(100% - 1rem));
+  height: calc(100% - 1rem);
+  max-width: none;
+  max-height: none;
+  overflow: hidden;
+  color: var(--tinta);
+  background: var(--papan);
+  box-shadow: 0 18px 60px rgba(0,0,0,.28);
+}
+#barjas-root #barjas-vdlg::backdrop{ background: rgba(18, 27, 22, .72); }
+#barjas-root #barjas-vdlg.wide{ width: min(1100px, calc(100% - 1rem)); height: calc(100% - 1rem); }
+#barjas-root #barjas-vdlg .vw-shell{ height: 100%; min-height: 0; display: flex; flex-direction: column; background: var(--papan); }
+#barjas-root #barjas-vdlg .vw-head{
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  min-height: 58px; padding: 9px 12px; background: var(--putih);
+  border-bottom: 1px solid var(--garis);
+}
+#barjas-root #barjas-vdlg .vw-title{ flex: 1 1 180px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; color: var(--tinta); }
+#barjas-root #barjas-vdlg .vw-select{
+  flex: 1 1 180px; min-width: 0; max-width: 440px; padding: 8px 10px;
+  border: 1px solid var(--garis); border-radius: var(--r); background: var(--putih); color: var(--tinta);
+}
+#barjas-root #barjas-vdlg .vw-page{ font-size: 12px; color: var(--biru); background: #e7f8fc; border-radius: 99px; padding: 5px 9px; white-space: nowrap; }
+#barjas-root #barjas-vdlg .vw-page:empty{ display: none; }
+#barjas-root #barjas-vdlg .vw-controls{ display: flex; flex-wrap: nowrap; gap: 4px; }
+#barjas-root #barjas-vdlg .vw-btn, #barjas-root #barjas-vdlg .vw-close{
+  border: 1px solid var(--garis); border-radius: 8px; background: var(--putih);
+  color: var(--tinta); min-height: 36px; padding: 6px 10px; font: inherit;
+  font-size: 13px; cursor: pointer;
+}
+#barjas-root #barjas-vdlg .vw-btn{ min-width: 36px; font-size: 17px; line-height: 1; }
+#barjas-root #barjas-vdlg .vw-btn:hover, #barjas-root #barjas-vdlg .vw-close:hover{ background: var(--primer-soft); border-color: #c9cbff; }
+#barjas-root #barjas-vdlg .vw-close{ background: var(--primer); border-color: var(--primer); color: #fff; font-weight: 600; }
+#barjas-root #barjas-vdlg .vw-close:hover{ background: var(--primer-hover); border-color: var(--primer-hover); }
+#barjas-root #barjas-vdlg .vw-stage-wrap{ flex: 1; min-height: 0; display: flex; position: relative; }
+#barjas-root #barjas-vdlg #vwp{
+  flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden;
+  touch-action: none; background: #e5e9e6; user-select: none; -webkit-user-select: none;
+}
+#barjas-root #barjas-vdlg #vws{ position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+#barjas-root #barjas-vdlg #vwi{ position: absolute; left: 0; top: 0; }
+#barjas-root #barjas-vdlg #vwm{
+  position: absolute; z-index: 2; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(560px, calc(100% - 32px)); text-align: center; color: var(--tinta);
+  pointer-events: none;
+}
+#barjas-root #barjas-vdlg .vw-error{ display: inline-block; background: rgba(255,255,255,.94); border-radius: 10px; padding: 12px 16px; box-shadow: 0 2px 12px rgba(0,0,0,.12); }
+#barjas-root #barjas-vdlg .vw-open{ display: inline-block; margin: 10px 0 0; padding: 9px 13px; border-radius: 8px; background: var(--primer); color: #fff; text-decoration: none; pointer-events: auto; }
+#barjas-root #barjas-vdlg .vw-hint{ padding: 7px 12px; border-top: 1px solid var(--garis); background: var(--putih); color: var(--tinta2); font-size: 11.5px; }
+@media (max-width: 720px) {
+  #barjas-root #barjas-vdlg, #barjas-root #barjas-vdlg.wide{ width: 100%; height: 100%; max-width: none; max-height: none; border-radius: 0; }
+  #barjas-root #barjas-vdlg .vw-head{ gap: 5px; padding: 8px; }
+  #barjas-root #barjas-vdlg .vw-title, #barjas-root #barjas-vdlg .vw-select{ flex-basis: 100%; max-width: none; }
+  #barjas-root #barjas-vdlg .vw-page{ margin-right: auto; }
+  #barjas-root #barjas-vdlg .vw-btn{ min-width: 32px; padding: 6px 8px; }
+  #barjas-root #barjas-vdlg .vw-hint{ display: none; }
+}
+
+
+/* BARJAS is rendered as a module inside the BIMASATU content area. */
+#barjas-root { min-height: 0; height: auto; margin: 0; padding: 18px 20px 32px; background: #f5f5f9; border: 1px solid #e7e8ef; border-radius: 12px; color: var(--tinta); color-scheme: light; }
+#barjas-root .atas { top: 10px; margin-bottom: 22px; padding: 12px 16px; background: rgba(255,255,255,.97); border: 1px solid var(--garis); border-radius: 10px; box-shadow: 0 2px 6px rgba(67,89,113,.08); }
+#barjas-root .baris { min-width: 0; }
+#barjas-root #barjas-toast { position: fixed; right: 18px; bottom: 18px; z-index: 1000; display: grid; gap: 8px; pointer-events: none; }
+#barjas-root #barjas-toast .toast { pointer-events: auto; }
+
+
+
+
+/* ---------- BARJAS component isolation (Sneat / Bootstrap compatibility) ---------- */
+#barjas-root, #barjas-root * { box-sizing: border-box; }
+#barjas-root { color: var(--tinta); color-scheme: light; }
+#barjas-root button,
+#barjas-root input,
+#barjas-root select,
+#barjas-root textarea { font-family: var(--sans); }
+
+/* Buttons: do not inherit the host application's Bootstrap button variants accidentally. */
+#barjas-root .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  background: #fff;
+  color: #566a7f;
+  font: 600 13.5px/1.35 var(--sans);
+  text-decoration: none;
+  box-shadow: none;
+}
+#barjas-root .btn:hover:not(:disabled) {
+  color: #4d5f73;
+  background: #f8f8ff;
+  border-color: #c9cbff;
+}
+#barjas-root .btn.primary {
+  color: #fff;
+  background: #5f61e6;
+  border-color: #5f61e6;
+  box-shadow: 0 2px 4px rgba(95,97,230,.20);
+}
+#barjas-root .btn.primary:hover:not(:disabled) {
+  color: #fff;
+  background: #4f50c5;
+  border-color: #4f50c5;
+}
+#barjas-root .btn.danger {
+  color: #c62828;
+  background: #fff;
+  border-color: #efc5c1;
+}
+#barjas-root .btn.danger:hover:not(:disabled) {
+  color: #a91f1f;
+  background: #fff1ef;
+  border-color: #e9aaa4;
+}
+#barjas-root .btn.ghost {
+  color: #566a7f;
+  background: #fff;
+  border-color: #d9dee7;
+}
+#barjas-root .btn:disabled,
+#barjas-root .btn[disabled] {
+  color: #8b97a6;
+  background: #f1f2f6;
+  border-color: #e1e5ed;
+  opacity: .72;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+#barjas-root .btn:focus-visible,
+#barjas-root button.icon:focus-visible {
+  outline: 3px solid rgba(105,108,255,.30);
+  outline-offset: 2px;
+}
+
+/* Text fields: cover native controls, Sneat .form-control/.form-select and BARJAS .inp. */
+#barjas-root .field input,
+#barjas-root .field select,
+#barjas-root .field textarea,
+#barjas-root .inp,
+#barjas-root .form-control,
+#barjas-root .form-select,
+#barjas-root .vw-select {
+  color: #566a7f;
+  background-color: #fff;
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  font: 400 14px/1.45 var(--sans);
+  box-shadow: none;
+}
+#barjas-root .field input,
+#barjas-root .field select,
+#barjas-root .inp,
+#barjas-root .form-control,
+#barjas-root .form-select,
+#barjas-root .vw-select { min-height: 40px; }
+#barjas-root .field textarea { min-height: 84px; resize: vertical; }
+#barjas-root input::placeholder,
+#barjas-root textarea::placeholder { color: #65748a; opacity: 1; }
+#barjas-root option { color: #566a7f; background: #fff; }
+#barjas-root .field input:focus,
+#barjas-root .field select:focus,
+#barjas-root .field textarea:focus,
+#barjas-root .inp:focus,
+#barjas-root .form-control:focus,
+#barjas-root .form-select:focus,
+#barjas-root .vw-select:focus {
+  color: #566a7f;
+  background-color: #fff;
+  border-color: #696cff;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(105,108,255,.16);
+}
+#barjas-root .field input[readonly],
+#barjas-root .field input:disabled,
+#barjas-root .field select:disabled,
+#barjas-root .field textarea:disabled,
+#barjas-root .form-control:disabled,
+#barjas-root .form-select:disabled {
+  color: #65748a;
+  background-color: #f1f2f6;
+  border-color: #e1e5ed;
+  opacity: 1;
+}
+#barjas-root .field .lbl,
+#barjas-root .form-label { color: #566a7f; }
+
+/* Bootstrap utility classes used by the SIPADU migration screen. */
+#barjas-root .text-body-secondary { color: #65748a !important; }
+#barjas-root .text-success { color: #2d6b12 !important; }
+#barjas-root .text-danger { color: #c62828 !important; }
+#barjas-root .text-info { color: #00718e !important; }
+#barjas-root .table {
+  --bs-table-color: #566a7f;
+  --bs-table-bg: #fff;
+  --bs-table-border-color: #e1e5ed;
+  color: #566a7f;
+  background: #fff;
+  border-color: #e1e5ed;
+}
+#barjas-root .table > :not(caption) > * > * {
+  color: #566a7f;
+  background-color: #fff;
+  border-bottom-color: #e1e5ed;
+}
+#barjas-root .table > thead > tr > th {
+  color: #566a7f;
+  background: #f8f9fc;
+  font-weight: 650;
+}
+#barjas-root .table-hover > tbody > tr:hover > * { background: #f5f5ff; color: #566a7f; }
+
+/* BARJAS modal is a div-based dialog, not Bootstrap's fixed-position .modal. */
+#barjas-root .modal-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(43,44,84,.52);
+}
+#barjas-root .modal {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  margin: 0;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  width: min(720px,100%);
+  max-height: 92vh;
+  color: #566a7f;
+  background: #fff;
+  border: 1px solid #e1e5ed;
+  border-radius: 10px;
+  box-shadow: 0 14px 40px rgba(43,44,84,.20);
+}
+#barjas-root .modal-head,
+#barjas-root .modal-body,
+#barjas-root .modal-foot { color: #566a7f; }
+#barjas-root .modal-head { background: #fff; border-bottom-color: #e1e5ed; }
+#barjas-root .modal-head h2 { color: #566a7f; }
+#barjas-root .modal-head button.icon { color: #65748a; }
+#barjas-root .modal-body { background: #fff; }
+#barjas-root .modal-foot { background: #f8f9fc; border-top-color: #e1e5ed; }
+#barjas-root .modal-foot .btn { min-width: 76px; }
+#barjas-root .modal .mini,
+#barjas-root .modal .diam { color: #65748a; }
+
+/* Viewer: neutral dark stage; controls retain readable contrast and the host dialog decoration is disabled. */
+#barjas-root #barjas-vdlg {
+  color: #566a7f;
+  background: #f8f9fc;
+  border: 0;
+  padding: 0;
+  border-radius: 14px;
+}
+#barjas-root #barjas-vdlg::before { display: none !important; }
+#barjas-root #barjas-vdlg .vw-head,
+#barjas-root #barjas-vdlg .vw-hint { color: #566a7f; }
+#barjas-root #barjas-vdlg .vw-select {
+  color: #566a7f;
+  background-color: #fff;
+  border: 1px solid #d9dee7;
+}
+#barjas-root #barjas-vdlg .vw-btn {
+  color: #566a7f;
+  background: #fff;
+  border-color: #d9dee7;
+}
+#barjas-root #barjas-vdlg .vw-btn:hover {
+  color: #4f50c5;
+  background: #e7e7ff;
+  border-color: #c9cbff;
+}
+#barjas-root #barjas-vdlg .vw-close {
+  color: #fff;
+  background: #5f61e6;
+  border-color: #5f61e6;
+}
+#barjas-root #barjas-vdlg .vw-close:hover {
+  color: #fff;
+  background: #4f50c5;
+  border-color: #4f50c5;
+}
+#barjas-root #barjas-vdlg .vw-page { color: #00718e; background: #e7f8fc; }
+
+@media (max-width: 720px) {
+  #barjas-root .modal-bg { padding: 10px; }
+  #barjas-root .modal { max-height: calc(100vh - 20px); }
+}
+
+
+/* Force visual contract for BARJAS native tables; legacy selectors stay as fallback. */
+#barjas-root table.tabel > thead > tr > th {
+  color: #65748a !important;
+  background-color: #f8f9fc !important;
+}
+#barjas-root table.tabel > tbody > tr > td {
+  color: #566a7f;
+  background-color: #fff;
+}
+#barjas-root table.tabel > tbody > tr:hover > td {
+  background-color: #f5f5ff;
+}
+
+
+/* Explicit interactive states after the Sneat compatibility layer. */
+#barjas-root .btn.primary:not(:disabled):hover {
+  color: #fff !important;
+  background-color: #4f50c5 !important;
+  background-image: none !important;
+  border-color: #4f50c5 !important;
+}
+#barjas-root .tab button.aktif {
+  color: #4f50c5;
+  border-bottom-color: #5f61e6;
+}
+#barjas-root .tab button:not(.aktif) {
+  color: #65748a;
+}
+
+
+/* Semantic status chips keep their own palettes, independent of Sneat .badge defaults. */
+#barjas-root .badge.ok {
+  color: #2d6b12 !important;
+  background-color: #e8f8dc !important;
+  border-color: #cce8bb !important;
+}
+#barjas-root .badge.warn {
+  color: #8a5f10 !important;
+  background-color: #fdf3e2 !important;
+  border-color: #ecd9ae !important;
+}
+#barjas-root .badge.bad {
+  color: #c62828 !important;
+  background-color: #ffe5e0 !important;
+  border-color: #e9cdc6 !important;
+}
+#barjas-root .badge.info {
+  color: #00718e !important;
+  background-color: #e7f8fc !important;
+  border-color: #b8eaf3 !important;
+}
+
+
+/* Generated document preview ("Buat" button): large, viewport-fitted modal. */
+#barjas-root .modal.penuh {
+  width: min(1240px, calc(100vw - 36px));
+  height: min(92vh, 1100px);
+  max-height: 92vh;
+  min-height: 0;
+}
+#barjas-root .modal.penuh .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  padding: 0;
+}
+#barjas-root .modal.penuh .pratinjau-dokumen {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #f8f9fc;
+}
+#barjas-root .modal.penuh .pratinjau-dokumen iframe {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: #fff;
+}
+@media (max-width: 720px) {
+  #barjas-root .modal.penuh {
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+}

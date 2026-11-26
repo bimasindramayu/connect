@@ -54,6 +54,7 @@ $('burger').onclick = () => {
   applySideState(next, true);
 };
 addEventListener('resize', syncSide);
+pages.barjas = () => window.pageBarjas();
 addEventListener('hashchange', route);
 
 // ---- Pemeriksaan pemasangan: js/config.js masih berisi nilai contoh? ----

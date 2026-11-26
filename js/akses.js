@@ -6,7 +6,7 @@
    Hak ini dibaca tiga tempat: tampilan (sidebar dan router), database (RLS/trigger lewat can_menu), Apps Script dan Edge Function.
    ===================================================================================== */
 
-const AKSES_PERAN = ['operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr'];   // peran yang hak aksesnya dapat diubah (Admin selalu semua menu)
+const AKSES_PERAN = ['operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr', 'bmn', 'barjas'];   // peran yang hak aksesnya dapat diubah (Admin selalu semua menu)
 const AKSES_ADMIN = ['akses', 'impor'];                                                                      // khusus Admin, tidak dapat diberikan
 const AKSES_TAK_OPERATOR = ['anggaran', 'verifikasi', 'metode', 'sakti', 'config'];                          // Operator KUA hanya boleh mengakses data KUA-nya sendiri
 const AKSES_HANYA_OPERATOR = { realisasi: 'Khusus Operator KUA (mengisi Realisasi KUA sendiri)', dashboard: 'Khusus Operator KUA (ringkasan KUA-nya sendiri)' };   // menu yang hanya dapat diberikan ke Operator KUA
@@ -16,7 +16,9 @@ const AKSES_BAWAAN = {   // isi awal di bop.sql (tombol "Kembalikan ke bawaan" h
   verifikator_bop: ['bop', 'rpd', 'verifikasi', 'laporan'],
   bast_nr: ['bast', 'bast-buat', 'bast-pegawai', 'bast-setting'],
   kemasjidan: ['sert-masjid', 'sert-kiblat', 'sert-pengaturan'],
-  pnbp_nr: ['jaspro']
+  pnbp_nr: ['jaspro'],
+  bmn: ['bmn'],
+  barjas: ['barjas'],
 };
 // [kunci, nama menu, keterangan]
 const MENU_DEF = [
@@ -35,7 +37,7 @@ const MENU_DEF = [
     ['impor', 'Impor Data Lama', 'Mengambil data dari sistem lama. Khusus Admin.'],
     ['laporan', 'Laporan', 'Unduh laporan Excel/PDF. Operator KUA: KUA-nya sendiri; peran lain: semua KUA.']]],
   ['BMN', [
-    ['bmn', 'Barang Milik Negara', 'Dashboard, inventaris aset, foto/dokumen barang, filter, ekspor Excel/PDF. Operator KUA dapat menambah, mengubah, dan menghapus BMN pada KUA sendiri selama izin input diaktifkan Admin; Admin dapat mengelola seluruh Satker.']]],
+    ['bmn', 'Barang Milik Negara', 'Dashboard, inventaris aset, foto/dokumen barang, filter, ekspor Excel/PDF. Operator KUA dapat mengelola BMN pada KUA sendiri selama izin input diaktifkan Admin; role BMN dapat mengelola seluruh Satker.']]],
   ['BAST NR', [
     ['bast', 'Riwayat', 'Daftar Berita Acara, status SIMKAH, dan arsip dokumen tertandatangan (lihat, unggah, hapus).'],
     ['bast-buat', 'Buat BA', 'Membuat Berita Acara baru.'],
@@ -45,6 +47,8 @@ const MENU_DEF = [
     ['sert-masjid', 'Masjid / Musala', 'Data masjid/musala dan cetak sertifikat.'],
     ['sert-kiblat', 'Arah Kiblat', 'Data kalibrasi arah kiblat dan cetak sertifikat.'],
     ['sert-pengaturan', 'Pengaturan Sertifikat', 'Nama penanda tangan dan tanda tangan petugas ukur.']]],
+  ['Pengadaan', [
+    ['barjas', 'BARJAS', 'Akses ke modul pengadaan: paket, dokumen, HPS/RAB, penugasan, satuan kerja, penyedia, pejabat, dan monitoring-evaluasi. Dapat diberikan kepada peran mana pun sesuai kebutuhan.']]],
   ['Lainnya', [
     ['jaspro', 'Jaspro Transport', 'Menghitung Jaspro dan Transport dari data presensi dan membuat laporannya.'],
     ['akses', 'Hak Akses Menu', 'Halaman ini. Khusus Admin.']]]
