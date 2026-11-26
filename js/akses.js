@@ -6,7 +6,7 @@
    Hak ini dibaca tiga tempat: tampilan (sidebar dan router), database (RLS/trigger lewat can_menu), Apps Script dan Edge Function.
    ===================================================================================== */
 
-const AKSES_PERAN = ['operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr', 'bmn_barjas'];   // peran yang hak aksesnya dapat diubah (Admin selalu semua menu)
+const AKSES_PERAN = ['operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr', 'bmn', 'barjas'];   // peran yang hak aksesnya dapat diubah (Admin selalu semua menu)
 const AKSES_ADMIN = ['akses', 'impor'];                                                                      // khusus Admin, tidak dapat diberikan
 const AKSES_TAK_OPERATOR = ['anggaran', 'verifikasi', 'metode', 'sakti', 'config'];                          // Operator KUA hanya boleh mengakses data KUA-nya sendiri
 const AKSES_HANYA_OPERATOR = { realisasi: 'Khusus Operator KUA (mengisi Realisasi KUA sendiri)', dashboard: 'Khusus Operator KUA (ringkasan KUA-nya sendiri)' };   // menu yang hanya dapat diberikan ke Operator KUA
@@ -17,7 +17,8 @@ const AKSES_BAWAAN = {   // isi awal di bop.sql (tombol "Kembalikan ke bawaan" h
   bast_nr: ['bast', 'bast-buat', 'bast-pegawai', 'bast-setting'],
   kemasjidan: ['sert-masjid', 'sert-kiblat', 'sert-pengaturan'],
   pnbp_nr: ['jaspro'],
-  bmn_barjas: ['bmn', 'barjas'],
+  bmn: ['bmn'],
+  barjas: ['barjas'],
 };
 // [kunci, nama menu, keterangan]
 const MENU_DEF = [
