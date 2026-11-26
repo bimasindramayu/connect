@@ -63,7 +63,7 @@ end $$;
 
 -- 1) PROFIL AKUN DAN PERAN -------------------------------------------------------------
 -- Peran: admin | operator (= Operator KUA, terikat ke satu KUA lewat kua_id) | bendahara_bop | verifikator_bop | bast_nr |
--- kemasjidan | pnbp_nr | pengadaan (peran legacy untuk kompatibilitas akun lama; menu BARJAS dapat diberikan melalui hak_akses ke peran mana pun). Daftar ini juga ada di handle_new_user(), set_hak_akses(),
+-- kemasjidan | pnbp_nr | bmn (pengelola inventaris BMN) | barjas (akses BARJAS) | pengadaan (peran legacy untuk kompatibilitas akun lama). Daftar ini juga ada di handle_new_user(), set_hak_akses(),
 -- supabase/functions/bop/index.ts (PERAN) dan js/core.js (PERAN): ubah semuanya bersama.
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -81,7 +81,7 @@ declare c record; sudah boolean := false;
 begin
   for c in select conname, pg_get_constraintdef(oid) as def from pg_constraint
             where conrelid = 'public.profiles'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%role%' loop
-    if c.def like '%pnbp_nr%' and c.def like '%pengadaan%' and c.def like '%bmn%' and c.def like '%barjas%' then sudah := true;
+    if c.def like '%pnbp_nr%' and c.def like '%pengadaan%' and c.def like '%''bmn''%' and c.def like '%''barjas''%' then sudah := true;
     else execute format('alter table public.profiles drop constraint %I', c.conname); end if;
   end loop;
   if not sudah then
@@ -218,7 +218,7 @@ declare c record; sudah boolean := false;
 begin
   for c in select conname, pg_get_constraintdef(oid) as def from pg_constraint
     where conrelid = 'public.hak_akses'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%role%' loop
-    if c.def like '%pengadaan%' and c.def like '%bmn%' and c.def like '%barjas%' then sudah := true;
+    if c.def like '%pengadaan%' and c.def like '%''bmn''%' and c.def like '%''barjas''%' then sudah := true;
     else execute format('alter table public.hak_akses drop constraint %I', c.conname); end if;
   end loop;
   if not sudah then
