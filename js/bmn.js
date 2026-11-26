@@ -23,7 +23,7 @@ const BMN_KUA_NAMES = [
   'Kedokan Bunder','Kertasemaya','Krangkeng','Kroya','Lelea','Lohbener','Losarang',
   'Pasekan','Patrol','Sindang','Sliyeg','Sukagumiwang','Sukra','Terisi','Tukdana','Widasari'
 ];
-const bmnCanManageAll = () => !!me && (me.role === 'admin' || me.role === 'bmn_barjas');
+const bmnCanManageAll = () => !!me && (me.role === 'admin' || me.role === 'bmn');
 const bmnCanWrite = () => !!me && (
   bmnCanManageAll() || (me.role === 'operator' && BMN_UI.settings.allowDataEntry !== false)
 );
