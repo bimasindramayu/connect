@@ -29,8 +29,8 @@ const sandiAcak = () => {   // 12 karakter tanpa huruf/angka yang mudah tertukar
 const apiJson = (action, body) => api({ action }, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 // Peran yang dapat dipilih untuk akun baru. Role pengadaan tetap dikenal sebagai kompatibilitas akun lama.
-const AKUN_PERAN = ['admin', 'operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr', 'bmn_barjas'];
-const BADGE_PERAN = { admin: 'danger', operator: 'primary', bendahara_bop: 'success', verifikator_bop: 'info', bast_nr: 'warning', kemasjidan: 'secondary', pnbp_nr: 'dark', bmn_barjas: 'info' };
+const AKUN_PERAN = ['admin', 'operator', 'bendahara_bop', 'verifikator_bop', 'bast_nr', 'kemasjidan', 'pnbp_nr', 'bmn', 'barjas'];
+const BADGE_PERAN = { admin: 'danger', operator: 'primary', bendahara_bop: 'success', verifikator_bop: 'info', bast_nr: 'warning', kemasjidan: 'secondary', pnbp_nr: 'dark', bmn: 'success', barjas: 'info' };
 let akun = { data: [], kua: [], peran: '', q: '', ep: 0 };   // keadaan daftar akun (admin): data akun, daftar KUA aktif, filter peran dan pencarian
 
 function openReset(r) {
@@ -78,7 +78,7 @@ function openAkun(r) {
     <input id="kn" class="form-control mb-3" maxlength="100" autocomplete="off" value="${esc(baru ? '' : r.nama)}" placeholder="Nama lengkap atau nama jabatan" required>
     <label class="form-label" for="kr">Peran</label>
     <select id="kr" class="form-select mb-1"${diri ? ' disabled' : ''}>${!baru && r.role === 'pengadaan' ? '<option value="pengadaan" selected disabled>Pengelola Pengadaan (akun lama)</option>' : ''}${AKUN_PERAN.map(p => `<option value="${p}"${!baru && r.role === p || baru && p === 'operator' ? ' selected' : ''}>${esc(peranLabel(p))}</option>`).join('')}</select>
-    <div class="small mb-3">${diri ? 'Peran akun Anda sendiri tidak dapat diubah.' : 'Operator KUA terikat ke satu KUA. Role BMN/Barjas mendapat akses kelola BMN lintas satker dan seluruh modul BARJAS.'}</div>
+    <div class="small mb-3">${diri ? 'Peran akun Anda sendiri tidak dapat diubah.' : 'Operator KUA terikat ke satu KUA. Role BMN dapat mengelola inventaris BMN lintas satker. Role Barjas mendapat akses ke seluruh modul BARJAS.'}</div>
     <div id="kk"><label class="form-label" for="kk1">KUA</label>
     <select id="kk1" class="form-select mb-3"><option value="">Pilih KUA…</option>${akun.kua.map(k => `<option value="${k.id}"${String(k.id) === String(kuaId) ? ' selected' : ''}>${esc(k.nama_kua)}</option>`).join('')}</select></div>
     ${baru ? `<div id="kpw">${pwPair('kp')}<button type="button" class="btn btn-sm btn-outline-secondary mb-3" id="kgen"><i class="bx bx-refresh"></i> Buat password acak</button></div>` : ''}
