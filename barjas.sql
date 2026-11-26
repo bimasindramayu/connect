@@ -7,11 +7,11 @@ begin;
 -- 1. Pertahankan daftar peran lama untuk kompatibilitas. BARJAS diberikan melalui hak_akses BIMASATU.
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles add constraint profiles_role_check
-  check (role in ('admin','operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan','bmn_barjas'));
+  check (role in ('admin','operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan','bmn','barjas'));
 
 alter table public.hak_akses drop constraint if exists hak_akses_role_check;
 alter table public.hak_akses add constraint hak_akses_role_check
-  check (role in ('operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan','bmn_barjas'));
+  check (role in ('operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan','bmn','barjas'));
 
 -- 0) Kompatibilitas rename dari skema SIPADU yang mungkin sudah pernah diterapkan.
 -- Data lama dipertahankan: tabel dan sequence hanya diganti nama, tidak dihapus.
@@ -53,8 +53,8 @@ where menu = 'sipadu'
 on conflict (role, menu) do nothing;
 delete from public.hak_akses where menu = 'sipadu';
 
--- Role gabungan BMN/Barjas mendapatkan kedua menu secara bawaan.
-insert into public.hak_akses (role, menu) values ('bmn_barjas','bmn'),('bmn_barjas','barjas')
+-- Role Barjas hanya mendapatkan menu BARJAS.
+insert into public.hak_akses (role, menu) values ('barjas','barjas')
 on conflict (role, menu) do nothing;
 
 create or replace function public.menu_keys() returns text[] language sql immutable as $$
@@ -66,7 +66,7 @@ create or replace function public.peran_label(p_role text) returns text language
   select case p_role when 'admin' then 'Admin' when 'operator' then 'Operator KUA'
     when 'bendahara_bop' then 'Bendahara BOP' when 'verifikator_bop' then 'Verifikator BOP'
     when 'bast_nr' then 'BAST NR' when 'kemasjidan' then 'Kemasjidan'
-    when 'pnbp_nr' then 'PNBP NR' when 'bmn_barjas' then 'BMN/Barjas' when 'pengadaan' then 'Pengelola Pengadaan (akun lama)' else p_role end;
+    when 'pnbp_nr' then 'PNBP NR' when 'bmn' then 'BMN' when 'barjas' then 'Barjas' when 'pengadaan' then 'Pengelola Pengadaan (akun lama)' else p_role end;
 $$;
 
 -- Trigger ini membatasi akun baru ke peran BIMASATU standar; role pengadaan hanya kompatibilitas akun lama.
@@ -74,7 +74,7 @@ create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare
   r text := case when new.raw_user_meta_data->>'role' in
-    ('admin','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','bmn_barjas')
+    ('admin','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','bmn','barjas')
     then new.raw_user_meta_data->>'role' else 'operator' end;
   k text := case when r = 'operator' then new.raw_user_meta_data->>'kua' end;
 begin
@@ -445,7 +445,7 @@ begin
   if not public.is_admin() then raise exception 'Hanya admin yang dapat mengatur hak akses menu.'; end if;
   if p_data is null or jsonb_typeof(p_data) <> 'object' then raise exception 'Format hak akses tidak valid.'; end if;
   for r in select key from jsonb_each(p_data) loop
-    if r not in ('operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan','bmn_barjas') then
+    if r not in ('operator','bendahara_bop','verifikator_bop','bast_nr','kemasjidan','pnbp_nr','pengadaan','bmn','barjas') then
       raise exception 'Peran % tidak dikenal atau tidak dapat diubah (Admin selalu memiliki semua menu).', r; end if;
     if jsonb_typeof(p_data -> r) <> 'array' then raise exception 'Daftar menu untuk % tidak valid.', public.peran_label(r); end if;
     select coalesce(array_agg(distinct x), '{}'::text[]) into menus from jsonb_array_elements_text(p_data -> r) x;
